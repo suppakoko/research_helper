@@ -21,6 +21,7 @@ import {
 } from "../../../src/ui/dialogs/searchDialog";
 import type { CanonicalWork } from "../../../src/model/canonicalWork";
 import { PREFERENCES_PANE_ID } from "../../../src/ui/prefs/preferencesPane";
+import { RECOMMEND_DEFAULT_SLIDER } from "../../../src/ui/viewModels/recommendViewModel";
 
 /**
  * `P1-T20` — the Search & Import window's markup and controls.
@@ -407,6 +408,10 @@ interface ControllerLogic {
   columns: { id: string; messageId: string; captioned: boolean }[];
   authorName: (author: unknown) => string;
   fluentText: (text: unknown) => string;
+  emptyHeadlineRef: (ref: {
+    id: string;
+    args?: Record<string, unknown>;
+  }) => unknown;
   authorSummary: (
     authors: unknown[],
     shown: number,
@@ -445,6 +450,9 @@ interface ControllerLogic {
 
   // P5-T16's half.
   matchesRelatedFilter: (row: unknown, view: unknown) => boolean;
+  matchesRecommendFilter: (row: unknown, view: unknown) => boolean;
+  reasonRef: (ref: { id: string; args?: unknown }) => unknown;
+  isoDay: (epochMs: number) => string;
   dotsText: (dots?: number) => string;
 }
 
@@ -1280,6 +1288,8 @@ describe("searchDialog.xhtml follows docs/08 §4.1.1", () => {
       "rh-search-query-row",
       // P5-T15: hidden outside the related mode (docs/08 §5.2).
       "rh-related-header",
+      // P5-T26: hidden outside the recommend mode (docs/08 §5.4).
+      "rh-recommend-header",
       "rh-search-scope-row",
       "rh-search-databases-group",
       "rh-search-filter-row",
@@ -1354,6 +1364,24 @@ describe("searchDialog.css sizes the window the only way that works", () => {
     expect(SEARCH_WINDOW_FEATURES).toContain(
       `minheight=${SEARCH_WINDOW_MIN_SIZE.height}`,
     );
+  });
+
+  it("holds a long list inside the window (docs/08 §4.3)", () => {
+    // The dialog's content box is a flex item: with its automatic minimum, a long
+    // table stretched it past the window and took OK and Cancel with it.
+    const block = (selector: string): string =>
+      CSS_CODE.split(selector)[1]?.split("}")[0] ?? "";
+    expect(block("#rh-search-dialog::part(content-box)")).toContain(
+      "min-height: 0",
+    );
+    expect(block("#rh-results-container {")).toContain("min-height: 0");
+    expect(block("#rh-recommend-header {")).toContain("overflow-y: auto");
+    // A floor for the table only where a tall header competes for its room: on the
+    // keyword window, whose rows are all short, it pushed the last row under OK.
+    expect(CSS_CODE).toMatch(
+      /#rh-recommend-header:not\(\[hidden\]\)\s*~ #rh-results-area:has\(> #rh-results-container:not\(\[hidden\]\)\) \{\s*min-height: 45vh/,
+    );
+    expect(CSS_CODE).not.toMatch(/\n#rh-results-area:has/);
   });
 
   it("fixes no width on a label or a button (docs/08 §10.3)", () => {
@@ -5334,5 +5362,1206 @@ describe("P5-T15 — relatedSeedHeader", () => {
       "title",
       "authors",
     ]);
+  });
+});
+
+describe('P5-T26: the window opened with mode: "recommend-from-collection"', () => {
+  const ref = (id: string, args?: Record<string, unknown>) => ({ id, args });
+  const HOSTILE = '<img src=x onerror="y">';
+
+  const PROFILE = {
+    focus: `Focus ${HOSTILE}`,
+    terms: [
+      {
+        term: `term ${HOSTILE}`,
+        added: false,
+        removeRef: ref("research-helper-search-recommend-term-remove", {
+          term: `term ${HOSTILE}`,
+        }),
+      },
+    ],
+    removed: [
+      {
+        term: "liver",
+        restoreRef: ref("research-helper-search-recommend-term-restore", {
+          term: "liver",
+        }),
+      },
+    ],
+    authors: [`Author ${HOSTILE} (2)`, "Cullis (1)"],
+    venues: ["Nature (4)"],
+    heuristic: ref("research-helper-search-recommend-heuristic"),
+    egress: [
+      ref("research-helper-search-recommend-egress-notice", {
+        papers: 15,
+        dismissed: 10,
+        authors: 5,
+      }),
+      ref("research-helper-search-recommend-egress-sources"),
+    ],
+    queries: [`"query" ${HOSTILE}`],
+  };
+
+  const stateOf = (extra: Record<string, unknown> = {}) => ({
+    panel: "initial",
+    running: false,
+    sources: [],
+    records: undefined,
+    recordsRevision: 0,
+    emptyHeadline: undefined,
+    error: undefined,
+    warnings: [],
+    notices: [],
+    status: undefined,
+    databaseProgress: undefined,
+    progressPercent: undefined,
+    cancelVisible: false,
+    screening: undefined,
+    recommend: {
+      collectionName: "mRNA LNP",
+      profile: undefined,
+      canBuild: true,
+      canFind: false,
+      keyRequestUrl: undefined,
+    },
+    ...extra,
+  });
+  const withProfile = (profile: unknown = PROFILE) =>
+    stateOf({
+      recommend: {
+        collectionName: "mRNA LNP",
+        profile,
+        canBuild: true,
+        canFind: true,
+        keyRequestUrl: undefined,
+      },
+    });
+
+  function open(
+    extraHost: Record<string, unknown> = {},
+    options: Partial<HarnessOptions> = {},
+  ) {
+    const calls: unknown[][] = [];
+    let view: { render(state: unknown): void } | undefined;
+    const note =
+      (name: string) =>
+      (...args: unknown[]) => {
+        calls.push([name, ...args]);
+        return Promise.resolve();
+      };
+    const recommend = {
+      connect: (given: { render(state: unknown): void }) => {
+        view = given;
+        return () => {
+          calls.push(["detach"]);
+        };
+      },
+      open: (id: unknown) => {
+        calls.push(["open", id]);
+      },
+      build: note("build"),
+      find: note("find"),
+      retry: note("retry"),
+      removeTerm: note("removeTerm"),
+      addTerm: note("addTerm"),
+      restoreTerm: note("restoreTerm"),
+      cancel: note("cancel"),
+      dismiss: note("dismiss"),
+      importRows: note("importRows"),
+    };
+    const keywordRuns: unknown[] = [];
+    const h = harness({
+      ...options,
+      args: { mode: "recommend-from-collection", collectionID: 77 },
+      host: {
+        listSources: () => [PUBMED, CROSSREF],
+        connect: () => {
+          throw new Error("the keyword view model must not attach here");
+        },
+        runSearch: (query: unknown) => {
+          keywordRuns.push(query);
+          return Promise.resolve();
+        },
+        recommend,
+        ...extraHost,
+      },
+    });
+    h.controller.init();
+    return {
+      h,
+      calls,
+      keywordRuns,
+      publish: (state: unknown) => {
+        view?.render(state);
+      },
+    };
+  }
+
+  it("says which collection it is on and starts no run by itself", () => {
+    const { calls, keywordRuns } = open();
+    expect(calls).toStrictEqual([["open", 77]]);
+    expect(keywordRuns).toStrictEqual([]);
+  });
+
+  it("is titled for this mode", async () => {
+    const { h } = open();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(h.doc.title).toBe(
+      "value:research-helper-search-window-title-recommend",
+    );
+  });
+
+  it("shows its panel, and hides what a recommend run does not read", () => {
+    const { h } = open();
+    expect(h.byId("rh-recommend-header")?.hidden).toBe(false);
+    for (const id of [
+      "rh-search-keyword-label",
+      SEARCH_WINDOW_KEYWORD_ID,
+      "rh-search-run",
+      "rh-search-scope-row",
+      "rh-search-databases-group",
+      "rh-state-empty-suggestions",
+      "rh-search-duplicates-label",
+      "rh-results-col-source",
+      "rh-results-col-type",
+      "rh-results-col-doi",
+    ]) {
+      expect(h.byId(id)?.hidden, id).toBe(true);
+    }
+    expect(h.byId("rh-search-mode")?.hidden).toBe(true);
+    expect(h.byId("rh-search-filter")?.hidden).toBeFalsy();
+    expect(h.byId("rh-related-header")?.hidden).toBe(true);
+    expect(h.byId("rh-state-initial-prose")?.getAttribute("data-l10n-id")).toBe(
+      "research-helper-search-state-initial-recommend",
+    );
+  });
+
+  it("starts the already-in-library box off, whatever the preference says", () => {
+    const h = harness({
+      args: { mode: "recommend-from-collection", collectionID: 77 },
+      prefs: { hideExisting: true },
+    });
+    h.controller.init();
+    expect(h.byId("rh-search-hide-existing")?.checked).toBe(false);
+  });
+
+  it("keeps its panel hidden in every other mode", () => {
+    const h = harness({ args: { mode: "keyword" } });
+    h.controller.init();
+    expect(h.byId("rh-recommend-header")?.hidden).toBe(true);
+    expect(h.byId(SEARCH_WINDOW_KEYWORD_ID)?.hidden).toBeFalsy();
+  });
+
+  it("focuses Build profile on open", () => {
+    const { h } = open();
+    expect(h.byId("rh-recommend-build")?.focused).toBe(true);
+  });
+
+  it("puts the name in the chip's attribute raw, since attributes are not parsed", () => {
+    const { h, publish } = open();
+    publish(
+      stateOf({
+        recommend: {
+          collectionName: "A & <B>",
+          profile: undefined,
+          canBuild: true,
+          canFind: false,
+          keyRequestUrl: undefined,
+        },
+      }),
+    );
+    const chip = h.byId("rh-search-mode");
+    expect(chip?.getAttribute("data-l10n-id")).toBe(
+      "research-helper-search-mode-recommend",
+    );
+    expect(argsOf(chip)).toStrictEqual({ collection: "A & <B>" });
+    expect(chip?.hidden).toBe(false);
+  });
+
+  it("hides the chip when the collection is not known", () => {
+    const { h, publish } = open();
+    publish(
+      stateOf({
+        recommend: {
+          collectionName: undefined,
+          profile: undefined,
+          canBuild: false,
+          canFind: false,
+          keyRequestUrl: undefined,
+        },
+      }),
+    );
+    expect(h.byId("rh-search-mode")?.hidden).toBe(true);
+  });
+
+  it("keeps Find papers disabled and the panel hidden until a profile is shown", () => {
+    const { h, publish } = open();
+    publish(stateOf());
+    expect(h.byId("rh-recommend-build")?.disabled).toBe(false);
+    expect(h.byId("rh-recommend-find")?.disabled).toBe(true);
+    expect(h.byId("rh-recommend-profile")?.hidden).toBe(true);
+
+    publish(withProfile());
+    expect(h.byId("rh-recommend-find")?.disabled).toBe(false);
+    expect(h.byId("rh-recommend-profile")?.hidden).toBe(false);
+  });
+
+  it("does not trust canFind without a profile", () => {
+    const { h, publish } = open();
+    publish(
+      stateOf({
+        recommend: {
+          collectionName: "x",
+          profile: undefined,
+          canBuild: true,
+          canFind: true,
+          keyRequestUrl: undefined,
+        },
+      }),
+    );
+    expect(h.byId("rh-recommend-find")?.disabled).toBe(true);
+  });
+
+  it("disables both buttons while a run goes, and Build starts it", () => {
+    const { h, calls, publish } = open();
+    h.byId("rh-recommend-build")?.dispatch("command");
+    expect(calls).toContainEqual(["build"]);
+    publish(
+      stateOf({
+        running: true,
+        recommend: {
+          collectionName: "x",
+          profile: PROFILE,
+          canBuild: false,
+          canFind: false,
+          keyRequestUrl: undefined,
+        },
+      }),
+    );
+    expect(h.byId("rh-recommend-build")?.disabled).toBe(true);
+    expect(h.byId("rh-recommend-find")?.disabled).toBe(true);
+  });
+
+  it("Find papers starts the run, with the notice already on screen", () => {
+    const { h, calls, publish } = open();
+    publish(withProfile());
+    const notice = h.byId("rh-recommend-egress");
+    expect(notice?.hidden).toBe(false);
+    expect(
+      notice?.children.map((line) => line.getAttribute("data-l10n-id")),
+    ).toStrictEqual([
+      "research-helper-search-recommend-egress-notice",
+      "research-helper-search-recommend-egress-sources",
+    ]);
+    expect(argsOf(notice?.children[0])).toStrictEqual({
+      papers: 15,
+      dismissed: 10,
+      authors: 5,
+    });
+    expect(calls.map(([name]) => name)).not.toContain("find");
+    h.byId("rh-recommend-find")?.dispatch("command");
+    expect(calls.map(([name]) => name)).toContain("find");
+  });
+
+  it("writes the profile's words as text, in no Fluent argument", () => {
+    const { h, publish } = open();
+    publish(withProfile());
+    expect(h.byId("rh-recommend-focus")?.textContent).toBe(PROFILE.focus);
+    expect(h.byId("rh-recommend-authors")?.textContent).toBe(
+      `Author ${HOSTILE} (2) · Cullis (1)`,
+    );
+    expect(h.byId("rh-recommend-venues")?.textContent).toBe("Nature (4)");
+    const [query] = h.byId("rh-recommend-queries")?.children ?? [];
+    expect(query?.textContent).toBe(PROFILE.queries[0]);
+    expect(query?.getAttribute("data-l10n-args")).toBeNull();
+    const [chip] = h.byId("rh-recommend-terms")?.children ?? [];
+    expect(chip?.className).toBe("rh-recommend-chip");
+    expect(chip?.children[0]?.textContent).toBe(PROFILE.terms[0]?.term);
+    expect(chip?.children[0]?.getAttribute("data-l10n-id")).toBeNull();
+  });
+
+  it("gives a chip's button the term in its message's raw arguments, and removes by term", () => {
+    const { h, calls, publish } = open();
+    publish(withProfile());
+    const [chip] = h.byId("rh-recommend-terms")?.children ?? [];
+    const button = chip?.children[1];
+    expect(button?.getAttribute("data-l10n-id")).toBe(
+      "research-helper-search-recommend-term-remove",
+    );
+    expect(argsOf(button)).toStrictEqual({ term: PROFILE.terms[0]?.term });
+    button?.dispatch("click");
+    expect(calls).toContainEqual(["removeTerm", PROFILE.terms[0]?.term]);
+    expect(h.byId("rh-recommend-term-input")?.focused).toBe(true);
+  });
+
+  it("draws the Removed line only with something on it, and puts back by term", () => {
+    const { h, calls, publish } = open();
+    publish(withProfile());
+    expect(h.byId("rh-recommend-removed-row")?.hidden).toBe(false);
+    const [chip] = h.byId("rh-recommend-removed")?.children ?? [];
+    expect(chip?.children[0]?.textContent).toBe("liver");
+    chip?.children[1]?.dispatch("click");
+    expect(calls).toContainEqual(["restoreTerm", "liver"]);
+
+    publish(withProfile({ ...PROFILE, removed: [] }));
+    expect(h.byId("rh-recommend-removed-row")?.hidden).toBe(true);
+    expect(h.byId("rh-recommend-removed")?.children).toHaveLength(0);
+  });
+
+  it("leaves out a focus, authors or venues the profile does not have, and the heuristic line of a model's", () => {
+    const { h, publish } = open();
+    publish(
+      withProfile({
+        ...PROFILE,
+        focus: undefined,
+        authors: [],
+        venues: [],
+        heuristic: undefined,
+      }),
+    );
+    expect(h.byId("rh-recommend-focus-row")?.hidden).toBe(true);
+    expect(h.byId("rh-recommend-authors-row")?.hidden).toBe(true);
+    expect(h.byId("rh-recommend-venues-row")?.hidden).toBe(true);
+    expect(h.byId("rh-recommend-heuristic")?.hidden).toBe(true);
+  });
+
+  it("shows the heuristic notice", () => {
+    const { h, publish } = open();
+    publish(withProfile());
+    const line = h.byId("rh-recommend-heuristic");
+    expect(line?.hidden).toBe(false);
+    expect(line?.getAttribute("data-l10n-id")).toBe(
+      "research-helper-search-recommend-heuristic",
+    );
+  });
+
+  it("says so when every query is gone", () => {
+    const { h, publish } = open();
+    publish(withProfile());
+    expect(h.byId("rh-recommend-queries-none")?.hidden).toBe(true);
+    publish(withProfile({ ...PROFILE, queries: [] }));
+    expect(h.byId("rh-recommend-queries-none")?.hidden).toBe(false);
+    expect(h.byId("rh-recommend-queries")?.children).toHaveLength(0);
+  });
+
+  it("does not rebuild the chips for a state with the same profile", () => {
+    const { h, publish } = open();
+    publish(withProfile());
+    const before = h.byId("rh-recommend-terms")?.children[0];
+    publish(withProfile());
+    expect(h.byId("rh-recommend-terms")?.children[0]).toBe(before);
+  });
+
+  it("adds a typed term on Add and on Enter, empties the box, and keeps Enter from the dialog", () => {
+    const { h, calls, publish } = open();
+    publish(withProfile());
+    const input = h.byId("rh-recommend-term-input");
+    if (input === undefined) throw new Error("no term box");
+    input.value = "delta";
+    h.byId("rh-recommend-term-add")?.dispatch("command");
+    expect(calls).toContainEqual(["addTerm", "delta"]);
+    expect(input.value).toBe("");
+
+    input.value = "epsilon";
+    const prevented = vi.fn();
+    input.dispatch("keydown", { key: "Enter", preventDefault: prevented });
+    expect(prevented).toHaveBeenCalledOnce();
+    expect(calls).toContainEqual(["addTerm", "epsilon"]);
+
+    input.value = "zeta";
+    input.dispatch("keydown", { key: "a", preventDefault: prevented });
+    expect(prevented).toHaveBeenCalledOnce();
+    expect(calls).not.toContainEqual(["addTerm", "zeta"]);
+  });
+
+  it("draws the run's status rows in its header", () => {
+    const { h, publish } = open();
+    expect(h.byId("rh-recommend-status")?.hidden).toBe(true);
+    publish(
+      stateOf({
+        sources: [
+          {
+            sourceId: "similar",
+            nameId: "research-helper-search-recommend-generator-similar",
+            outcome: "succeeded",
+            detail: ref("research-helper-search-recommend-source-partial"),
+          },
+        ],
+      }),
+    );
+    const host = h.byId("rh-recommend-status");
+    expect(host?.hidden).toBe(false);
+    expect(host?.children[0]?.id).toBe("rh-recommend-status-similar");
+    expect(h.byId("rh-search-source-status")?.children).toHaveLength(0);
+  });
+
+  it("shows the run's key notice, and opens its link outside the window", () => {
+    const { h, publish } = open();
+    publish(
+      stateOf({
+        recommend: {
+          collectionName: "x",
+          profile: undefined,
+          canBuild: true,
+          canFind: false,
+          keyRequestUrl: "https://example.org/k",
+        },
+      }),
+    );
+    expect(h.byId("rh-recommend-key-notice")?.hidden).toBe(false);
+    const link = h.byId("rh-recommend-key-request");
+    expect(link?.getAttribute("href")).toBe("https://example.org/k");
+    link?.dispatch("click", { preventDefault: vi.fn() });
+    expect(h.launched).toStrictEqual(["https://example.org/k"]);
+
+    publish(stateOf());
+    expect(h.byId("rh-recommend-key-notice")?.hidden).toBe(true);
+    expect(link?.getAttribute("href")).toBeNull();
+  });
+
+  it("draws a row's columns, ticked as the pipeline said, with Import on", () => {
+    const { h, publish } = open();
+    const row = (n: number, startsTicked: boolean) => ({
+      key: `key-${String(n)}`,
+      title: `Paper ${String(n)}`,
+      authors: [{ family: `Author${String(n)}` }],
+      year: 2024,
+      sourceLabels: [],
+      typeLabel: "",
+      doi: "",
+      existing: !startsTicked,
+      startsTicked,
+      recommended: true,
+    });
+    publish(
+      stateOf({
+        panel: "results",
+        records: [row(1, true), row(2, false)],
+        recordsRevision: 1,
+      }),
+    );
+    const rows = h.byId("rh-results-body")?.children ?? [];
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.children.map((cell) => cell.className)).toStrictEqual([
+      "rh-col-select",
+      "rh-col-title",
+      "rh-col-authors",
+      "rh-col-year",
+      "rh-col-reason",
+      "rh-col-dismiss",
+    ]);
+    expect(h.controller.state.selection).toStrictEqual(["key-1"]);
+    expect(h.controller.state.selectedCount).toBe(1);
+    expect(
+      h.byId("rh-search-dialog")?.getAttribute("buttondisabledaccept"),
+    ).toBe("false");
+    expect(h.byId("rh-search-export")?.hidden).toBe(true);
+  });
+
+  it("offers no provenance export over a cost notice, since this mode writes no record", () => {
+    const { h, publish } = open();
+    publish(
+      stateOf({ notices: [ref("research-helper-search-recommend-heuristic")] }),
+    );
+    expect(h.byId("rh-search-export")?.hidden).toBe(true);
+  });
+
+  it("escapes a query in the empty panel's headline", () => {
+    const { h, publish } = open();
+    publish(
+      stateOf({
+        panel: "empty",
+        emptyHeadline: ref("research-helper-search-state-empty", {
+          query: "<b>x</b>",
+          from: 2020,
+          to: 2021,
+        }),
+      }),
+    );
+    expect(argsOf(h.byId("rh-state-empty-headline"))).toStrictEqual({
+      query: "&lt;b>x&lt;/b>",
+      from: 2020,
+      to: 2021,
+    });
+  });
+
+  it("Retry repeats this mode's last button, and Cancel goes to this mode's host", () => {
+    const { h, calls, keywordRuns } = open();
+    h.byId("rh-state-error-retry")?.dispatch("command");
+    expect(calls).toContainEqual(["retry"]);
+    expect(keywordRuns).toStrictEqual([]);
+    h.byId("rh-search-cancel")?.dispatch("command");
+    expect(calls).toContainEqual(["cancel"]);
+  });
+
+  it("stays usable with no recommend host", () => {
+    const h = harness({
+      args: { mode: "recommend-from-collection", collectionID: 77 },
+      host: { listSources: () => [PUBMED] },
+    });
+    h.controller.init();
+    h.byId("rh-recommend-build")?.dispatch("command");
+    h.byId("rh-recommend-term-add")?.dispatch("command");
+    expect(h.byId("rh-recommend-build")?.getAttribute("disabled")).toBe("true");
+  });
+
+  describe("P5-T27: the results", () => {
+    const P = "research-helper-search-recommend-";
+    const row = (n: number, extra: Record<string, unknown> = {}) => ({
+      key: `key-${String(n)}`,
+      title: `Paper ${String(n)}`,
+      authors: [{ family: `Author${String(n)}` }],
+      year: 2024,
+      sourceLabels: [],
+      typeLabel: "",
+      doi: "",
+      existing: false,
+      startsTicked: true,
+      recommended: true,
+      reasons: [ref(`${P}reason-recency`)],
+      preprint: false,
+      ...extra,
+    });
+    const listState = (
+      records: readonly unknown[],
+      recommend: Record<string, unknown> = {},
+      extra: Record<string, unknown> = {},
+    ) =>
+      stateOf({
+        panel: "results",
+        records,
+        recordsRevision: 1,
+        recommend: {
+          collectionName: "mRNA LNP",
+          profile: undefined,
+          canBuild: true,
+          canFind: true,
+          keyRequestUrl: undefined,
+          dismissedKeys: [],
+          dismissedAsked: false,
+          listNote: undefined,
+          ...recommend,
+        },
+        ...extra,
+      });
+    const bodyRows = (h: ReturnType<typeof open>["h"]) =>
+      h.byId("rh-results-body")?.children ?? [];
+    const buttonOf = (tr: FakeElement | undefined) =>
+      tr?.children.at(-1)?.children[0];
+    const flush = async () => {
+      for (let at = 0; at < 4; at += 1) await Promise.resolve();
+    };
+
+    it("draws Why and Dismiss in place of Source, Type and DOI", () => {
+      const { h, publish } = open();
+      publish(listState([row(1)]));
+      expect(
+        bodyRows(h)[0]?.children.map((cell) => cell.className),
+      ).toStrictEqual([
+        "rh-col-select",
+        "rh-col-title",
+        "rh-col-authors",
+        "rh-col-year",
+        "rh-col-reason",
+        "rh-col-dismiss",
+      ]);
+      expect(h.byId("rh-results-col-reason")?.getAttribute("scope")).toBe(
+        "col",
+      );
+      expect(h.byId("rh-results-col-dismiss")?.getAttribute("scope")).toBe(
+        "col",
+      );
+      expect(h.byId("rh-results-col-source")?.hidden).toBe(true);
+      expect(h.byId("rh-results-col-doi")?.hidden).toBe(true);
+    });
+
+    it("captions the two columns from the bundle's labels", async () => {
+      const { h } = open();
+      await flush();
+      expect(h.byId("rh-results-col-reason")?.textContent).toBe(
+        `label:${P}col-reason`,
+      );
+      expect(h.byId("rh-results-col-dismiss")?.textContent).toBe(
+        `label:${P}col-dismiss`,
+      );
+    });
+
+    it("gives each reason its own message and line, with a source's names escaped", () => {
+      const { h, publish } = open();
+      publish(
+        listState([
+          row(1, {
+            reasons: [
+              ref(`${P}reason-recency`),
+              ref(`${P}reason-author`, { names: HOSTILE, count: 1 }),
+              ref(`${P}reason-cites`, { count: 3 }),
+            ],
+          }),
+        ]),
+      );
+      const lines = bodyRows(h)[0]?.children[4]?.children ?? [];
+      expect(
+        lines.map((line) => line.getAttribute("data-l10n-id")),
+      ).toStrictEqual([
+        `${P}reason-recency`,
+        `${P}reason-author`,
+        `${P}reason-cites`,
+      ]);
+      expect(argsOf(lines[0])).toBeUndefined();
+      expect(argsOf(lines[1])).toStrictEqual({
+        names: '&lt;img src=x onerror="y">',
+        count: 1,
+      });
+      expect(argsOf(lines[2])).toStrictEqual({ count: 3 });
+    });
+
+    it("draws no heading on a list with no groups", () => {
+      const { h, publish } = open();
+      publish(listState([row(1), row(2)]));
+      expect(bodyRows(h)).toHaveLength(2);
+    });
+
+    it("draws one heading per group, spanning the columns on show", () => {
+      const { h, publish } = open();
+      const lipid = { key: "1", label: `lipid ${HOSTILE}` };
+      const numbered = {
+        key: "0",
+        ref: ref(`${P}group-numbered`, { number: 1 }),
+      };
+      publish(
+        listState([
+          row(1, { group: lipid }),
+          row(2, { group: lipid }),
+          row(3, { group: numbered }),
+        ]),
+      );
+      const rows = bodyRows(h);
+      expect(rows).toHaveLength(5);
+      const heading = rows[0]?.children[0];
+      expect(heading?.name).toBe("th");
+      expect(heading?.className).toBe("rh-recommend-group");
+      expect(heading?.getAttribute("scope")).toBe("colgroup");
+      expect(heading?.getAttribute("colspan")).toBe(
+        String(rows[1]?.children.length),
+      );
+      // The library's or a model's words: as text, and in no Fluent argument.
+      expect(heading?.textContent).toBe(`lipid ${HOSTILE}`);
+      expect(heading?.getAttribute("data-l10n-id")).toBeNull();
+      expect(rows[3]?.children[0]?.getAttribute("data-l10n-id")).toBe(
+        `${P}group-numbered`,
+      );
+      expect(argsOf(rows[3]?.children[0])).toStrictEqual({ number: 1 });
+    });
+
+    it("gives a heading no key and no checkbox, so the counts and arrow keys pass it", () => {
+      const { h, publish } = open();
+      const group = { key: "0", label: "lipid" };
+      publish(listState([row(1, { group }), row(2, { group })]));
+      const rows = bodyRows(h);
+      expect(
+        rows[0]?.getAttribute(h.controller.spec.row.keyAttribute),
+      ).toBeNull();
+      expect(rows[0]?.children[0]?.children).toHaveLength(0);
+      expect(h.controller.state.selectedCount).toBe(2);
+      expect(h.controller.rowCheckboxes()).toHaveLength(2);
+    });
+
+    it("does not draw a heading whose rows are all filtered away", () => {
+      const { h, publish } = open();
+      const lipid = { key: "1", label: "lipid" };
+      const liver = { key: "0", label: "liver" };
+      publish(
+        listState([
+          row(1, { group: lipid, title: "Alpha" }),
+          row(2, { group: liver, title: "Beta" }),
+        ]),
+      );
+      const filter = h.byId("rh-search-filter");
+      if (filter) filter.value = "beta";
+      h.controller.applyFilter();
+      const rows = bodyRows(h);
+      expect(rows).toHaveLength(2);
+      expect(rows[0]?.children[0]?.textContent).toBe("liver");
+    });
+
+    it("says a preprint in words, beside the title, and keeps the title as text", () => {
+      const { h, publish } = open();
+      publish(listState([row(1, { preprint: true, title: `T ${HOSTILE}` })]));
+      const cell = bodyRows(h)[0]?.children[1];
+      expect(cell?.children[0]?.className).toBe("rh-preprint-badge");
+      expect(cell?.children[0]?.getAttribute("data-l10n-id")).toBe(
+        `${P}preprint`,
+      );
+      expect(cell?.children[1]?.textContent).toBe(`T ${HOSTILE}`);
+      expect(cell?.children[1]?.getAttribute("data-l10n-id")).toBeNull();
+    });
+
+    it("keeps the in-library marker and the badge together, unticked", () => {
+      const { h, publish } = open();
+      publish(
+        listState([
+          row(1, { preprint: true, existing: true, startsTicked: false }),
+        ]),
+      );
+      const cell = bodyRows(h)[0]?.children[1];
+      expect(
+        cell?.children.map((child) => child.getAttribute("data-l10n-id")),
+      ).toContain(`${P}preprint`);
+      expect(
+        cell?.children.map((child) => child.getAttribute("data-l10n-id")),
+      ).toContain("research-helper-search-row-existing");
+      expect(h.controller.state.selection).toStrictEqual([]);
+    });
+
+    it("Not interested calls the host with the row's key, and draws nothing until it answers", () => {
+      const { h, calls, publish } = open();
+      publish(listState([row(1), row(2)]));
+      const button = buttonOf(bodyRows(h)[1]);
+      expect(button?.name).toBe("button");
+      expect(button?.getAttribute("type")).toBe("button");
+      expect(button?.getAttribute("data-l10n-id")).toBe(`${P}not-interested`);
+      button?.dispatch("click");
+      expect(calls).toContainEqual(["dismiss", "key-2"]);
+      expect(bodyRows(h)).toHaveLength(2);
+    });
+
+    it("stops Enter on the button at keydown, so it cannot reach the dialog's accept", () => {
+      const { h, calls, publish } = open();
+      publish(listState([row(1)]));
+      const prevented = vi.fn();
+      buttonOf(bodyRows(h)[0])?.dispatch("keydown", {
+        key: "Enter",
+        preventDefault: prevented,
+      });
+      expect(prevented).toHaveBeenCalledTimes(1);
+      expect(calls).toContainEqual(["dismiss", "key-1"]);
+    });
+
+    it("leaves any other key on the button alone", () => {
+      const { h, calls, publish } = open();
+      publish(listState([row(1)]));
+      const prevented = vi.fn();
+      buttonOf(bodyRows(h)[0])?.dispatch("keydown", {
+        key: "Tab",
+        preventDefault: prevented,
+      });
+      expect(prevented).not.toHaveBeenCalled();
+      expect(calls).not.toContainEqual(["dismiss", "key-1"]);
+    });
+
+    it("removes a dismissed row without touching any other row's tick", () => {
+      const { h, publish } = open();
+      publish(listState([row(1), row(2), row(3)]));
+      h.controller.toggleRow("key-3", false);
+      publish(
+        listState([row(1), row(2), row(3)], { dismissedKeys: ["key-2"] }),
+      );
+      expect(
+        bodyRows(h).map((tr) =>
+          tr.getAttribute(h.controller.spec.row.keyAttribute),
+        ),
+      ).toStrictEqual(["key-1", "key-3"]);
+      expect(h.controller.state.selection).toStrictEqual(["key-1"]);
+      expect(h.controller.state.selectedCount).toBe(1);
+    });
+
+    it("moves the focus to the button that took the pressed one's place", () => {
+      const { h, publish } = open();
+      publish(listState([row(1), row(2), row(3)]));
+      buttonOf(bodyRows(h)[1])?.dispatch("click");
+      publish(
+        listState([row(1), row(2), row(3)], { dismissedKeys: ["key-2"] }),
+      );
+      expect(buttonOf(bodyRows(h)[1])?.focused).toBe(true);
+      expect(buttonOf(bodyRows(h)[0])?.focused).toBe(false);
+    });
+
+    it("moves the focus to the last button when the last row went", () => {
+      const { h, publish } = open();
+      publish(listState([row(1), row(2)]));
+      buttonOf(bodyRows(h)[1])?.dispatch("click");
+      publish(listState([row(1), row(2)], { dismissedKeys: ["key-2"] }));
+      expect(buttonOf(bodyRows(h)[0])?.focused).toBe(true);
+    });
+
+    it("does not rebuild the table for a state with the same dismissed keys", () => {
+      const { h, publish } = open();
+      const dismissedKeys = ["key-2"];
+      publish(listState([row(1), row(2)], { dismissedKeys }));
+      const [first] = bodyRows(h);
+      publish(listState([row(1), row(2)], { dismissedKeys }));
+      expect(bodyRows(h)[0]).toBe(first);
+    });
+
+    it("moves the focus once for one press", () => {
+      const { h, publish } = open();
+      publish(listState([row(1), row(2), row(3)]));
+      buttonOf(bodyRows(h)[0])?.dispatch("click");
+      publish(
+        listState([row(1), row(2), row(3)], { dismissedKeys: ["key-1"] }),
+      );
+      publish(
+        listState([row(1), row(2), row(3)], {
+          dismissedKeys: ["key-1", "key-2"],
+        }),
+      );
+      expect(buttonOf(bodyRows(h)[0])?.focused).toBe(false);
+    });
+
+    it("moves no focus on a list that was not its doing", () => {
+      const { h, publish } = open();
+      publish(listState([row(1), row(2)]));
+      publish(listState([row(1), row(2)], { dismissedKeys: ["key-1"] }));
+      expect(buttonOf(bodyRows(h)[0])?.focused).toBe(false);
+    });
+
+    it("Show dismissed shows them marked, sends nothing, and hides them again", () => {
+      const { h, calls, publish } = open();
+      publish(listState([row(1), row(2)], { dismissedKeys: ["key-2"] }));
+      expect(bodyRows(h)).toHaveLength(1);
+      const before = calls.length;
+      const box = h.byId("rh-recommend-show-dismissed");
+      if (box) box.checked = true;
+      box?.dispatch("command");
+      expect(calls).toHaveLength(before);
+      const rows = bodyRows(h);
+      expect(rows).toHaveLength(2);
+      const marker = buttonOf(rows[1]);
+      expect(marker?.name).toBe("span");
+      expect(marker?.className).toBe("rh-row-dismissed-text");
+      expect(marker?.getAttribute("data-l10n-id")).toBe(`${P}row-dismissed`);
+      if (box) box.checked = false;
+      box?.dispatch("command");
+      expect(bodyRows(h)).toHaveLength(1);
+    });
+
+    it("leaves a dismissed row unticked when shown, and lets a hand tick it", () => {
+      const { h, publish } = open();
+      publish(listState([row(1), row(2)]));
+      publish(listState([row(1), row(2)], { dismissedKeys: ["key-2"] }));
+      const box = h.byId("rh-recommend-show-dismissed");
+      if (box) box.checked = true;
+      box?.dispatch("command");
+      expect(h.controller.state.selection).toStrictEqual(["key-1"]);
+      h.controller.toggleRow("key-2", true);
+      // A later dismissal of another row does not take that tick back.
+      publish(
+        listState([row(1), row(2)], { dismissedKeys: ["key-2", "key-1"] }),
+      );
+      expect(h.controller.state.selection).toStrictEqual(["key-2"]);
+    });
+
+    it("says rows from an earlier run are not on hand only while that is so", () => {
+      const { h, publish } = open();
+      const hint = () => h.byId("rh-recommend-dismissed-hint")?.hidden;
+      publish(listState([row(1)]));
+      expect(hint()).toBe(true);
+      const box = h.byId("rh-recommend-show-dismissed");
+      if (box) box.checked = true;
+      box?.dispatch("command");
+      expect(hint()).toBe(false);
+      publish(listState([row(1)], { dismissedAsked: true }));
+      expect(hint()).toBe(true);
+    });
+
+    it("says nothing of the hint with no list", () => {
+      const { h, publish } = open();
+      const box = h.byId("rh-recommend-show-dismissed");
+      if (box) box.checked = true;
+      publish(listState([], {}, { panel: "initial" }));
+      expect(h.byId("rh-recommend-dismissed-hint")?.hidden).toBe(true);
+    });
+
+    it("draws the list's note, and takes it away", () => {
+      const { h, publish } = open();
+      const note = () => h.byId("rh-recommend-list-note");
+      expect(note()?.hidden).toBe(true);
+      publish(listState([row(1)], { listNote: ref(`${P}novelty-note`) }));
+      expect(note()?.hidden).toBe(false);
+      expect(note()?.getAttribute("data-l10n-id")).toBe(`${P}novelty-note`);
+      publish(listState([row(1)]));
+      expect(note()?.hidden).toBe(true);
+      expect(note()?.getAttribute("data-l10n-id")).toBeNull();
+    });
+
+    it("Find papers carries the three controls, and starts on the decided values", () => {
+      const { h, calls, publish } = open();
+      publish(withProfile());
+      h.byId("rh-recommend-find")?.dispatch("command");
+      expect(calls).toContainEqual([
+        "find",
+        {
+          slider: RECOMMEND_DEFAULT_SLIDER,
+          peerReviewedOnly: false,
+          showDismissed: false,
+        },
+      ]);
+    });
+
+    it("reads the controls when pressed, not before", () => {
+      const { h, calls, publish } = open();
+      publish(withProfile());
+      const slider = h.byId("rh-recommend-slider");
+      if (slider) slider.value = "70";
+      const peer = h.byId("rh-recommend-peer-reviewed");
+      if (peer) peer.checked = true;
+      const dismissed = h.byId("rh-recommend-show-dismissed");
+      if (dismissed) dismissed.checked = true;
+      expect(calls.some(([name]) => name === "find")).toBe(false);
+      h.byId("rh-recommend-find")?.dispatch("command");
+      expect(calls).toContainEqual([
+        "find",
+        { slider: 70, peerReviewedOnly: true, showDismissed: true },
+      ]);
+    });
+
+    it("the slider's markup is the decided control, and writes no preference", () => {
+      const slider = h0().byId("rh-recommend-slider");
+      expect(slider?.name).toBe("html:input");
+      expect(slider?.getAttribute("type")).toBe("range");
+      expect(slider?.getAttribute("min")).toBe("0");
+      expect(slider?.getAttribute("max")).toBe("100");
+      expect(slider?.getAttribute("step")).toBe("5");
+      expect(slider?.getAttribute("value")).toBe(
+        String(RECOMMEND_DEFAULT_SLIDER),
+      );
+      expect(slider?.getAttribute("data-l10n-id")).toBe(`${P}slider`);
+      expect(h0().byId("rh-recommend-peer-reviewed")?.checked).toBe(false);
+      expect(h0().byId("rh-recommend-show-dismissed")?.checked).toBe(false);
+      expect(SCRIPT).not.toMatch(/setPref[^\n]*recommend/i);
+    });
+
+    it("stops Enter on the slider at keydown", () => {
+      const { h } = open();
+      const prevented = vi.fn();
+      h.byId("rh-recommend-slider")?.dispatch("keydown", {
+        key: "Enter",
+        preventDefault: prevented,
+      });
+      expect(prevented).toHaveBeenCalledTimes(1);
+      const other = vi.fn();
+      h.byId("rh-recommend-slider")?.dispatch("keydown", {
+        key: "ArrowLeft",
+        preventDefault: other,
+      });
+      expect(other).not.toHaveBeenCalled();
+    });
+
+    it("turns Import on with a tick, and off with none", () => {
+      const { h, publish } = open();
+      publish(listState([row(1)]));
+      expect(
+        h.byId("rh-search-dialog")?.getAttribute("buttondisabledaccept"),
+      ).toBe("false");
+      h.controller.toggleRow("key-1", false);
+      expect(
+        h.byId("rh-search-dialog")?.getAttribute("buttondisabledaccept"),
+      ).toBe("true");
+    });
+
+    /** A window whose bundle answers the dated default as Fluent does. */
+    function dated(asked: unknown[] = []) {
+      const opened = open(
+        {},
+        {
+          formatMessages: (
+            requests: readonly { id: string; args?: unknown }[],
+          ) => {
+            asked.push(...requests);
+            return Promise.resolve(
+              requests.map((request) => ({
+                value:
+                  request.id === `${P}target-default`
+                    ? "⁨mRNA LNP⁩ — recommended ⁨2026-11-05⁩"
+                    : `value:${request.id}`,
+                attributes: [],
+              })),
+            );
+          },
+        },
+      );
+      return opened;
+    }
+    const DATED = "new:mRNA LNP — recommended 2026-11-05";
+
+    it("starts the picker on the dated default, without Fluent's marks, on the local day", async () => {
+      const asked: unknown[] = [];
+      const { h, publish } = dated(asked);
+      h.controller.clock = {
+        now: () => new Date(2026, 10, 5, 23, 30).getTime(),
+      };
+      publish(listState([row(1)]));
+      await flush();
+      expect(h.byId("rh-search-target")?.value).toBe(DATED);
+      expect(asked).toContainEqual({
+        id: `${P}target-default`,
+        args: { collection: "mRNA LNP", date: "2026-11-05" },
+      });
+    });
+
+    it("pads the month and the day", () => {
+      const { h } = open();
+      expect(
+        h.controller.logic.isoDay(new Date(2026, 0, 3, 0, 5).getTime()),
+      ).toBe("2026-01-03");
+    });
+
+    it("asks for that name once, so a later state cannot take back a choice", async () => {
+      const asked: { id: string }[] = [];
+      const { h, publish } = dated(asked);
+      publish(listState([row(1)]));
+      await flush();
+      const target = h.byId("rh-search-target");
+      if (target) target.value = "9";
+      publish(listState([row(1)]));
+      await flush();
+      expect(
+        asked.filter(({ id }) => id === `${P}target-default`),
+      ).toHaveLength(1);
+      expect(target?.value).toBe("9");
+    });
+
+    it("leaves alone a choice made while the bundle was answering", async () => {
+      const { h, publish } = dated();
+      publish(listState([row(1)]));
+      const target = h.byId("rh-search-target");
+      if (target) target.value = "9";
+      await flush();
+      expect(target?.value).toBe("9");
+    });
+
+    it("Import hands over the ticked visible rows and nests only the dated default", async () => {
+      const { h, calls, publish } = dated();
+      publish(listState([row(1), row(2), row(3)]));
+      await flush();
+      h.controller.toggleRow("key-2", false);
+      h.doc.dispatch("dialogaccept", { preventDefault: () => undefined });
+      expect(calls).toContainEqual([
+        "importRows",
+        {
+          keys: ["key-1", "key-3"],
+          collectionID: DATED,
+          parentIsSource: true,
+        },
+      ]);
+      const target = h.byId("rh-search-target");
+      if (target) target.value = "9";
+      h.doc.dispatch("dialogaccept", { preventDefault: () => undefined });
+      expect(calls).toContainEqual([
+        "importRows",
+        {
+          keys: ["key-1", "key-3"],
+          collectionID: "9",
+          parentIsSource: false,
+        },
+      ]);
+    });
+
+    it("imports no row filtered out of view, and calls nothing with no tick", () => {
+      const { h, calls, publish } = open();
+      publish(listState([row(1), row(2)], { dismissedKeys: ["key-2"] }));
+      h.doc.dispatch("dialogaccept", { preventDefault: () => undefined });
+      const request = calls.find(([name]) => name === "importRows")?.[1] as {
+        keys: string[];
+      };
+      expect(request.keys).toStrictEqual(["key-1"]);
+      h.controller.toggleRow("key-1", false);
+      calls.length = 0;
+      h.doc.dispatch("dialogaccept", { preventDefault: () => undefined });
+      expect(calls).toStrictEqual([]);
+    });
+
+    it("draws a row's filter text from its title, authors and year only", () => {
+      const { h, publish } = open();
+      publish(listState([row(1, { title: "Alpha" })]));
+      const filter = h.byId("rh-search-filter");
+      if (filter) filter.value = `${P}reason-recency`;
+      h.controller.applyFilter();
+      expect(bodyRows(h)).toHaveLength(0);
+      if (filter) filter.value = "author1";
+      h.controller.applyFilter();
+      expect(bodyRows(h)).toHaveLength(1);
+    });
+
+    it("filters only this mode's rows on dismissal", () => {
+      const { logic } = open().h.controller;
+      expect(
+        logic.matchesRecommendFilter({ key: "a" }, { dismissedKeys: ["a"] }),
+      ).toBe(true);
+      expect(
+        logic.matchesRecommendFilter(
+          { key: "a", recommended: true },
+          undefined,
+        ),
+      ).toBe(true);
+      expect(
+        logic.matchesRecommendFilter({ key: "a", recommended: true }, {}),
+      ).toBe(true);
+      expect(
+        logic.matchesRecommendFilter(
+          { key: "a", recommended: true },
+          { dismissedKeys: ["a"] },
+        ),
+      ).toBe(false);
+      expect(
+        logic.matchesRecommendFilter(
+          { key: "a", recommended: true },
+          { dismissedKeys: ["a"], showDismissed: true },
+        ),
+      ).toBe(true);
+    });
+
+    it("escapes only names in a reason, and leaves one with none as it was", () => {
+      const { logic } = open().h.controller;
+      const plain = ref(`${P}reason-recency`);
+      expect(logic.reasonRef(plain)).toBe(plain);
+      const counted = ref(`${P}reason-cites`, { count: 2 });
+      expect(logic.reasonRef(counted)).toBe(counted);
+    });
+
+    /** The markup with the window opened, once per call. */
+    function h0() {
+      return open().h;
+    }
+  });
+});
+
+describe("P5-T26: the two Fluent arguments of plan/reports/integration-round-350.md", () => {
+  it("escapes a re-run heading's collection name and leaves the chip's attribute raw", async () => {
+    const name = "<img src=x onerror=y> & co";
+    const h = harness({
+      args: { mode: "rerun", collectionID: 4242 },
+      host: {
+        listSources: () => [PUBMED],
+        loadRerun: () =>
+          Promise.resolve({ ...RERUN_SEED, collectionName: name }),
+      },
+    });
+    h.controller.init();
+    await flush();
+    expect(argsOf(h.byId("rh-rerun-heading"))).toStrictEqual({
+      collection: "&lt;img src=x onerror=y> &amp; co",
+    });
+    expect(argsOf(h.byId("rh-search-mode"))).toStrictEqual({
+      collection: name,
+    });
+  });
+
+  it("escapes an empty headline's query and passes every other headline through", () => {
+    const logic = harness().controller.logic;
+    expect(
+      logic.emptyHeadlineRef({
+        id: "research-helper-search-state-empty",
+        args: { query: "<b>x</b> & y", from: 2020, to: 2021 },
+      }),
+    ).toStrictEqual({
+      id: "research-helper-search-state-empty",
+      args: { query: "&lt;b>x&lt;/b> &amp; y", from: 2020, to: 2021 },
+    });
+    const bare = { id: "research-helper-search-related-state-empty" };
+    expect(logic.emptyHeadlineRef(bare)).toBe(bare);
+    const other = { id: "x", args: { count: 1 } };
+    expect(logic.emptyHeadlineRef(other)).toBe(other);
   });
 });

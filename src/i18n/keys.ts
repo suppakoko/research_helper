@@ -173,6 +173,8 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   "research-helper-menu-collection-search-import",
   // FR-12's "Re-run This Search…" (P2-T17), docs/08 §2.4 and §10.2.
   "research-helper-menu-collection-rerun",
+  // FR-44's entry (P5-T26), docs/08 §2.4 and §10.2.
+  "research-helper-menu-collection-recommend",
   // FR-25's "Generate Research Trends Report…" (P4-T19), docs/08 §2.4 and
   // §10.2. The window it opens has its own bundle: REPORT_WINDOW_MESSAGE_IDS.
   "research-helper-menu-collection-report",
@@ -554,6 +556,10 @@ export const L10N_MENU_COLLECTION_SEARCH_IMPORT =
 export const L10N_MENU_COLLECTION_RERUN =
   "research-helper-menu-collection-rerun";
 
+/** FR-44's entry (`P5-T26`), behind the hidden `recommend.enabled`. */
+export const L10N_MENU_COLLECTION_RECOMMEND =
+  "research-helper-menu-collection-recommend";
+
 /**
  * Collection context menu ▸ Research Helper ▸ Summarize All Papers in
  * Collection (`P3-T29`, FR-19). `docs/08` §2.4 registers it under this id and
@@ -772,6 +778,77 @@ export const SEARCH_DIALOG_MESSAGE_IDS = [
   "research-helper-search-related-include-recommendation",
   "research-helper-search-related-include-similar",
   "research-helper-search-state-initial-related",
+
+  // The recommend mode (P5-T26; docs/08 §5.4).
+  "research-helper-search-window-title-recommend",
+  "research-helper-search-mode-recommend",
+  "research-helper-search-state-initial-recommend",
+  "research-helper-search-recommend-build",
+  "research-helper-search-recommend-find",
+  "research-helper-search-recommend-focus-label",
+  "research-helper-search-recommend-terms-label",
+  "research-helper-search-recommend-removed-label",
+  "research-helper-search-recommend-authors-label",
+  "research-helper-search-recommend-venues-label",
+  "research-helper-search-recommend-queries-label",
+  "research-helper-search-recommend-term-remove",
+  "research-helper-search-recommend-term-restore",
+  "research-helper-search-recommend-term-input",
+  "research-helper-search-recommend-term-add",
+  "research-helper-search-recommend-term-refused",
+  "research-helper-search-recommend-heuristic",
+  "research-helper-search-recommend-heuristic-no-provider",
+  "research-helper-search-recommend-heuristic-too-large",
+  "research-helper-search-recommend-egress-notice",
+  "research-helper-search-recommend-egress-sources",
+  "research-helper-search-recommend-queries-none",
+  "research-helper-search-recommend-generator-recommendations",
+  "research-helper-search-recommend-generator-similar",
+  "research-helper-search-recommend-generator-forward-citations",
+  "research-helper-search-recommend-generator-keyword-search",
+  "research-helper-search-recommend-generator-author-watch",
+  "research-helper-search-recommend-source-partial",
+  "research-helper-search-recommend-source-could-not-ask",
+  "research-helper-search-recommend-key-notice",
+  "research-helper-search-recommend-vectors-incomplete",
+  "research-helper-search-recommend-profile-rebuilt",
+  "research-helper-search-recommend-state-empty",
+  "research-helper-search-recommend-state-failed",
+  "research-helper-search-recommend-collection-gone",
+  "research-helper-search-recommend-status-building",
+  "research-helper-search-recommend-status-finding",
+  // The results (P5-T27; docs/08 §5.4).
+  "research-helper-search-recommend-col-reason",
+  "research-helper-search-recommend-col-dismiss",
+  "research-helper-search-recommend-slider",
+  "research-helper-search-recommend-slider-familiar",
+  "research-helper-search-recommend-slider-exploratory",
+  "research-helper-search-recommend-peer-reviewed",
+  "research-helper-search-recommend-show-dismissed",
+  "research-helper-search-recommend-dismissed-hint",
+  "research-helper-search-recommend-not-interested",
+  "research-helper-search-recommend-row-dismissed",
+  "research-helper-search-recommend-preprint",
+  "research-helper-search-recommend-reason-recommended",
+  "research-helper-search-recommend-reason-cites",
+  "research-helper-search-recommend-reason-author",
+  "research-helper-search-recommend-reason-similarity",
+  "research-helper-search-recommend-reason-similarity-basic",
+  "research-helper-search-recommend-reason-recency",
+  "research-helper-search-recommend-reason-velocity",
+  "research-helper-search-recommend-reason-novelty",
+  "research-helper-search-recommend-reason-venue",
+  "research-helper-search-recommend-reason-agreement",
+  "research-helper-search-recommend-reason-coupling",
+  "research-helper-search-recommend-reason-found",
+  "research-helper-search-recommend-group-numbered",
+  "research-helper-search-recommend-group-none",
+  "research-helper-search-recommend-novelty-note",
+  "research-helper-search-recommend-dismissed-status",
+  "research-helper-search-recommend-dismissed-status-no-key",
+  "research-helper-search-recommend-dismiss-failed",
+  "research-helper-search-recommend-target-default",
+  "research-helper-search-recommend-similarity-no-vectors",
 
   // FR-14 to FR-16's related results (P5-T16; docs/08 §5.2, §5.3).
   "research-helper-search-related-include-reference-count",
@@ -1281,6 +1358,77 @@ export const KO_PENDING_REVIEW = [
   "rh-error-seed-no-match",
   // --- P5-T25's refusal below 5 items (mainWindow), a commented stub in ko-KR ---
   "rh-error-recommend-too-few-items",
+  // --- P5-T26's recommend entry (mainWindow) and mode (searchDialog), stubs ---
+  "research-helper-menu-collection-recommend",
+  "research-helper-search-window-title-recommend",
+  "research-helper-search-mode-recommend",
+  "research-helper-search-state-initial-recommend",
+  "research-helper-search-recommend-build",
+  "research-helper-search-recommend-find",
+  "research-helper-search-recommend-focus-label",
+  "research-helper-search-recommend-terms-label",
+  "research-helper-search-recommend-removed-label",
+  "research-helper-search-recommend-authors-label",
+  "research-helper-search-recommend-venues-label",
+  "research-helper-search-recommend-queries-label",
+  "research-helper-search-recommend-term-remove",
+  "research-helper-search-recommend-term-restore",
+  "research-helper-search-recommend-term-input",
+  "research-helper-search-recommend-term-add",
+  "research-helper-search-recommend-term-refused",
+  "research-helper-search-recommend-heuristic",
+  "research-helper-search-recommend-heuristic-no-provider",
+  "research-helper-search-recommend-heuristic-too-large",
+  "research-helper-search-recommend-egress-notice",
+  "research-helper-search-recommend-egress-sources",
+  "research-helper-search-recommend-queries-none",
+  "research-helper-search-recommend-generator-recommendations",
+  "research-helper-search-recommend-generator-similar",
+  "research-helper-search-recommend-generator-forward-citations",
+  "research-helper-search-recommend-generator-keyword-search",
+  "research-helper-search-recommend-generator-author-watch",
+  "research-helper-search-recommend-source-partial",
+  "research-helper-search-recommend-source-could-not-ask",
+  "research-helper-search-recommend-key-notice",
+  "research-helper-search-recommend-vectors-incomplete",
+  "research-helper-search-recommend-profile-rebuilt",
+  "research-helper-search-recommend-state-empty",
+  "research-helper-search-recommend-state-failed",
+  "research-helper-search-recommend-collection-gone",
+  "research-helper-search-recommend-status-building",
+  "research-helper-search-recommend-status-finding",
+  // --- P5-T27's results, commented stubs in ko-KR ---
+  "research-helper-search-recommend-col-reason",
+  "research-helper-search-recommend-col-dismiss",
+  "research-helper-search-recommend-slider",
+  "research-helper-search-recommend-slider-familiar",
+  "research-helper-search-recommend-slider-exploratory",
+  "research-helper-search-recommend-peer-reviewed",
+  "research-helper-search-recommend-show-dismissed",
+  "research-helper-search-recommend-dismissed-hint",
+  "research-helper-search-recommend-not-interested",
+  "research-helper-search-recommend-row-dismissed",
+  "research-helper-search-recommend-preprint",
+  "research-helper-search-recommend-reason-recommended",
+  "research-helper-search-recommend-reason-cites",
+  "research-helper-search-recommend-reason-author",
+  "research-helper-search-recommend-reason-similarity",
+  "research-helper-search-recommend-reason-similarity-basic",
+  "research-helper-search-recommend-reason-recency",
+  "research-helper-search-recommend-reason-velocity",
+  "research-helper-search-recommend-reason-novelty",
+  "research-helper-search-recommend-reason-venue",
+  "research-helper-search-recommend-reason-agreement",
+  "research-helper-search-recommend-reason-coupling",
+  "research-helper-search-recommend-reason-found",
+  "research-helper-search-recommend-group-numbered",
+  "research-helper-search-recommend-group-none",
+  "research-helper-search-recommend-novelty-note",
+  "research-helper-search-recommend-dismissed-status",
+  "research-helper-search-recommend-dismissed-status-no-key",
+  "research-helper-search-recommend-dismiss-failed",
+  "research-helper-search-recommend-target-default",
+  "research-helper-search-recommend-similarity-no-vectors",
   // --- P5-T16's related results (searchDialog), commented stubs in ko-KR ---
   "research-helper-search-related-include-reference-count",
   "research-helper-search-related-include-citation-count",
@@ -2052,6 +2200,27 @@ export interface FluentMessageArgsMap {
   "research-helper-search-mode-rerun": { collection: string };
   // `P5-T15`: `$title` is the seed's own title (data), cut by the window.
   "research-helper-search-mode-related": { title: string };
+  // `P5-T26`. `$collection` and `$term` are data, and every one is an attribute.
+  "research-helper-search-mode-recommend": { collection: string };
+  "research-helper-search-recommend-term-remove": { term: string };
+  "research-helper-search-recommend-term-restore": { term: string };
+  "research-helper-search-recommend-egress-notice": {
+    papers: number;
+    dismissed: number;
+    authors: number;
+  };
+  // `P5-T27`. `$names` is a source's text, escaped by `logic.reasonRef`.
+  // `$collection` is the user's, in a string that is formatted and stored.
+  "research-helper-search-recommend-reason-cites": { count: number };
+  "research-helper-search-recommend-reason-author": {
+    names: string;
+    count: number;
+  };
+  "research-helper-search-recommend-group-numbered": { number: number };
+  "research-helper-search-recommend-target-default": {
+    collection: string;
+    date: string;
+  };
   // `P5-T16`. `$count` is how many rows of the run have that kind; `$value` a
   // similarity already written with two decimals; `$dots` 0 to 5; `$code` a
   // machine code, not translated.
@@ -2246,6 +2415,16 @@ export const ARGUMENT_MESSAGE_IDS = [
   "research-helper-search-mode-rerun",
   // `P5-T15`.
   "research-helper-search-mode-related",
+  // `P5-T26`.
+  "research-helper-search-mode-recommend",
+  "research-helper-search-recommend-term-remove",
+  "research-helper-search-recommend-term-restore",
+  "research-helper-search-recommend-egress-notice",
+  // `P5-T27`.
+  "research-helper-search-recommend-reason-cites",
+  "research-helper-search-recommend-reason-author",
+  "research-helper-search-recommend-group-numbered",
+  "research-helper-search-recommend-target-default",
   // `P5-T16`.
   "research-helper-search-related-include-reference-count",
   "research-helper-search-related-include-citation-count",

@@ -1487,6 +1487,7 @@ function createJobProgressFactory(
           // concurrently cannot dispose it twice — `dispose()` is idempotent
           // either way, and this keeps `openJobs` honest.
           open.delete(reporter);
+          popup.releaseJob();
           reporter.dispose();
         },
       };

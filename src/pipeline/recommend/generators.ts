@@ -636,8 +636,19 @@ function holdsWholeWords(query: string, removed: ReadonlySet<string>): boolean {
 }
 
 /**
+ * How {@link recommendKeywordQueries} compares terms, so the window's edits
+ * (`recommendViewModel.ts`, `P5-T26`) agree with what the run will send.
+ *
+ * @param term - a term, as stored or as typed
+ * @returns its comparison key; empty for a term with no letter or digit
+ */
+export function recommendTermKey(term: string): string {
+  return normalizeTitle(term);
+}
+
+/**
  * The run's keyword queries, as `parseUserQuery` reads them: `docs/05` §7.3's note,
- * item 7. Also what `P5-T26`'s notice can show as what is sent.
+ * item 7. Also what `P5-T26`'s notice shows as what is sent.
  *
  * @param profile - the profile, with any `userEdits`
  * @returns at most {@link RECOMMEND_MAX_KEYWORD_QUERIES} queries; none when the

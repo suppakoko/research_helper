@@ -1066,6 +1066,83 @@ describe("ZoteroProgressWindowSink", () => {
     expect(windows).toHaveLength(1);
   });
 
+  it("leaves a completion toast to its own timer when the job is disposed (2026-11-06)", () => {
+    const clock = createManualClock();
+    const win = fakeProgressWindow();
+    const sink = new ZoteroProgressWindowSink({
+      clock,
+      headline: "Research Helper",
+      openOn: "completion",
+      openWindow: () => win,
+    });
+    const reporter = new CompositeProgressReporter({ clock, sinks: [sink] });
+    reporter.done("succeeded", "3 results · 2 new");
+    sink.releaseJob();
+    reporter.dispose();
+    expect(win.closed).toBe(false);
+    expect(win.calls.some((call) => call.startsWith("startCloseTimer"))).toBe(
+      true,
+    );
+  });
+
+  it("closes a completion toast on a teardown that finds its job still open", () => {
+    const clock = createManualClock();
+    const win = fakeProgressWindow();
+    const reporter = new CompositeProgressReporter({
+      clock,
+      sinks: [
+        new ZoteroProgressWindowSink({
+          clock,
+          headline: "Research Helper",
+          openOn: "completion",
+          openWindow: () => win,
+        }),
+      ],
+    });
+    reporter.done("succeeded", "3 results · 2 new");
+    reporter.dispose();
+    expect(win.closed).toBe(true);
+  });
+
+  it("closes a popup still running when its job is let go", () => {
+    const clock = createManualClock();
+    const win = fakeProgressWindow();
+    const sink = new ZoteroProgressWindowSink({
+      clock,
+      headline: "Research Helper",
+      openWindow: () => win,
+    });
+    sink.update(runningSnapshot(clock.now(), 1, 10));
+    sink.releaseJob();
+    sink.dispose();
+    expect(win.closed).toBe(true);
+  });
+
+  it("raises nothing for a job that ended with nothing to say (2026-11-06)", () => {
+    const clock = createManualClock();
+    const windows: FakeWindow[] = [];
+    const reporter = new CompositeProgressReporter({
+      clock,
+      sinks: [
+        new ZoteroProgressWindowSink({
+          clock,
+          headline: "Research Helper",
+          openOn: "completion",
+          openWindow: () => {
+            const win = fakeProgressWindow();
+            windows.push(win);
+            return win;
+          },
+        }),
+      ],
+    });
+    reporter.done("succeeded");
+    expect(windows).toHaveLength(0);
+    // And the words still raise it, as a Cancel's do after the token's own done().
+    reporter.done("succeeded", "said");
+    expect(windows).toHaveLength(1);
+  });
+
   it("is torn down by the reporter's dispose()", () => {
     const clock = createManualClock();
     const win = fakeProgressWindow();
@@ -1078,6 +1155,33 @@ describe("ZoteroProgressWindowSink", () => {
     reporter.setProgress(1, 2);
     reporter.dispose();
     expect(win.closed).toBe(true);
+  });
+
+  it("lets a cancelled job's words land after the token raised its surfaces (2026-11-06)", () => {
+    const seen: ProgressSnapshot[] = [];
+    const source = createCancellationTokenSource();
+    const reporter = new CompositeProgressReporter({
+      clock: createManualClock(),
+      sinks: [{ update: (snapshot) => seen.push(snapshot) }],
+      token: source.token,
+    });
+    source.cancel({ kind: "user" });
+    expect(seen.at(-1)?.status).toBe("cancelled");
+    expect(seen.at(-1)?.message).toBe("");
+
+    reporter.done("cancelled", "Cancelled. 0 items were already imported.");
+    expect(seen.at(-1)?.status).toBe("cancelled");
+    expect(seen.at(-1)?.message).toBe(
+      "Cancelled. 0 items were already imported.",
+    );
+
+    // Nothing else lands: another outcome, or anything once the surfaces are gone.
+    const painted = seen.length;
+    reporter.done("succeeded", "not this");
+    reporter.done("cancelled");
+    reporter.dispose();
+    reporter.done("cancelled", "nor this");
+    expect(seen.length).toBe(painted);
   });
 });
 

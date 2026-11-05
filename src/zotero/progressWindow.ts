@@ -271,6 +271,8 @@ export class ZoteroProgressWindowSink implements ProgressSink {
   private closesAtMs = Number.POSITIVE_INFINITY;
   private autoClosed = false;
   private disposed = false;
+  private terminalPainted = false;
+  private toastOutlivesJob = false;
 
   constructor(options: ZoteroProgressWindowSinkOptions) {
     this.clock = options.clock;
@@ -324,9 +326,14 @@ export class ZoteroProgressWindowSink implements ProgressSink {
     // popup if the start-of-job one has already closed. This is `docs/08`
     // §4.4's completion toast, "so the user gets feedback if they have switched
     // away from the window".
+    //
+    // A job that ended with nothing to say raises nothing: a profile built, or a run
+    // whose failure is in its window's error panel. It is not a blank toast.
+    if (this.handle === undefined && this.formatLine(snapshot) === "") return;
     this.lastPaintMs = this.clock.now();
     this.closesAtMs = Number.POSITIVE_INFINITY;
     this.autoClosed = false;
+    this.terminalPainted = true;
     this.paint(snapshot);
     if (snapshot.status === "failed") this.line?.setError();
     // Restarted for the completion toast. `startCloseTimer` is a no-op before
@@ -362,11 +369,23 @@ export class ZoteroProgressWindowSink implements ProgressSink {
   }
 
   /** Close whatever is open and refuse further updates. Idempotent. */
+  /**
+   * The job is over and its owner is letting go of it, which is every job's last
+   * step, straight after `done()`: a dispose from here on leaves a completion toast
+   * to its own close timer. Closing it took the toast down 3 ms after it was raised
+   * (measured 2026-11-06, Zotero 10.0.3). The plugin's teardown does not come through
+   * here, so a toast of a job it finds still open is closed as ever.
+   */
+  releaseJob(): void {
+    this.toastOutlivesJob = this.terminalPainted;
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
     const handle = this.handle;
     this.release();
+    if (this.toastOutlivesJob) return;
     try {
       handle?.close();
     } catch {

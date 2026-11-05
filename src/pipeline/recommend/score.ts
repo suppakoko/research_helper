@@ -215,17 +215,24 @@ function isOwned(
 }
 
 /** A `"match"` only: a `"link"` or a `"flag"` is not ownership (`docs/02` §11.6). */
-function titleMatches(
+function titleMatchItem(
   candidate: RecommendCandidate,
   titles: TitleIndex,
-): boolean {
+): number | undefined {
   const [record] = candidate.records;
-  if (record === undefined) return false;
+  if (record === undefined) return undefined;
   const match = matchAgainstLibrary(
     { ...record, work: candidate.work },
     titles,
   );
-  return match?.decision.verdict === "match";
+  return match?.decision.verdict === "match" ? match.itemID : undefined;
+}
+
+function titleMatches(
+  candidate: RecommendCandidate,
+  titles: TitleIndex,
+): boolean {
+  return titleMatchItem(candidate, titles) !== undefined;
 }
 
 /**
@@ -845,8 +852,16 @@ export interface RecommendScoreInput extends RecommendYieldOptions {
  */
 export interface RecommendationRow {
   readonly recommendation: Recommendation;
+  /** The candidate's records, for the window's import (`P5-T27`). Never stored. */
+  readonly records: RecommendCandidate["records"];
   /** FR-46: elsewhere in the library. */
   readonly inLibrary: boolean;
+  /**
+   * The item a title match named, so an import links it rather than writing a second
+   * copy (`docs/08` §5.4's section "The results", decision 12). Absent for a row owned
+   * through an identifier, which the importer's own index finds.
+   */
+  readonly existingItemID?: number;
   /** FR-49: kept only because the run asked to show dismissed papers. */
   readonly dismissed: boolean;
   /** {@link isPreprintWork}, for the label on every preprint row. */
@@ -925,9 +940,11 @@ export async function scoreRecommendations(
       reading,
       profile.centroids.length,
     );
-    const inLibrary =
-      isOwned(ownership.library, work.ids, work.workKey) ||
-      titleMatches(candidate, ownership.libraryTitles);
+    const ownedById = isOwned(ownership.library, work.ids, work.workKey);
+    const titleItem = ownedById
+      ? undefined
+      : titleMatchItem(candidate, ownership.libraryTitles);
+    const inLibrary = ownedById || titleItem !== undefined;
     const dismissed = isOwned(input.dismissed, work.ids, work.workKey);
     rows.push({
       recommendation: {
@@ -953,7 +970,9 @@ export async function scoreRecommendations(
         ...(topicIndex !== undefined && { topicIndex }),
         generatedAtEpochMs: input.nowEpochMs,
       },
+      records: candidate.records,
       inLibrary,
+      ...(titleItem !== undefined && { existingItemID: titleItem }),
       dismissed,
       preprint: isPreprintWork(work),
       checkedByDefault: !inLibrary && !dismissed,

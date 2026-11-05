@@ -165,6 +165,37 @@ var RHSearchWindow = {
     stateRelatedChoose: "rh-state-related-choose",
     relatedPickerList: "rh-related-picker-list",
     relatedPickerUse: "rh-related-picker-use",
+    // FR-44's recommend mode (P5-T26, docs/08 §5.4).
+    scopeRow: "rh-search-scope-row",
+    recommendHeader: "rh-recommend-header",
+    recommendBuild: "rh-recommend-build",
+    recommendFind: "rh-recommend-find",
+    recommendProfile: "rh-recommend-profile",
+    recommendFocusRow: "rh-recommend-focus-row",
+    recommendFocus: "rh-recommend-focus",
+    recommendTerms: "rh-recommend-terms",
+    recommendRemovedRow: "rh-recommend-removed-row",
+    recommendRemoved: "rh-recommend-removed",
+    recommendTermInput: "rh-recommend-term-input",
+    recommendTermAdd: "rh-recommend-term-add",
+    recommendAuthorsRow: "rh-recommend-authors-row",
+    recommendAuthors: "rh-recommend-authors",
+    recommendVenuesRow: "rh-recommend-venues-row",
+    recommendVenues: "rh-recommend-venues",
+    recommendHeuristic: "rh-recommend-heuristic",
+    recommendEgress: "rh-recommend-egress",
+    recommendQueries: "rh-recommend-queries",
+    recommendQueriesNone: "rh-recommend-queries-none",
+    recommendKeyNotice: "rh-recommend-key-notice",
+    recommendKeyRequest: "rh-recommend-key-request",
+    recommendStatus: "rh-recommend-status",
+    // The results (P5-T27, docs/08 §5.4's section "The results").
+    recommendControls: "rh-recommend-controls",
+    recommendSlider: "rh-recommend-slider",
+    recommendPeerReviewed: "rh-recommend-peer-reviewed",
+    recommendShowDismissed: "rh-recommend-show-dismissed",
+    recommendDismissedHint: "rh-recommend-dismissed-hint",
+    recommendListNote: "rh-recommend-list-note",
     // P5-T17: "Link imported items as “Related” to the seed item".
     relatedLinkSeed: "rh-related-link-seed",
     emptySuggestions: "rh-state-empty-suggestions",
@@ -275,6 +306,14 @@ var RHSearchWindow = {
       scoreCell: "rh-col-score",
       context: "rh-related-context",
       contextLabel: "rh-related-context-label",
+      // P5-T26: one term of the recommend mode's profile panel.
+      recommendChip: "rh-recommend-chip",
+      // P5-T27: its reason cell, its button and its heading row.
+      reasonCell: "rh-col-reason",
+      dismissCell: "rh-col-dismiss",
+      preprintBadge: "rh-preprint-badge",
+      recommendGroup: "rh-recommend-group",
+      rowDismissed: "rh-row-dismissed-text",
       candidate: "rh-related-candidate",
       candidateTitle: "rh-related-candidate-title",
       candidateDetails: "rh-related-candidate-details",
@@ -398,6 +437,15 @@ var RHSearchWindow = {
     windowTitleRelated: "research-helper-search-window-title-related",
     modeRelated: "research-helper-search-mode-related",
     stateInitialRelated: "research-helper-search-state-initial-related",
+    // FR-44 (P5-T26): the recommend mode's title, chip and panel.
+    windowTitleRecommend: "research-helper-search-window-title-recommend",
+    modeRecommend: "research-helper-search-mode-recommend",
+    stateInitialRecommend: "research-helper-search-state-initial-recommend",
+    // P5-T27: the row's words, and the name an import's new collection starts with.
+    recommendNotInterested: "research-helper-search-recommend-not-interested",
+    recommendRowDismissed: "research-helper-search-recommend-row-dismissed",
+    recommendPreprint: "research-helper-search-recommend-preprint",
+    recommendTargetDefault: "research-helper-search-recommend-target-default",
     // P5-T17: the name a related import's new collection starts with.
     relatedTargetDefault: "research-helper-search-related-target-default",
     yearsAny: "research-helper-search-years-any",
@@ -589,6 +637,20 @@ var RHSearchWindow = {
     /** P5-T16: the list drawn by `renderRelatedCandidates`, and the choice in it. */
     relatedCandidates: null,
     relatedPick: null,
+
+    /** P5-T26: the view `renderRecommendProfile` last drew. */
+    recommendProfile: null,
+
+    /** P5-T27: `RecommendRunView.dismissedKeys`, as last adopted. */
+    recommendDismissed: [],
+    /** P5-T27: `RecommendRunView.dismissedAsked`, for the hint line. */
+    recommendDismissedAsked: false,
+    /** P5-T27: the "Not interested" button's place among them, while one is out. */
+    recommendDismissAt: null,
+    /** P5-T27: the source collection's name has been asked for its default target. */
+    recommendTargetAsked: false,
+    /** P5-T27: the picker value of the dated default, which nests under the source. */
+    recommendTarget: null,
   },
 
   // =========================================================================
@@ -1162,6 +1224,23 @@ var RHSearchWindow = {
       },
     ],
 
+    /**
+     * The two columns the recommend mode draws instead of Source, Type and DOI
+     * (P5-T27, docs/08 §5.4). Built by {@link RHSearchWindow.applyRecommendMode}.
+     */
+    recommendColumns: [
+      {
+        id: "rh-results-col-reason",
+        messageId: "research-helper-search-recommend-col-reason",
+        className: "rh-col-reason",
+      },
+      {
+        id: "rh-results-col-dismiss",
+        messageId: "research-helper-search-recommend-col-dismiss",
+        className: "rh-col-dismiss",
+      },
+    ],
+
     /** The columns `relatedColumns` replaces, hidden in the related mode. */
     columnsNotInRelatedMode: [
       "rh-results-col-source",
@@ -1280,6 +1359,54 @@ var RHSearchWindow = {
         .replace(/</g, "&lt;");
     },
 
+    /**
+     * The empty panel's headline, with any `$query` ready for its message's value
+     * (docs/08 §4.6; `research-helper-search-state-empty`). No view model publishes
+     * that message today, as `EMPTY_HEADLINE_OMITTED` says; this holds the rule for
+     * the card that does.
+     *
+     * @param {object} ref - a `MessageRef`
+     * @returns {object}
+     */
+    emptyHeadlineRef(ref) {
+      const args = ref.args;
+      return args && args.query !== undefined
+        ? { ...ref, args: { ...args, query: this.fluentText(args.query) } }
+        : ref;
+    },
+
+    /**
+     * One reason's message, ready for an element (P5-T27). `$names` is a source's
+     * text in a message's value, and so goes through {@link fluentText}.
+     *
+     * @param {object} ref - a `MessageRef` from `reasonRefs`
+     * @returns {object}
+     */
+    reasonRef(ref) {
+      const args = ref.args;
+      return args && args.names !== undefined
+        ? { ...ref, args: { ...args, names: this.fluentText(args.names) } }
+        : ref;
+    },
+
+    /**
+     * A day in the machine's own calendar, as the dated default names it (P5-T27).
+     *
+     * @param {number} epochMs
+     * @returns {string} YYYY-MM-DD
+     */
+    isoDay(epochMs) {
+      const day = new Date(epochMs);
+      const pad = (part) => String(part).padStart(2, "0");
+      return (
+        String(day.getFullYear()) +
+        "-" +
+        pad(day.getMonth() + 1) +
+        "-" +
+        pad(day.getDate())
+      );
+    },
+
     chipTitle(title, limit) {
       const text = typeof title === "string" ? title.trim() : "";
       const points = Array.from(text);
@@ -1370,6 +1497,18 @@ var RHSearchWindow = {
           // P3-T27: the model's score, or null for a row it did not score —
           // which no threshold hides.
           relevance: this.relevanceOf(source.relevance),
+          // P5-T26: ticked as the pipeline's `checkedByDefault` says.
+          // P5-T27: `reasons` and `group` are the view model's, and `group` is
+          // null on a list with no headings.
+          ...(source.recommended
+            ? {
+                recommended: true,
+                startsTicked: source.startsTicked !== false,
+                reasons: Array.isArray(source.reasons) ? source.reasons : [],
+                preprint: Boolean(source.preprint),
+                group: source.group || null,
+              }
+            : {}),
           // P5-T16: only a related record has these, so no other mode's row
           // changes shape.
           ...(source.related
@@ -1452,6 +1591,7 @@ var RHSearchWindow = {
         (row) =>
           (!hideExisting || !row.existing) &&
           this.matchesRelatedFilter(row, view) &&
+          this.matchesRecommendFilter(row, view) &&
           (threshold === null ||
             showExcluded ||
             !row.relevance ||
@@ -1483,6 +1623,24 @@ var RHSearchWindow = {
       }
       const year = Number(row.year);
       return !(year < view.fromYear) && !(year > view.toYear);
+    },
+
+    /**
+     * A dismissed row shows only while "Show dismissed" is ticked (docs/08 §5.4's
+     * section "The results", decision 10). Every other row, and every row of any
+     * other mode, passes.
+     *
+     * @param {object} row
+     * @param {{dismissedKeys?: string[], showDismissed?: boolean}} view
+     * @returns {boolean}
+     */
+    matchesRecommendFilter(row, view) {
+      if (!row.recommended || !view || !Array.isArray(view.dismissedKeys)) {
+        return true;
+      }
+      return (
+        Boolean(view.showDismissed) || !view.dismissedKeys.includes(row.key)
+      );
     },
 
     /**
@@ -1700,6 +1858,9 @@ var RHSearchWindow = {
     // P5-T16: a related window starts its run by itself (docs/08 §5.2's note of
     // 2026-11-05, decision 1), because it has no Search button and nothing to type.
     this.settle(this.runRelated());
+    // P5-T26: a recommend window only says which collection it is on. It sends
+    // nothing until a button is pressed (docs/08 §5.4).
+    this.openRecommend();
   },
 
   /**
@@ -1794,7 +1955,9 @@ var RHSearchWindow = {
           id:
             this.io.mode === "related"
               ? this.l10n.windowTitleRelated
-              : this.l10n.windowTitle,
+              : this.inRecommendMode()
+                ? this.l10n.windowTitleRecommend
+                : this.l10n.windowTitle,
         },
         { id: this.l10n.close },
         { id: this.l10n.import, args: { count: 0 } },
@@ -1860,6 +2023,9 @@ var RHSearchWindow = {
     // Last, because seedScreening() above decides the screening row's `hidden`.
     if (this.io.mode === "related") {
       this.applyRelatedMode();
+    }
+    if (this.inRecommendMode()) {
+      this.applyRecommendMode();
     }
   },
 
@@ -2303,6 +2469,40 @@ var RHSearchWindow = {
       );
     }
 
+    // FR-44's recommend mode (P5-T26). Enter in the term box adds the term, and
+    // must not reach the dialog's accept.
+    if (this.inRecommendMode()) {
+      this.on(this.spec.recommendBuild, "command", () =>
+        this.settle(this.recommendHost("build")),
+      );
+      this.on(this.spec.recommendFind, "command", () =>
+        this.settle(this.recommendHost("find", this.recommendControls())),
+      );
+      // P5-T27: Enter on the slider must not reach the dialog's accept either.
+      this.on(this.spec.recommendSlider, "keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+        }
+      });
+      // Sends nothing: it shows or hides the rows this window holds.
+      this.on(this.spec.recommendShowDismissed, "command", () => {
+        this.applyFilter();
+        this.renderDismissedHint();
+      });
+      this.on(this.spec.recommendTermAdd, "command", () =>
+        this.addRecommendTerm(),
+      );
+      this.on(this.spec.recommendTermInput, "keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          this.addRecommendTerm();
+        }
+      });
+      this.on(this.spec.recommendKeyRequest, "click", (event) =>
+        this.openKeyRequest(event, this.spec.recommendKeyRequest),
+      );
+    }
+
     // docs/08 §4.6's two actions on the all-failed panel.
     this.on(this.spec.errorRetry, "command", () => this.search());
     this.on(this.spec.errorPreferences, "command", () =>
@@ -2337,13 +2537,16 @@ var RHSearchWindow = {
 
   /**
    * `docs/08` §4.2: the keyword field is focused on open. The related mode has
-   * none, so its first Include box takes the focus (P5-T15).
+   * none, so its first Include box takes the focus (P5-T15), and in the recommend
+   * mode the button that starts it (P5-T26).
    */
   focusKeyword() {
     const target = this.el(
       this.io.mode === "related"
         ? this.spec.relatedIncludeReference
-        : this.spec.keyword,
+        : this.inRecommendMode()
+          ? this.spec.recommendBuild
+          : this.spec.keyword,
     );
     if (target && typeof target.focus === "function") {
       target.focus();
@@ -2536,7 +2739,7 @@ var RHSearchWindow = {
     // FR-13: the keyword view model is application-scoped and would paint its
     // previous run's rows under this seed, so the related mode attaches to its
     // own (P5-T16; docs/08 §5.2's note of 2026-11-05).
-    const target = this.inRelatedMode() ? this.host.related : this.host;
+    const target = this.modeHost();
     if (!target || typeof target.connect !== "function") {
       return;
     }
@@ -2573,6 +2776,8 @@ var RHSearchWindow = {
     this.state.running = Boolean(state.running);
     // P3-T27: before the table, so a new result set is filtered by it.
     this.state.screening = state.screening || null;
+    // P5-T27: before the table too, so a new list is filtered by it.
+    const dismissedChanged = this.adoptRecommendDismissed(state.recommend);
 
     // The table, only when the result set actually changed — see
     // `state.appliedRecordsRevision`.
@@ -2582,6 +2787,10 @@ var RHSearchWindow = {
     ) {
       this.state.appliedRecordsRevision = state.recordsRevision;
       this.setResults(state.records || []);
+    } else if (dismissedChanged) {
+      // One dismissal is no new list: every other row keeps its tick.
+      this.applyFilter();
+      this.focusAfterDismiss();
     }
 
     this.renderSourceStatus(state.sources || []);
@@ -2599,6 +2808,7 @@ var RHSearchWindow = {
     this.renderErrorPanel(state.error);
     this.renderStatusBar(state);
     this.renderRelated(state.related);
+    this.renderRecommend(state.recommend);
 
     // Last: `setResults()` shows the results panel when it has rows, and the
     // view model — not this document — decides which of docs/08 §8.4's five
@@ -2624,14 +2834,19 @@ var RHSearchWindow = {
   renderSourceStatus(lines) {
     // P5-T16: a related run's rows stay on screen beside its table, so they are in
     // the header rather than the panel a finished run leaves.
-    const related = this.inRelatedMode();
-    const id = related ? this.spec.relatedStatus : this.spec.sourceStatus;
+    // P5-T26: the recommend mode's, for the same reason.
+    const inHeader = this.inRelatedMode() || this.inRecommendMode();
+    const id = this.inRelatedMode()
+      ? this.spec.relatedStatus
+      : this.inRecommendMode()
+        ? this.spec.recommendStatus
+        : this.spec.sourceStatus;
     const host = this.el(id);
     if (!host) {
       return;
     }
     this.clear(host);
-    if (related) {
+    if (inHeader) {
       host.hidden = lines.length === 0;
     }
     for (const line of lines) {
@@ -2729,7 +2944,7 @@ var RHSearchWindow = {
       return;
     }
     if (ref && ref.id) {
-      this.applyRef(element, ref);
+      this.applyRef(element, this.logic.emptyHeadlineRef(ref));
       element.hidden = false;
       return;
     }
@@ -2864,7 +3079,9 @@ var RHSearchWindow = {
     // P5-T17: a related import draws its summary in `notices` and has no record
     // to export (docs/08 §5.2's note, decision 9), so the proxy does not hold there.
     const available =
-      !this.inRelatedMode() && this.logic.exportAvailable(state);
+      !this.inRelatedMode() &&
+      !this.inRecommendMode() &&
+      this.logic.exportAvailable(state);
     if (!available && this.state.exportAvailable) {
       // A new run replaced what can be exported, so the previous run's outcome
       // sentence stops being true.
@@ -3063,6 +3280,7 @@ var RHSearchWindow = {
     const captioned = [
       ...this.logic.columns.filter((column) => column.captioned),
       ...(this.inRelatedMode() ? this.logic.relatedColumns : []),
+      ...(this.inRecommendMode() ? this.logic.recommendColumns : []),
     ];
     return l10n
       .formatMessages(captioned.map((column) => ({ id: column.messageId })))
@@ -3131,6 +3349,7 @@ var RHSearchWindow = {
             showExcluded: this.checked(this.spec.screeningShowExcluded),
           }),
       ...this.relatedView(),
+      ...this.recommendView(),
     };
     this.state.visible = this.logic.visibleRows(
       this.state.rows,
@@ -3172,7 +3391,14 @@ var RHSearchWindow = {
       return;
     }
     this.clear(body);
+    // P5-T27: a heading only stands above a row, so one whose rows are all
+    // filtered away is not drawn.
+    let group = null;
     this.state.visible.forEach((row, index) => {
+      if (row.group && row.group.key !== group) {
+        group = row.group.key;
+        body.appendChild(this.buildGroupRow(row.group));
+      }
       body.appendChild(this.buildRow(row, index));
     });
   },
@@ -3238,6 +3464,11 @@ var RHSearchWindow = {
       [row.linked, classes.linkedBadge],
       // P3-T27: the model's score, its words and number from Fluent.
       [row.relevance && row.relevance.ref, classes.relevanceBadge],
+      // P5-T27: in words, with its message's own span like these.
+      [
+        row.preprint && { id: this.l10n.recommendPreprint },
+        classes.preprintBadge,
+      ],
     ]) {
       if (ref) {
         const marker = this.createHTML("span");
@@ -3262,7 +3493,7 @@ var RHSearchWindow = {
       );
       text.setAttribute("data-l10n-id", this.l10n.rowExisting);
       titleCell.appendChild(text);
-    } else if (row.duplicate || row.linked || row.relevance) {
+    } else if (row.duplicate || row.linked || row.relevance || row.preprint) {
       // A paper's title is data, not a translatable string — in a span of its
       // own here, because `textContent` on the cell would remove the badges.
       const text = this.createHTML("span");
@@ -3297,6 +3528,13 @@ var RHSearchWindow = {
     yearCell.className = "rh-col-year";
     yearCell.textContent = row.year;
     tr.appendChild(yearCell);
+
+    // P5-T27: the recommend mode's last two stand in for Source, Type and DOI.
+    if (row.recommended) {
+      tr.appendChild(this.buildReasonCell(row));
+      tr.appendChild(this.buildDismissCell(row));
+      return tr;
+    }
 
     // The related mode's last two columns (P5-T16, docs/08 §5.2) stand in for
     // Source, Type and DOI, which its header hides.
@@ -3600,6 +3838,11 @@ var RHSearchWindow = {
    * (`docs/01` §2.3).
    */
   search() {
+    // P5-T26: the same for the recommend mode, which repeats its last button.
+    if (this.inRecommendMode()) {
+      this.settle(this.recommendHost("retry"));
+      return;
+    }
     // FR-13 (P5-T16): the only way here in the related mode is Retry on the error
     // panel, and it repeats the run's own input. A keyword search with no keyword
     // must not start in its place.
@@ -3633,6 +3876,15 @@ var RHSearchWindow = {
   import() {
     // Enter must not reach what the button refuses.
     if (!this.logic.importEnabled(this.state.selectedCount)) {
+      return;
+    }
+    // P5-T27: as the related mode's, a recommended row is not a record.
+    if (this.inRecommendMode()) {
+      if (this.host.recommend) {
+        this.settle(
+          this.host.recommend.importRows(this.recommendImportRequest()),
+        );
+      }
       return;
     }
     // P5-T17: a related row is not a record, so this mode has its own road.
@@ -3888,7 +4140,7 @@ var RHSearchWindow = {
    */
   cancel() {
     this.state.running = false;
-    const target = this.inRelatedMode() ? this.host.related : this.host;
+    const target = this.modeHost();
     if (target && typeof target.cancel === "function") {
       target.cancel();
     }
@@ -4175,11 +4427,20 @@ var RHSearchWindow = {
         column.hidden = true;
       }
     }
+    this.buildHeadCells(this.logic.relatedColumns);
+  },
+
+  /**
+   * Append one mode's own columns to the header.
+   *
+   * @param {object[]} columns - `logic.relatedColumns` or `logic.recommendColumns`
+   */
+  buildHeadCells(columns) {
     const head = this.el(this.spec.resultsHeadRow);
     if (!head) {
       return;
     }
-    for (const column of this.logic.relatedColumns) {
+    for (const column of columns) {
       const cell = this.createHTML("th");
       cell.id = column.id;
       cell.className = column.className;
@@ -4308,6 +4569,29 @@ var RHSearchWindow = {
    */
   inRelatedMode() {
     return Boolean(this.io && this.io.mode === "related");
+  },
+
+  /**
+   * Whether this window is in the recommend mode. Safe before `init()`, as
+   * {@link inRelatedMode} is.
+   *
+   * @returns {boolean}
+   */
+  inRecommendMode() {
+    return Boolean(this.io && this.io.mode === "recommend-from-collection");
+  },
+
+  /**
+   * The host this window's mode talks to: the keyword view model would paint its
+   * previous run's rows under another mode, so each has its own.
+   *
+   * @returns {object|undefined}
+   */
+  modeHost() {
+    if (this.inRelatedMode()) {
+      return this.host.related;
+    }
+    return this.inRecommendMode() ? this.host.recommend : this.host;
   },
 
   /** The four Include boxes, in the row's order. */
@@ -4473,6 +4757,539 @@ var RHSearchWindow = {
   },
 
   // =========================================================================
+  // 4b. FR-44's recommend mode (P5-T26, docs/08 §5.4)
+  // =========================================================================
+
+  /**
+   * Turn the keyword window into docs/08 §5.4's: show the panel, and hide what a
+   * recommend run does not read. Every hidden control keeps its value. The window
+   * title is {@link applyChromeStrings}'s.
+   */
+  applyRecommendMode() {
+    const header = this.el(this.spec.recommendHeader);
+    if (header) {
+      header.hidden = false;
+    }
+    for (const id of [
+      "rh-search-keyword-label",
+      this.spec.keyword,
+      this.spec.run,
+      this.spec.scopeRow,
+      "rh-search-databases-group",
+      this.spec.screeningRow,
+      this.spec.emptySuggestions,
+      "rh-search-duplicates-label",
+      this.spec.duplicates,
+      ...this.logic.columnsNotInRelatedMode,
+    ]) {
+      const element = this.el(id);
+      if (element) {
+        element.hidden = true;
+      }
+    }
+    // Hidden until the collection is named, so it never says "Keyword" here.
+    const chip = this.el(this.spec.mode);
+    if (chip) {
+      chip.hidden = true;
+    }
+    // As in the related mode: nothing here writes the preference.
+    const hide = this.el(this.spec.hideExisting);
+    if (hide) {
+      hide.checked = false;
+    }
+    this.buildHeadCells(this.logic.recommendColumns);
+    this.localize(this.spec.initialProse, this.l10n.stateInitialRecommend);
+  },
+
+  /** Say which collection this window is on. No-op in every other mode. */
+  openRecommend() {
+    const recommend = this.inRecommendMode() ? this.host.recommend : undefined;
+    if (recommend && typeof recommend.open === "function") {
+      recommend.open(this.io.collectionID);
+    }
+  },
+
+  /**
+   * Call one of the recommend host's run methods.
+   *
+   * @param {"build"|"find"|"retry"} method
+   * @param {object} [controls] - what "Find papers" read off the window
+   * @returns {Promise<void>|undefined}
+   */
+  recommendHost(method, controls) {
+    const recommend = this.host.recommend;
+    if (!recommend) {
+      return undefined;
+    }
+    return controls === undefined
+      ? recommend[method]()
+      : recommend[method](controls);
+  },
+
+  /**
+   * The window's three per-run controls (`RecommendRunControls`), read when "Find
+   * papers" is pressed and written nowhere (docs/08 §5.4's section "The results",
+   * decision 8).
+   *
+   * @returns {{slider: number, peerReviewedOnly: boolean, showDismissed: boolean}}
+   */
+  recommendControls() {
+    return {
+      slider: Number(this.value(this.spec.recommendSlider)),
+      peerReviewedOnly: this.checked(this.spec.recommendPeerReviewed),
+      showDismissed: this.checked(this.spec.recommendShowDismissed),
+    };
+  },
+
+  /** What {@link logic.visibleRows} reads in this mode; nothing in any other. */
+  recommendView() {
+    if (!this.inRecommendMode()) {
+      return {};
+    }
+    return {
+      dismissedKeys: this.state.recommendDismissed,
+      showDismissed: this.checked(this.spec.recommendShowDismissed),
+    };
+  },
+
+  /**
+   * Take the view model's dismissed keys. A row dismissed just now loses its tick,
+   * because an import should not write what the user has just turned away. One
+   * ticked by hand after that stays ticked (decision 10).
+   *
+   * @param {object} [recommend] - the view model's `RecommendRunView`
+   * @returns {boolean} whether the list of keys is a new one
+   */
+  adoptRecommendDismissed(recommend) {
+    const keys = recommend && recommend.dismissedKeys;
+    this.state.recommendDismissedAsked = Boolean(
+      recommend && recommend.dismissedAsked,
+    );
+    if (!Array.isArray(keys) || keys === this.state.recommendDismissed) {
+      return false;
+    }
+    const before = this.state.recommendDismissed;
+    const added = keys.filter((key) => !before.includes(key));
+    this.state.recommendDismissed = keys;
+    if (added.length > 0) {
+      this.state.selection = this.logic.applySelection(
+        this.state.selection,
+        added,
+        "none",
+      );
+    }
+    return true;
+  },
+
+  /**
+   * The Why cell. Each reason is its own message on its own line, so nothing is
+   * assembled from fragments (decision 4).
+   *
+   * @param {object} row
+   * @returns {object}
+   */
+  buildReasonCell(row) {
+    const classes = this.spec.rowClass;
+    const cell = this.createHTML("td");
+    cell.className = classes.reasonCell;
+    for (const ref of row.reasons) {
+      const line = this.createHTML("div");
+      this.applyRef(line, this.logic.reasonRef(ref));
+      cell.appendChild(line);
+    }
+    return cell;
+  },
+
+  /**
+   * "Not interested", or "Dismissed" where it was (decisions 9 and 10).
+   *
+   * @param {object} row
+   * @returns {object}
+   */
+  buildDismissCell(row) {
+    const classes = this.spec.rowClass;
+    const cell = this.createHTML("td");
+    cell.className = classes.dismissCell;
+    if (this.state.recommendDismissed.includes(row.key)) {
+      const text = this.createHTML("span");
+      text.className = classes.rowDismissed;
+      text.setAttribute("data-l10n-id", this.l10n.recommendRowDismissed);
+      cell.appendChild(text);
+      return cell;
+    }
+    const button = this.createHTML("button");
+    button.setAttribute("type", "button");
+    button.setAttribute(this.spec.row.keyAttribute, row.key);
+    button.setAttribute("data-l10n-id", this.l10n.recommendNotInterested);
+    button.addEventListener("click", () => this.dismissRow(row.key, button));
+    // Enter would otherwise also reach the dialog's accept.
+    button.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        this.dismissRow(row.key, button);
+      }
+    });
+    cell.appendChild(button);
+    return cell;
+  },
+
+  /**
+   * A heading row. It is not a row of the table's data: it has no key, no checkbox
+   * and no count (decision 14), and it holds no element, so `rowCheckboxes` passes it.
+   *
+   * @param {{key: string, label?: string, ref?: object}} group
+   * @returns {object}
+   */
+  buildGroupRow(group) {
+    const tr = this.createHTML("tr");
+    const cell = this.createHTML("th");
+    cell.className = this.spec.rowClass.recommendGroup;
+    cell.setAttribute("scope", "colgroup");
+    cell.setAttribute(
+      "colspan",
+      String(
+        this.logic.columns.length -
+          this.logic.columnsNotInRelatedMode.length +
+          this.logic.recommendColumns.length,
+      ),
+    );
+    if (group.ref) {
+      this.applyRef(cell, group.ref);
+    } else {
+      // A model's or the library's words: never through Fluent, never as markup.
+      cell.textContent = group.label || "";
+    }
+    tr.appendChild(cell);
+    return tr;
+  },
+
+  /**
+   * "Not interested": remember where the button stood, for {@link focusAfterDismiss}.
+   *
+   * @param {string} key
+   * @param {object} button
+   */
+  dismissRow(key, button) {
+    const recommend = this.host.recommend;
+    if (!recommend) {
+      return;
+    }
+    this.state.recommendDismissAt =
+      this.recommendDismissButtons().indexOf(button);
+    this.settle(recommend.dismiss(key));
+  },
+
+  /** The table's "Not interested" buttons, in order. */
+  recommendDismissButtons() {
+    const body = this.el(this.spec.resultsBody);
+    const buttons = [];
+    for (const tr of (body && body.children) || []) {
+      const cell = tr.children && tr.children[tr.children.length - 1];
+      const button = cell && cell.children && cell.children[0];
+      if (
+        button &&
+        button.getAttribute("data-l10n-id") === this.l10n.recommendNotInterested
+      ) {
+        buttons.push(button);
+      }
+    }
+    return buttons;
+  },
+
+  /**
+   * The button pressed has gone, so the focus moves to the one that took its place,
+   * or the last one when it was the last row (decision 9).
+   */
+  focusAfterDismiss() {
+    const at = this.state.recommendDismissAt;
+    this.state.recommendDismissAt = null;
+    if (at === null || at < 0) {
+      return;
+    }
+    const buttons = this.recommendDismissButtons();
+    const button = buttons[Math.min(at, buttons.length - 1)];
+    if (button && typeof button.focus === "function") {
+      button.focus();
+    }
+  },
+
+  /**
+   * Say that the rows dismissed in an earlier run are not on hand, while the box
+   * asks for them and the list came from a run that did not (decision 10).
+   */
+  renderDismissedHint() {
+    const hint = this.el(this.spec.recommendDismissedHint);
+    if (hint) {
+      hint.hidden = !(
+        this.checked(this.spec.recommendShowDismissed) &&
+        this.state.rows.length > 0 &&
+        !this.state.recommendDismissedAsked
+      );
+    }
+  },
+
+  /**
+   * The picker's start: a new collection under the source (decision 11), whatever
+   * the opener preselected. A choice the user made while the bundle was answering
+   * is left alone.
+   *
+   * @param {string} name - the source collection's name
+   */
+  async adoptRecommendTarget(name) {
+    const l10n = document.l10n;
+    if (!l10n || typeof l10n.formatMessages !== "function") {
+      return;
+    }
+    const before = this.value(this.spec.target);
+    const [formatted] = await l10n.formatMessages([
+      {
+        id: this.l10n.recommendTargetDefault,
+        args: {
+          collection: name,
+          date: this.logic.isoDay(this.clock.now()),
+        },
+      },
+    ]);
+    // Fluent wraps a placeable in isolation marks, and this string is stored as
+    // the collection's name.
+    const text = String((formatted && formatted.value) || "").replace(
+      /[\u2068\u2069]/g,
+      "",
+    );
+    if (this.value(this.spec.target) === before) {
+      this.state.recommendTarget = this.adoptNewCollection(text);
+    }
+  },
+
+  /**
+   * What this mode's Import hands over: the ticked visible rows by key and the
+   * picker, and whether the picker is still on the dated default. The model holds
+   * the rows themselves.
+   *
+   * @returns {{keys: string[], collectionID: string, parentIsSource: boolean}}
+   */
+  recommendImportRequest() {
+    const collectionID = this.value(this.spec.target);
+    return {
+      keys: this.logic.pickedKeys(this.state.visible, this.state.selection),
+      collectionID,
+      parentIsSource: collectionID === this.state.recommendTarget,
+    };
+  },
+
+  /** The term box's Add, and its Enter. The box is emptied either way. */
+  addRecommendTerm() {
+    const input = this.el(this.spec.recommendTermInput);
+    const recommend = this.host.recommend;
+    if (!input || !recommend) {
+      return;
+    }
+    const typed = String(input.value || "");
+    input.value = "";
+    recommend.addTerm(typed);
+    input.focus();
+  },
+
+  /**
+   * Draw what only the recommend mode has. Every other mode's state has no
+   * `recommend`.
+   *
+   * @param {object} [recommend] - the view model's `RecommendRunView`
+   */
+  renderRecommend(recommend) {
+    if (!recommend) {
+      return;
+    }
+    const build = this.el(this.spec.recommendBuild);
+    if (build) {
+      build.disabled = !recommend.canBuild;
+    }
+    const find = this.el(this.spec.recommendFind);
+    if (find) {
+      // Without a profile there is no notice on screen, so never enabled.
+      find.disabled = !(recommend.canFind && recommend.profile);
+    }
+
+    // `.value` is an attribute, which Fluent does not parse: the name stays raw.
+    const chip = this.el(this.spec.mode);
+    if (chip) {
+      const name = recommend.collectionName;
+      chip.hidden = typeof name !== "string";
+      if (typeof name === "string") {
+        this.localize(
+          this.spec.mode,
+          this.l10n.modeRecommend,
+          JSON.stringify({ collection: name }),
+        );
+      }
+    }
+    // P5-T27: once, when the name is first known, and only then: a later state
+    // must not take back what the user picked.
+    if (
+      typeof recommend.collectionName === "string" &&
+      !this.state.recommendTargetAsked
+    ) {
+      this.state.recommendTargetAsked = true;
+      this.settle(this.adoptRecommendTarget(recommend.collectionName));
+    }
+
+    this.renderDismissedHint();
+    const note = this.el(this.spec.recommendListNote);
+    if (note) {
+      note.hidden = !recommend.listNote;
+      if (recommend.listNote) {
+        this.applyRef(note, recommend.listNote);
+      } else {
+        this.clearRef(note);
+      }
+    }
+
+    const url = recommend.keyRequestUrl;
+    const notice = this.el(this.spec.recommendKeyNotice);
+    if (notice) {
+      notice.hidden = typeof url !== "string";
+    }
+    const link = this.el(this.spec.recommendKeyRequest);
+    if (link) {
+      if (typeof url === "string") {
+        link.setAttribute("href", url);
+      } else {
+        link.removeAttribute("href");
+      }
+    }
+
+    this.renderRecommendProfile(recommend.profile);
+  },
+
+  /**
+   * The profile panel. Every line of data is `textContent` (docs/08 §5.4's note,
+   * decision 7). Rebuilt only when the view changes, so a progress update cannot
+   * take the focus off a chip's button.
+   *
+   * @param {object} [profile] - the view model's `RecommendProfileView`
+   */
+  renderRecommendProfile(profile) {
+    if (profile === this.state.recommendProfile) {
+      return;
+    }
+    this.state.recommendProfile = profile;
+    const panel = this.el(this.spec.recommendProfile);
+    if (panel) {
+      panel.hidden = !profile;
+    }
+    if (!profile) {
+      return;
+    }
+
+    const lines = [
+      [this.spec.recommendFocusRow, this.spec.recommendFocus, profile.focus],
+      [
+        this.spec.recommendAuthorsRow,
+        this.spec.recommendAuthors,
+        profile.authors.join(" · "),
+      ],
+      [
+        this.spec.recommendVenuesRow,
+        this.spec.recommendVenues,
+        profile.venues.join(" · "),
+      ],
+    ];
+    for (const [rowId, textId, text] of lines) {
+      const row = this.el(rowId);
+      if (row) {
+        row.hidden = !text;
+      }
+      const element = this.el(textId);
+      if (element) {
+        element.textContent = text || "";
+      }
+    }
+
+    this.renderRecommendChips(
+      this.spec.recommendTerms,
+      profile.terms,
+      (chip) => chip.removeRef,
+      (term) => this.host.recommend.removeTerm(term),
+    );
+    this.renderRecommendChips(
+      this.spec.recommendRemoved,
+      profile.removed,
+      (chip) => chip.restoreRef,
+      (term) => this.host.recommend.restoreTerm(term),
+    );
+    const removedRow = this.el(this.spec.recommendRemovedRow);
+    if (removedRow) {
+      removedRow.hidden = profile.removed.length === 0;
+    }
+
+    const heuristic = this.el(this.spec.recommendHeuristic);
+    if (heuristic) {
+      heuristic.hidden = !profile.heuristic;
+      if (profile.heuristic) {
+        this.applyRef(heuristic, profile.heuristic);
+      }
+    }
+
+    this.renderMessageList(
+      this.spec.recommendEgress,
+      profile.egress,
+      "rh-hint",
+    );
+
+    const queries = this.el(this.spec.recommendQueries);
+    if (queries) {
+      this.clear(queries);
+      for (const query of profile.queries) {
+        const line = this.createXUL("description");
+        line.textContent = query;
+        queries.appendChild(line);
+      }
+    }
+    const none = this.el(this.spec.recommendQueriesNone);
+    if (none) {
+      none.hidden = profile.queries.length > 0;
+    }
+  },
+
+  /**
+   * One line of chips: the term as `textContent`, and a button whose message holds
+   * the term in attributes only. The focus moves to the term box, because the button
+   * pressed is gone.
+   *
+   * @param {string} id - the line's element
+   * @param {object[]} chips - each with a `term`
+   * @param {(chip: object) => object} refOf - the button's message
+   * @param {(term: string) => void} act - what the button does
+   */
+  renderRecommendChips(id, chips, refOf, act) {
+    const host = this.el(id);
+    if (!host) {
+      return;
+    }
+    this.clear(host);
+    const classes = this.spec.rowClass;
+    for (const chip of chips) {
+      const box = this.createHTML("span");
+      box.className = classes.recommendChip;
+      const text = this.createHTML("span");
+      text.textContent = chip.term;
+      box.appendChild(text);
+      const button = this.createHTML("button");
+      button.setAttribute("type", "button");
+      this.applyRef(button, refOf(chip));
+      button.addEventListener("click", () => {
+        act(chip.term);
+        const input = this.el(this.spec.recommendTermInput);
+        if (input && typeof input.focus === "function") {
+          input.focus();
+        }
+      });
+      box.appendChild(button);
+      host.appendChild(box);
+    }
+  },
+
+  // =========================================================================
   // 4a. FR-12's re-run, pre-filled from provenance (P2-T17, docs/08 §4.6)
   // =========================================================================
 
@@ -4517,9 +5334,20 @@ var RHSearchWindow = {
    */
   applyRerun(seed) {
     this.state.rerun = { seed, choice: "recorded", dateTouched: false };
-    const collection = JSON.stringify({ collection: seed.collectionName });
-    this.localize(this.spec.mode, this.l10n.modeRerun, collection);
-    this.localize(this.spec.rerunHeading, this.l10n.rerunHeading, collection);
+    // The chip's `.value` is an attribute, which Fluent does not parse, so the name
+    // stays raw there. The heading is a value, which it does (docs/08 §5.2's note).
+    this.localize(
+      this.spec.mode,
+      this.l10n.modeRerun,
+      JSON.stringify({ collection: seed.collectionName }),
+    );
+    this.localize(
+      this.spec.rerunHeading,
+      this.l10n.rerunHeading,
+      JSON.stringify({
+        collection: this.logic.fluentText(seed.collectionName),
+      }),
+    );
     this.localize(
       this.spec.rerunRecorded,
       this.l10n.rerunRecorded,

@@ -18,6 +18,7 @@ import {
   TTSError,
 } from "../../../src/core/errors";
 import { createLogger } from "../../../src/core/logger";
+import { RECOMMEND_DISPLAY_NAME_KEY } from "../../../src/pipeline/recommend/recommendPipeline";
 import * as keys from "../../../src/i18n/keys";
 import { ANTHROPIC_DISPLAY_NAME_KEY } from "../../../src/llm/anthropic/anthropicProvider";
 import { GEMINI_DISPLAY_NAME_KEY } from "../../../src/llm/gemini/geminiProvider";
@@ -138,6 +139,7 @@ const ID_CONSTANTS = {
   L10N_MENU_COLLECTION_SEARCH_IMPORT: keys.L10N_MENU_COLLECTION_SEARCH_IMPORT,
   // `P2-T17`: FR-12's "Re-run This Search…".
   L10N_MENU_COLLECTION_RERUN: keys.L10N_MENU_COLLECTION_RERUN,
+  L10N_MENU_COLLECTION_RECOMMEND: keys.L10N_MENU_COLLECTION_RECOMMEND,
   // `P3-T29`: FR-19's summarize entry and FR-20's removal entry.
   L10N_MENU_COLLECTION_SUMMARIZE_ALL: keys.L10N_MENU_COLLECTION_SUMMARIZE_ALL,
   L10N_MENU_COLLECTION_REMOVE_NOTES: keys.L10N_MENU_COLLECTION_REMOVE_NOTES,
@@ -1494,6 +1496,92 @@ describe("P5-T16: the related results' strings", () => {
         "source-failed",
         "target-default",
       ].map((part) => `research-helper-search-related-${part}`),
+    );
+  });
+});
+
+describe("P5-T26: the recommend mode's strings", () => {
+  const bundle = (locale: string, surface = "searchDialog"): string =>
+    readFileSync(
+      resolve(
+        dirname(fileURLToPath(import.meta.url)),
+        `../../../addon/locale/${locale}/research-helper-${surface}.ftl`,
+      ),
+      "utf8",
+    );
+  const WHOLE_IDS = [
+    "research-helper-search-window-title-recommend",
+    "research-helper-search-mode-recommend",
+    "research-helper-search-state-initial-recommend",
+  ];
+  const ids = [
+    ...WHOLE_IDS,
+    ...bundle("en-US")
+      .split(/\r?\n/)
+      .map(
+        (line) =>
+          /^(research-helper-search-recommend-[a-z0-9-]+) =/.exec(line)?.[1],
+      )
+      .filter((id): id is string => id !== undefined),
+  ];
+
+  it("finds them all", () => {
+    // 37 of `P5-T26`'s and 31 of `P5-T27`'s, on the same terms.
+    expect(ids).toHaveLength(68);
+  });
+
+  it("puts each on the window's surface and on the pending list", () => {
+    for (const id of ids) {
+      expect(keys.SEARCH_DIALOG_MESSAGE_IDS, id).toContain(id);
+      expect(keys.KO_PENDING_REVIEW, id).toContain(id);
+      expect(keys.KO_PRESENT, id).not.toContain(id);
+    }
+  });
+
+  it("gives each a commented stub in ko-KR and no live message", () => {
+    const korean = bundle("ko-KR");
+    const lines = korean.split(/\r?\n/);
+    for (const id of ids) {
+      expect(korean, id).toContain(`# NEEDS REVIEW ${id} `);
+      expect(
+        lines.some((line) => line.startsWith(`${id} =`)),
+        id,
+      ).toBe(false);
+    }
+  });
+
+  it("gives arguments to exactly the messages with placeables", () => {
+    expect(sharedBy(ids, keys.ARGUMENT_MESSAGE_IDS).sort()).toStrictEqual(
+      [
+        "research-helper-search-mode-recommend",
+        "research-helper-search-recommend-egress-notice",
+        "research-helper-search-recommend-term-remove",
+        "research-helper-search-recommend-term-restore",
+        "research-helper-search-recommend-reason-cites",
+        "research-helper-search-recommend-reason-author",
+        "research-helper-search-recommend-group-numbered",
+        "research-helper-search-recommend-target-default",
+      ].sort(),
+    );
+  });
+
+  it("the entry's own string, on the main window's surface and pending", () => {
+    const id = keys.L10N_MENU_COLLECTION_RECOMMEND;
+    expect(keys.MAIN_WINDOW_MESSAGE_IDS).toContain(id);
+    expect(keys.KO_PENDING_REVIEW).toContain(id);
+    expect(keys.KO_PRESENT).not.toContain(id);
+    expect(bundle("en-US", "mainWindow")).toContain(
+      `${id} =\n    .label = Recommend New Papers from This Collection…`.replace(
+        /\n/g,
+        bundle("en-US", "mainWindow").includes("\r\n") ? "\r\n" : "\n",
+      ),
+    );
+    expect(bundle("ko-KR", "mainWindow")).toContain(`# NEEDS REVIEW ${id} `);
+  });
+
+  it("the pipeline's display name is that string", () => {
+    expect(RECOMMEND_DISPLAY_NAME_KEY).toBe(
+      keys.L10N_MENU_COLLECTION_RECOMMEND,
     );
   });
 });

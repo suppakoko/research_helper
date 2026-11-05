@@ -102,6 +102,7 @@ import { httpRequest } from "../core/http/client";
 import { getPref, setPref } from "../prefs";
 import { PROVIDER_PREF_NAMES } from "./registerProviders";
 import type { PluginDatabase } from "./pluginDatabase";
+import { RECOMMEND_MAX_POSITIVES } from "../sources/semanticscholar/recommendations";
 import { SEMANTICSCHOLAR_KEY_REQUEST_URL } from "../sources/semanticscholar/semanticscholarSource";
 import {
   SEARCH_WINDOW_API_PROPERTY,
@@ -136,6 +137,7 @@ import {
   buildEgressDisclosure,
   settleDisclosure,
 } from "../pipeline/shared/egressDisclosure";
+import type { RecommendPipeline } from "../pipeline/recommend/types";
 import type { RelatedPipeline } from "../pipeline/related/types";
 import type { RunEstimate } from "../pipeline/shared/estimate";
 import { isPrivacyMode } from "../pipeline/shared/privacyPolicy";
@@ -144,6 +146,10 @@ import {
   createRelatedViewModel,
   type RelatedWindowHost,
 } from "../ui/viewModels/relatedViewModel";
+import {
+  createRecommendViewModel,
+  type RecommendWindowHost,
+} from "../ui/viewModels/recommendViewModel";
 import type { ScreeningEstimateRequest } from "../ui/viewModels/searchImportViewModel";
 import {
   LLM_CREDENTIALS,
@@ -167,6 +173,7 @@ import type { ProviderId } from "../model/ids";
 import { readValidation, recordValidation } from "../zotero/keychain";
 import {
   createSearchImportViewModel,
+  type MessageFormatter,
   type SearchImportViewModelDeps,
   type SearchWindowHostApi,
 } from "../ui/viewModels/searchImportViewModel";
@@ -376,6 +383,11 @@ const SEARCH_MENU_COMMANDS: SearchMenuCommands = {
   // {@link publishReportWindowCommands} holds.
   openReportWindow: (host, collectionID) =>
     openReportWindowCommand(host, collectionID),
+  // FR-44 (`P5-T26`): the entry's two readers of the hidden preference. The third
+  // is `openRecommendWindowCommand` itself.
+  recommendEnabled: () => getPref("recommendEnabled"),
+  openRecommendWindow: (host, collectionID) =>
+    openRecommendWindowCommand(host, collectionID),
 };
 
 /**
@@ -411,6 +423,22 @@ function openRelatedWindowCommand(
 }
 
 /**
+ * FR-44's window (`P5-T26`; `docs/08` §5.4). Opens nothing while the hidden
+ * `recommend.enabled` is off (`docs/07` §8.5), read on every call. Opening it sends
+ * nothing: the window starts no run by itself.
+ */
+function openRecommendWindowCommand(
+  host: SearchWindowHost,
+  collectionID: number,
+): SearchWindowHandle | undefined {
+  if (!getPref("recommendEnabled")) return undefined;
+  return openTrackedSearchWindow(host, {
+    mode: "recommend-from-collection",
+    collectionID,
+  });
+}
+
+/**
  * What `itemMenuOptions` may do. Separate from {@link SEARCH_MENU_COMMANDS}
  * because the item menu has its own selection and one command.
  */
@@ -429,7 +457,18 @@ declare module "../addon" {
      * state and see it closed at shutdown.
      */
     relatedWindow?: RelatedWindowCommands;
+    /** FR-44's opener (`P5-T26`), published for the same reason. */
+    recommendWindow?: RecommendWindowCommands;
   }
+}
+
+/** {@link PluginApi.recommendWindow}. */
+export interface RecommendWindowCommands {
+  /** The window, or `undefined` while `recommend.enabled` is off. */
+  open(
+    host: SearchWindowHost,
+    collectionID: number,
+  ): SearchWindowHandle | undefined;
 }
 
 /** {@link PluginApi.relatedWindow}. */
@@ -574,9 +613,9 @@ async function publishProvenanceStore(
  * Zotero 10's `MenuManager` propagates a registration to every open window and
  * removes the elements again on unregister.
  *
- * `menuRegistration()`, `toolsMenuOptions()`, `withSearchImportEntry()` and
- * `collectionMenuOptions()` all run at module-evaluation time and none touches
- * the platform: the first returns a closure, the rest plain objects. Nothing
+ * `menuRegistration()`, `toolsMenuOptions()` and `withSearchImportEntry()` all run
+ * at module-evaluation time and none touches the platform (`collectionMenuOptions()`
+ * does at registration since `P5-T26`, reading one preference): the first returns a closure, the rest plain objects. Nothing
  * reaches `Zotero.MenuManager` until `registerUI()` feeds this array to a live
  * `Scope`.
  *
@@ -601,10 +640,14 @@ const APP_REGISTRATIONS: readonly ScopedRegistration[] = [
   ),
   // The hidden `report.enabled` that held the report entry back (item 307(d))
   // was removed on 2026-11-02: the window can generate a report (`P4-T20`).
-  menuRegistration(
-    COLLECTION_MENU_DESCRIPTION,
-    collectionMenuOptions(SEARCH_MENU_COMMANDS),
-  ),
+  // A function since `P5-T26`: the options read the hidden `recommend.enabled`, which
+  // needs `installServices` to have installed the preference store.
+  async (scope) => {
+    await menuRegistration(
+      COLLECTION_MENU_DESCRIPTION,
+      collectionMenuOptions(SEARCH_MENU_COMMANDS),
+    )(scope);
+  },
   // FR-13 (`P5-T15`), the first `main/library/item` registration. Not registered
   // at all while the hidden `related.enabled` is off (`docs/11` §0 principle 5),
   // so the item menu holds no empty submenu and no separator of ours. Read here,
@@ -820,6 +863,17 @@ function singletonWorkKey(record: SourceRecord): string | undefined {
  * this each time it opens, so a preference changed between two opens has to be
  * visible without a restart.
  */
+/**
+ * docs/08 §10.1's "From JS, no window" row: both bundles, because a toast can be worded
+ * from either and its window may be gone by then.
+ */
+function toastFormatter(): MessageFormatter {
+  return new Localization([
+    `${config.addonRef}-searchDialog.ftl`,
+    MAIN_WINDOW_FTL,
+  ]) as unknown as MessageFormatter;
+}
+
 function searchWindowDeps(
   graph: ServiceGraph,
   pipeline: Pipeline<SearchImportInput, SearchImportOutput>,
@@ -827,6 +881,7 @@ function searchWindowDeps(
 ): SearchWindowDeps {
   return {
     pipeline,
+    toastFormatter: toastFormatter(),
     jobs: graph.pipelineContext,
     logger,
     pluginVersion: version,
@@ -1140,6 +1195,7 @@ async function publishSearchWindowHost(
       ? undefined
       : createRelatedViewModel({
           pipeline: relatedPipeline,
+          toastFormatter: toastFormatter(),
           jobs: graph.pipelineContext,
           logger,
           keyRequestUrl: SEMANTICSCHOLAR_KEY_REQUEST_URL,
@@ -1152,8 +1208,58 @@ async function publishSearchWindowHost(
               (await relatedSeedOfItemID(itemID))?.libraryID,
           },
         }).host;
+  // FR-44 (`P5-T26`): the recommend mode's own model, the same way.
+  const recommendPipeline = graph.pipelines.get("recommend") as
+    RecommendPipeline | undefined;
+  if (recommendPipeline === undefined) {
+    logger.error(
+      "the recommend pipeline is not registered, so the recommend window will " +
+        "show no run",
+      { pipelines: graph.pipelines.list().length },
+    );
+  }
+  const recommend =
+    recommendPipeline === undefined
+      ? undefined
+      : createRecommendViewModel({
+          pipeline: recommendPipeline,
+          toastFormatter: toastFormatter(),
+          jobs: graph.pipelineContext,
+          logger,
+          keyRequestUrl: SEMANTICSCHOLAR_KEY_REQUEST_URL,
+          maxPaperIdentifiers: RECOMMEND_MAX_POSITIVES,
+          collectionOf: (collectionID) => {
+            const collection = addon.platform.collectionById(collectionID);
+            return collection === undefined
+              ? undefined
+              : {
+                  libraryID: collection.libraryId,
+                  collectionKey: collection.key,
+                  name: collection.name,
+                };
+          },
+          confirm: reportConfirmDeps(graph),
+          askBudget: async (question) => {
+            const outcome = await confirmRunCost({
+              mode: "ceiling",
+              stop: question.stop,
+              remainingUsd: question.remainingUsd,
+              raiseToUsd: question.raiseToUsd,
+              usage: question.usage,
+            });
+            return outcome.kind === "continue" ? "resume" : "cancel";
+          },
+          // `P5-T27`: the window's import, through this function's own pipeline.
+          imports: {
+            pipeline,
+            listCollections: () => addon.platform.listCollections(),
+          },
+        }).host;
   const host: SearchWindowHostApi &
-    RelatedSeedHost & { readonly related?: RelatedWindowHost } = {
+    RelatedSeedHost & {
+      readonly related?: RelatedWindowHost;
+      readonly recommend?: RecommendWindowHost;
+    } = {
     ...published,
     runSearch: async (query: SearchWindowQuery): Promise<void> => {
       await refreshLibraryIndex(logger);
@@ -1165,6 +1271,7 @@ async function publishSearchWindowHost(
       return work === undefined ? undefined : relatedSeedHeader(work);
     },
     ...(related === undefined ? {} : { related }),
+    ...(recommend === undefined ? {} : { recommend }),
   };
 
   // Captured once, for the reason {@link publishServiceGraph} gives: the
@@ -1216,10 +1323,12 @@ async function publishSearchWindowCommands(scope: Scope): Promise<void> {
     description: "the search window's related opener and its open window",
     register: () => {
       api.relatedWindow = { open: openRelatedWindowCommand };
+      api.recommendWindow = { open: openRecommendWindowCommand };
       return "searchWindowState";
     },
     unregister: () => {
       delete api.relatedWindow;
+      delete api.recommendWindow;
       const win = searchWindowState.win;
       searchWindowState.win = undefined;
       if (win !== undefined && win.closed !== true) win.close?.();

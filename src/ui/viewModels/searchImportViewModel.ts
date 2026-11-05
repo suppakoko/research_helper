@@ -792,6 +792,15 @@ export interface MessageFormatter {
 /** What {@link createSearchImportViewModel} needs. */
 export interface SearchImportViewModelDeps {
   readonly pipeline: Pipeline<SearchImportInput, SearchImportOutput>;
+  /**
+   * What words the completion toast. Not the window's `document.l10n`, for two
+   * reasons measured 2026-11-06: a run outlives its window, and a toast raised after
+   * the window closed had nothing to word it with; and the window links its own
+   * bundle only (`docs/08` §10.1), so `rh-error-cancelled` never resolved through it.
+   * Both drew a toast with a headline and an empty line. Absent, the connected
+   * window's formatter is used.
+   */
+  readonly toastFormatter?: MessageFormatter;
   readonly jobs: SearchImportJobFactory;
   readonly logger: Logger;
   /** The plugin's own version, for `SearchProvenance.pluginVersion`. */
@@ -2355,7 +2364,7 @@ export function createSearchImportViewModel(
 
   /** Resolve a {@link MessageRef} to text. Used for the completion toast only. */
   async function text(ref: MessageRef): Promise<string | undefined> {
-    const formatter = view?.formatter;
+    const formatter = deps.toastFormatter ?? view?.formatter;
     if (formatter === undefined) return undefined;
     try {
       const [resolved] = await formatter.formatMessages([

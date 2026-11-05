@@ -1726,6 +1726,41 @@ describe("what a row records", () => {
     ).toBe(1);
   });
 
+  it("carries the candidate's records, for the window's import", async () => {
+    const given = candidate(work());
+    const row = await oneRow(given);
+    expect(row.records).toBe(given.records);
+  });
+
+  it("names the item a title match found, and only for a title match", async () => {
+    const title =
+      "A long and specific title about lipid delivery in human primary cells";
+    const authors = [{ family: "Kim", given: "Jun" }];
+    const elsewhere = work({ title, ids: {} as ExternalIds, authors });
+    const byTitle = await oneRow(
+      candidate(work({ title, ids: { pmid: "888" } as ExternalIds, authors })),
+      {
+        ownership: {
+          ...ownershipOf(),
+          libraryTitles: buildTitleIndex([libraryItemOf(elsewhere, 41)]),
+        },
+      },
+    );
+    expect(byTitle.inLibrary).toBe(true);
+    expect(byTitle.existingItemID).toBe(41);
+
+    const owner = work();
+    const byIdentifier = await oneRow(candidate(work({ ids: owner.ids })), {
+      ownership: ownershipOf([], [owner]),
+    });
+    expect(byIdentifier.inLibrary).toBe(true);
+    expect(byIdentifier).not.toHaveProperty("existingItemID");
+
+    const fresh = await oneRow(candidate(work()));
+    expect(fresh.inLibrary).toBe(false);
+    expect(fresh).not.toHaveProperty("existingItemID");
+  });
+
   it("marks a library item by a title match", async () => {
     const title =
       "A long and specific title about delivery vectors in human primary cells";

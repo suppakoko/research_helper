@@ -68,6 +68,8 @@ research-helper-menu-search-import =
 research-helper-menu-collection-rerun =
     .label = 이 검색 다시 실행…
 
+# NEEDS REVIEW research-helper-menu-collection-recommend .label = Recommend New Papers from This Collection…
+
 # FR-19's entry (P3-T29), taken verbatim from `docs/08` §10.2, which ships the
 # owner's Korean for it beside the en-US "Summarize All Papers in Collection".
 research-helper-menu-collection-summarize-all =

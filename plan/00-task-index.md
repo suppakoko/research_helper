@@ -3,7 +3,7 @@
 > **Generated from the task cards in `01`–`04`, `07` and `08`** (Phase 4's file, read since 2026-10-26, and
 > Phase 5's, read since 2026-11-01). If a row here disagrees with a card, the card wins — then regenerate
 > this file.
-> **Last updated:** 2026-11-05 · **214 tasks: 112 `DONE`, 102 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 37**, Phase 3 **0 of 39**, Phase 4 **0 of 25**, Phase 5 **0 of 32**. **The plan has grown from the 153 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25, plus the 30 Phase 5 was drafted and reviewed with on 2026-11-01; its 31st card, `P5-T31`, added when the owner's decisions were applied, counts as growth) to 214, so 61 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-11-06 · **214 tasks: 112 `DONE`, 102 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 37**, Phase 3 **0 of 39**, Phase 4 **0 of 25**, Phase 5 **0 of 32**. **The plan has grown from the 153 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25, plus the 30 Phase 5 was drafted and reviewed with on 2026-11-01; its 31st card, `P5-T31`, added when the owner's decisions were applied, counts as growth) to 214, so 61 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -3084,6 +3084,43 @@ the caller of what the card builds; if it does not, the caller is added with a d
     - (d) Finding 2: `research-helper-search-rerun-heading`'s `$collection` can now carry a seed's title, because a new collection takes it, so `P5-T26` passes it and `$query` through `logic.fluentText`. Finding 3: `P5-T26`'s integration
       round measures whether the keyword window raises the same left-run toast. Findings 4 and 5 are recorded only.
     - (e) Status rows take about half the window at seven rows, at 1019 × 600. That is a judgement for the owner when the window is first used, and blocks nothing.
+
+351. **`P5-T26` written, 2026-11-05** (`plan/reports/P5-T26.md`). It passes at unit level and in a simulated document. The real menu entry and window wait on the next integration round, and all its integration changes are unrun.
+    **DECIDED 2026-11-05 (coordinator, under item 313):**
+    - (a) The agent's eleven readings stand, as written in `docs/08` §5.4 and §2.5.
+    - (b) Item 350(c) is closed: `noteEgress` lets a failed log write reject, `beforeSend` rejects, the router sends nothing, and the run ends `failed` with no `egress`. `docs/07` §12.5 item 8 holds the dated correction. Its real failure in
+      Zotero is still to be proved.
+    - (c) Item 350(d)'s premise about `$query` was wrong: no view model publishes `research-helper-search-state-empty`, and `logic.emptyHeadlineRef` holds the rule. Both arguments are escaped and tested.
+    - (d) The owner's Korean batch gains this card's 38 ids, with the question of 게재처 for "Venues".
+
+352. **`P5-T27` written, dated in its documents 2026-11-05 and recorded here 2026-11-06** (`plan/reports/P5-T27.md`). It passes at unit level. `recommendFlow.spec.ts` is unrun, and group headings need vectors, so a keyless run cannot show them
+    and only `P5-T30`'s keyed run will.
+    **DECIDED 2026-11-06 (coordinator, under item 313):**
+    - (a) The agent's fourteen readings stand, as written in `docs/08` §5.4, `docs/05` §7.6 and `docs/07` §12.5. A label the user removed reads "Topic n", which settles `P5-T21`'s finding 5. On the word space `novelty` is said once for the list and not on
+      each row. "We'll show fewer like this." is said only with a key, because nothing reads a negative without one.
+    - (b) Finding 2: the note of 2026-11-02 on `plan/08` saying a numbered group appears on the lexical path does not hold, because a keyless profile has no centroid. `docs/08` holds the correction.
+    - (c) The owner's Korean batch gains this card's 31 ids. `research-helper-search-recommend-target-default`, like the related window's, becomes a stored collection name.
+
+353. **`P5-T28` written, 2026-11-06** (`plan/reports/P5-T28.md`). The spec typechecks and is unrun in Zotero. A Node harness over the same doubled answers gave 130 related rows and 30 recommend rows with no Semantic Scholar request. Those answers include two
+    hand-written ones, so nothing here says the rows are good papers: "useful" stays with `P5-T30`, on the live services.
+    **DECIDED 2026-11-06 (coordinator, under item 313):**
+    - (a) The agent's six readings stand, as written on the card and in `docs/05` §7.4 item 16.
+    - (b) Forward citations added no row to a keyless recommendation list here: 0 of 25 recorded Europe PMC relation rows hold a DOI or an abstract, the fill-in asks by DOI, and `contentFilters` drops them, so 10 of the run's 20 requests bought nothing on these
+      answers. A fix would need a lookup by PMID and more of the budget. It blocks no finishing condition (rule 9). `P5-T30` reads the live figure, and a real run showing the same adds that lookup.
+    - (c) Item 341(c) now has a measured cost: 30 recorded abstracts, six from each of five files, gave 15 seeds split 5, 2, 5, 3 and 0, so one file in five was never asked from by the seed-reading lists. One run of one collection, and it stays a stated limit.
+    - (d) The Korean batch of 116 strings went to the review page on 2026-11-06 in place of chat, because a page does not stop agents' results being read (`https://claude.ai/artifact/9XWYSJVPFztfpHkFtwxb8J`; collection `review`, doc id = message id). Item 347(b) is met that way.
+
+354. **Integration round on `P5-T26`, `T27`, `T28`, 2026-11-06** (`plan/reports/integration-round-354.md`). Three consecutive runs on the final tree: 345 passed, 0 failed, 2 pending. ko-KR 353 present, 117 absent: the 116 ids on `KO_PENDING_REVIEW` and the deliberate fallback fixture.
+    The guard read 1197 channels in each run and cancelled none. Five product defects were found and fixed at the cause, three of them older than this round and also in the keyword window: a long list stretched the window past its buttons, a completion toast closed 3 ms after it was raised, and a keyword toast could have a headline over an empty line.
+    **DECIDED 2026-11-06 (coordinator, under item 313):**
+    - (a) The one changed assertion stands. `test/unit/bootstrap/container.test.ts` read `firstPopup.closed() === true` after `done()` and `dispose()`, which stated the toast defect as correct. It now reads false, with a dated comment, and what it is there for, that a second job's surfaces are untouched, did not move.
+    - (b) Items 350(d) and 351(b) are closed. The keyword window raises no left-run toast, so it needs no `leaveRun`-style fix. A real `recordEgress` failure sends nothing and calls no model, at pipeline level and in a real window.
+    - (c) `P5-T27`'s line on the heading row is proved only in part: on a list drawn by hand through the real table, left and right edges agree. A heading row from real topic centroids needs vectors, and vectors need a key, so `P5-T30` reads it.
+    - (d) Recorded and not carded, because none blocks a finishing condition (rule 9): a keyword window re-opened during a run draws its first panel until the run ends; a window dragged below its minimum clips up to 39 px of the dialog's bottom; a finished job's toast can outlast a plugin disable by up to 4 s on Zotero's own timer; closing a keyword window lets its requests finish while the related and recommend modes cancel when left. All are in `docs/08` §4.3 and §8.1.
+    - (e) Not checked, and stated so: layout in Korean at 1019 × 600, because the layout specs pin en-US (read again once the owner's Korean is in); the toast as seen on screen, since calls and timing were measured; a Cancel toast in the related mode in a real window; an import cancelled in the related or recommend mode in a real window; high contrast.
+    - (f) **The coordinator read the screenshots and the round's account of the panel understates one thing.** At 1019 × 600 with 20 terms the header wants 436 px and has 298. The report speaks of the last disclosure line being cut, but that leaves 138 px under the edge, and the notice says "the search queries below". Find papers sits above all of it and works without a scroll. Meanwhile the Filter row, the Import row and the empty placeholder hold room and do nothing before a list exists. What is under the edge has not been measured line by line. A follow-up measures that and gives the room to the profile while no table shows. It is done under this item, on the rule that a notice of what leaves the machine should be readable where the button is.
+    - (g) Two judgements remain for the owner when the window is first used, and neither blocks anything: a larger opening size, which was not tried, and the balance of the `45vh` table floor against reading the profile once a list shows.
+    - (h) The `review` collection of the Korean page read empty on 2026-11-06, first batch included, so an earlier note that the first batch's rows remained there no longer holds. Nothing is lost: `KO_PENDING_REVIEW` was empty on 2026-11-02, so that batch was already in. No answer has arrived on the second batch.
 
 ## 7. Regenerating this file
 

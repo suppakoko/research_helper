@@ -44,6 +44,7 @@ import { SEARCH_WINDOW_NAME } from "../../src/ui/dialogs/searchDialog";
 import { SUMMARIZE_WINDOW_NAME_PREFIX } from "../../src/ui/dialogs/summarizeDialog";
 import { REPORT_WINDOW_NAME_PREFIX } from "../../src/ui/panes/reportWindow";
 import { qualifiedPrefName } from "../../src/zotero/prefStore";
+import { doubleTheTransport, runToken } from "./support/recommendPage";
 
 // Mocha and Chai globals injected by the scaffold runner's index.xhtml. Typed
 // locally, to exactly what this file uses: no Mocha types are installed.
@@ -591,6 +592,121 @@ describe("lifecycle (FR-56)", function () {
         await initializedInstance();
       }
       await seed.eraseTx();
+    }
+  });
+
+  it("shutdown during a recommend run closes the window and withdraws its opener (P5-T26)", async function () {
+    this.timeout(120_000);
+    const wrapper = await researchHelperAddon();
+    const enabledPref = qualifiedPrefName(PREF_KEYS.recommendEnabled);
+    const sourcesPref = qualifiedPrefName(PREF_KEYS.sources);
+    const sourcesBefore = Zotero.Prefs.get(sourcesPref, true) as
+      string | undefined;
+    const before = await initializedInstance();
+    const token = runToken();
+    // First, so nothing below can reach the live request guard. Every answer takes a
+    // while, so the run is still going when the plugin goes.
+    const transport = doubleTheTransport(token, { rows: 8, delayMs: 500 });
+    const collection = new Zotero.Collection({
+      libraryID: Zotero.Libraries.userLibraryID,
+      name: `Lifecycle: a recommend run ${token}`,
+    });
+    await collection.saveTx();
+    const items: Zotero.Item[] = [];
+    for (let at = 0; at < 6; at += 1) {
+      const item = new Zotero.Item("journalArticle");
+      item.setField(
+        "title",
+        `Saved paper ${String(at)} on hepatocyte lipid delivery`,
+      );
+      item.setField("date", "2024");
+      item.addToCollection(collection.id);
+      await item.saveTx();
+      items.push(item);
+    }
+    const platform = Zotero as unknown as {
+      ProgressWindow: new (...args: unknown[]) => unknown;
+    };
+    const RealProgressWindow = platform.ProgressWindow;
+    let toasts = 0;
+    platform.ProgressWindow = new Proxy(RealProgressWindow, {
+      construct(target, args, newTarget) {
+        toasts += 1;
+        return Reflect.construct(target, args, newTarget) as object;
+      },
+    });
+    let disabled = false;
+    try {
+      Zotero.Prefs.set(enabledPref, true, true);
+      Zotero.Prefs.set(sourcesPref, "europepmc", true);
+      const opener = before.api.recommendWindow;
+      if (!opener) {
+        assert.fail("registerUI() published no api.recommendWindow");
+      }
+      const win = opener.open(Zotero.getMainWindow(), collection.id) as
+        Window | undefined;
+      if (!win) assert.fail("the opener opened nothing");
+      const button = (id: string) =>
+        win.document.getElementById(id) as unknown as {
+          disabled?: boolean;
+          doCommand(): void;
+        } | null;
+      await waitUntil(
+        () => button("rh-recommend-build")?.disabled === false,
+        "Build to be on offer",
+      );
+      button("rh-recommend-build")?.doCommand();
+      await waitUntil(
+        () => button("rh-recommend-find")?.disabled === false,
+        "Find papers to be on offer",
+      );
+      button("rh-recommend-find")?.doCommand();
+      await waitUntil(
+        () => transport.urls.length > 0,
+        "the run's first request",
+      );
+      // Build's own end raises one of its own: only what shutting down adds counts.
+      const toastsBefore = toasts;
+
+      disabled = true;
+      await afterBootstrapCall("shutdown", () => wrapper.disable());
+      await waitUntil(
+        () => pluginInstance() === undefined,
+        `Zotero.${config.addonInstance} to be removed by onShutdown`,
+      );
+      await waitUntil(
+        () => openWindowCount(SEARCH_WINDOW_NAME) === 0,
+        "no search window after disable",
+      );
+      await Zotero.Promise.delay(1_000);
+      debug(
+        `[P5-T26] shutdown during a recommend run: ${String(toasts - toastsBefore)} toasts, ` +
+          `${String(before.scope.liveHandles().length)} live handles`,
+      );
+      assert.strictEqual(
+        before.api.recommendWindow,
+        undefined,
+        "the opener is withdrawn with the instance",
+      );
+      assert.strictEqual(toasts, toastsBefore, "shutting down raises no toast");
+      assert.deepEqual(before.scope.liveHandles(), []);
+    } finally {
+      platform.ProgressWindow = RealProgressWindow;
+      Zotero.Prefs.clear(enabledPref, true);
+      if (sourcesBefore === undefined) {
+        Zotero.Prefs.clear(sourcesPref, true);
+      } else {
+        Zotero.Prefs.set(sourcesPref, sourcesBefore, true);
+      }
+      if (disabled) {
+        await afterBootstrapCall("startup", () => wrapper.enable());
+        await initializedInstance();
+      }
+      // Answers still on their way see the double, not the network.
+      await Zotero.Promise.delay(1_000);
+      transport.restore();
+      for (const item of items) await item.eraseTx();
+      await collection.eraseTx();
     }
   });
 

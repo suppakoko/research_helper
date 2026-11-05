@@ -129,6 +129,7 @@ import {
   KO_DELIBERATELY_ABSENT,
   KO_PENDING_REVIEW,
   KO_PRESENT,
+  L10N_MENU_COLLECTION_RECOMMEND,
   L10N_MENU_ITEM_FIND_RELATED,
   MAIN_WINDOW_MESSAGE_IDS,
   MESSAGE_IDS_BY_SURFACE,
@@ -940,6 +941,93 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
         "the owner's Korean is in the ko-KR file (G-41, item 334(f))",
       );
     }
+  });
+
+  it("P5-T26: resolves the recommend entry and the notice before Find papers in both locales, the Korean falling back to English until G-41", async function () {
+    const added: readonly (readonly [ShippedSurface, readonly string[]])[] = [
+      ["mainWindow", [L10N_MENU_COLLECTION_RECOMMEND]],
+      [
+        "searchDialog",
+        [
+          "research-helper-search-window-title-recommend",
+          "research-helper-search-mode-recommend",
+          "research-helper-search-state-initial-recommend",
+          "research-helper-search-recommend-build",
+          "research-helper-search-recommend-find",
+          "research-helper-search-recommend-heuristic",
+          "research-helper-search-recommend-term-remove",
+          "research-helper-search-recommend-term-restore",
+          "research-helper-search-recommend-egress-notice",
+          "research-helper-search-recommend-egress-sources",
+        ],
+      ],
+    ];
+    for (const [surface, ids] of added) {
+      const english = await resolvable(
+        pinnedLocalization(surface, ["en-US"]),
+        ids,
+      );
+      const chain = await resolvable(
+        pinnedLocalization(surface, ["ko-KR", "en-US"]),
+        ids,
+      );
+      log(
+        `P5-T26 ${surface}: en-US ${english.resolved.length} of ${ids.length}, ` +
+          `ko-KR chain ${chain.resolved.length} of ${ids.length}`,
+      );
+      assert.deepEqual(english.unresolved, [], `${surface} in en-US`);
+      assert.deepEqual(chain.unresolved, [], `${surface} along ko-KR, en-US`);
+    }
+  });
+
+  it("P5-T27: resolves the results' strings in both locales, the Korean falling back to English until G-41", async function () {
+    const ids = [
+      "col-reason",
+      "col-dismiss",
+      "slider",
+      "slider-familiar",
+      "slider-exploratory",
+      "peer-reviewed",
+      "show-dismissed",
+      "dismissed-hint",
+      "not-interested",
+      "row-dismissed",
+      "preprint",
+      "reason-recommended",
+      "reason-cites",
+      "reason-author",
+      "reason-similarity",
+      "reason-similarity-basic",
+      "reason-recency",
+      "reason-velocity",
+      "reason-novelty",
+      "reason-venue",
+      "reason-agreement",
+      "reason-coupling",
+      "reason-found",
+      "group-numbered",
+      "group-none",
+      "novelty-note",
+      "dismissed-status",
+      "dismissed-status-no-key",
+      "dismiss-failed",
+      "target-default",
+      "similarity-no-vectors",
+    ].map((suffix) => `research-helper-search-recommend-${suffix}`);
+    const english = await resolvable(
+      pinnedLocalization("searchDialog", ["en-US"]),
+      ids,
+    );
+    const chain = await resolvable(
+      pinnedLocalization("searchDialog", ["ko-KR", "en-US"]),
+      ids,
+    );
+    log(
+      `P5-T27 searchDialog: en-US ${english.resolved.length} of ${ids.length}, ` +
+        `ko-KR chain ${chain.resolved.length} of ${ids.length}`,
+    );
+    assert.deepEqual(english.unresolved, [], "searchDialog in en-US");
+    assert.deepEqual(chain.unresolved, [], "searchDialog along ko-KR, en-US");
   });
 
   it("G-41: P4-T21's stop reason, P5-T22's two strings and FINDING P4-T22-2's two labels resolve in Korean, with no English behind them (plan/00 §6 item 335(l))", async function () {

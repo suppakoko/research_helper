@@ -101,6 +101,11 @@ research-helper-menu-collection-search-import =
 research-helper-menu-collection-rerun =
     .label = Re-run This Search…
 
+# FR-44's entry (P5-T26), verbatim from `docs/08` §2.4 and §10.2. Not in the menu
+# while the hidden `recommend.enabled` preference is off.
+research-helper-menu-collection-recommend =
+    .label = Recommend New Papers from This Collection…
+
 # FR-25's entry (P4-T19), verbatim from `docs/08` §2.4 and §10.2; FR-25's
 # wording was corrected to match (owner, 2026-10-26, `plan/00` §6 item 286).
 # It opens the report window, whose strings are in

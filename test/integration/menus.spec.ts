@@ -42,6 +42,7 @@ import {
   L10N_MENU_COLLECTION_REMOVE_NOTES,
   L10N_MENU_COLLECTION_REPORT,
   L10N_MENU_COLLECTION_RERUN,
+  L10N_MENU_COLLECTION_RECOMMEND,
   L10N_MENU_COLLECTION_SEARCH_IMPORT,
   L10N_MENU_COLLECTION_SUMMARIZE_ALL,
   L10N_MENU_ITEM_FIND_RELATED,
@@ -743,7 +744,7 @@ describe("menu entry points and the window opener (P1-T19)", function () {
       "P4-T19's report entry, P3-T29's two LLM-job entries and the separator " +
         "below them (docs/08 §2.5's notes of 2026-10-29), then Search & " +
         "Import and FR-12's Re-run This Search… (P2-T17); the recommend " +
-        "entry of docs/08 §2.4 is a later card's",
+        "entry (P5-T26) is absent while recommend.enabled is off",
     );
     assert.deepEqual(
       [...shape.kinds],
@@ -1382,6 +1383,158 @@ describe("menu entry points and the window opener (P1-T19)", function () {
         );
       }
       log(`cycle ${cycle} of ${TEARDOWN_CYCLES} clean`);
+    }
+  });
+});
+
+describe("Recommend New Papers… on the collection menu (P5-T26)", function () {
+  const RECOMMEND_PREF = qualifiedPrefName(PREF_KEYS.recommendEnabled);
+
+  /** The submenu's entries, as the options build them. */
+  function entriesOf(commands: SearchMenuCommands) {
+    return collectionMenuOptions(commands).menus[0]?.menus ?? [];
+  }
+
+  it("is left out while the preference is off, and its window's opener opens nothing", async function () {
+    const instance = await initializedInstance();
+    assert.strictEqual(
+      Zotero.Prefs.get(RECOMMEND_PREF, true) ?? PREFS.recommendEnabled.default,
+      false,
+      "the schema's default holds the entry back (docs/07 §8.5)",
+    );
+    const realMenu = await readMenu(
+      Zotero.getMainWindow(),
+      COLLECTION_POPUP_ID,
+      COLLECTION_TARGET,
+      true,
+    );
+    assert.isFalse(
+      realMenu.entries.includes(L10N_MENU_COLLECTION_RECOMMEND),
+      "the real menu holds no entry while off",
+    );
+    assert.isUndefined(
+      instance.api.recommendWindow?.open(Zotero.getMainWindow(), 1),
+      "the opener reads the preference on every call",
+    );
+    assert.strictEqual(searchWindows().length, 0, "no window opened");
+  });
+
+  it("is last in the search group when on, and hands over the one collection", async function () {
+    const rec = recorder();
+    const calls: { host: unknown; collectionID: number }[] = [];
+    const commands: SearchMenuCommands = {
+      ...rec.commands,
+      recommendEnabled: () => true,
+      openRecommendWindow: (host, collectionID) => {
+        calls.push({ host, collectionID });
+        return undefined;
+      },
+    };
+    const entry = entriesOf(commands).at(-1);
+    assert.strictEqual(entry?.l10nID, L10N_MENU_COLLECTION_RECOMMEND);
+    const win = stubWindow([4243]);
+    entry?.onCommand?.(new Event("command"), libraryContext(win, {}));
+    assert.strictEqual(rec.errors.length, 0, rec.errors.join("; "));
+    assert.deepEqual(calls, [{ host: win, collectionID: 4243 }]);
+
+    const off: SearchMenuCommands = {
+      ...commands,
+      recommendEnabled: () => false,
+    };
+    assert.strictEqual(
+      entriesOf(off).some(
+        (item) => item.l10nID === L10N_MENU_COLLECTION_RECOMMEND,
+      ),
+      false,
+      "left out while off",
+    );
+  });
+
+  it("hides for two collections, and when the preference goes off after registration", async function () {
+    const rec = recorder();
+    let enabled = true;
+    const entry = entriesOf({
+      ...rec.commands,
+      recommendEnabled: () => enabled,
+      openRecommendWindow: () => undefined,
+    }).at(-1);
+    const shown = (ids: number[]) => {
+      const probe: VisibilityProbe = {};
+      entry?.onShowing?.(
+        new Event("popupshowing"),
+        libraryContext(stubWindow(ids), probe),
+      );
+      return probe.visible;
+    };
+    assert.strictEqual(shown([1]), true);
+    assert.strictEqual(shown([1, 2]), false);
+    enabled = false;
+    assert.strictEqual(shown([1]), false);
+  });
+
+  it("opens the real window while on, and that window sends nothing by itself", async function () {
+    this.timeout(120_000);
+    const collection = new Zotero.Collection({
+      libraryID: Zotero.Libraries.userLibraryID,
+      name: "P5-T26 collection",
+    });
+    await collection.saveTx();
+    try {
+      Zotero.Prefs.set(RECOMMEND_PREF, true, true);
+      const instance = await cyclePlugin();
+      // The real menu, built at registration from the preference it read then.
+      const realMenu = await readMenu(
+        Zotero.getMainWindow(),
+        COLLECTION_POPUP_ID,
+        COLLECTION_TARGET,
+        true,
+      );
+      assert.strictEqual(
+        realMenu.entries.at(-1),
+        L10N_MENU_COLLECTION_RECOMMEND,
+        "the real menu holds the entry while on, last in the search group",
+      );
+      const handle = instance.api.recommendWindow?.open(
+        Zotero.getMainWindow(),
+        collection.id,
+      );
+      assert.strictEqual(
+        handle !== undefined,
+        true,
+        "the opener opens while the preference is on",
+      );
+      await waitUntil(
+        () => searchWindows().length === 1,
+        "the recommend window to open",
+      );
+      const [win] = searchWindows();
+      if (win === undefined) throw new Error("no window");
+      await waitUntil(
+        () =>
+          win.document.readyState === "complete" &&
+          (
+            win.document.getElementById("rh-recommend-header") as unknown as {
+              hidden?: boolean;
+            } | null
+          )?.hidden === false,
+        "the recommend panel to show",
+      );
+      const find = win.document.getElementById("rh-recommend-find") as
+        (Element & { disabled?: boolean }) | null;
+      assert.strictEqual(
+        find?.disabled,
+        true,
+        "Find papers waits for a profile",
+      );
+      const profile = win.document.getElementById(
+        "rh-recommend-profile",
+      ) as unknown as { hidden?: boolean } | null;
+      assert.strictEqual(profile?.hidden, true, "no profile before Build");
+    } finally {
+      await closeSearchWindows();
+      Zotero.Prefs.clear(RECOMMEND_PREF, true);
+      await cyclePlugin();
+      await collection.eraseTx();
     }
   });
 });

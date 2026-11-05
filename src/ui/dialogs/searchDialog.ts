@@ -55,9 +55,9 @@ import type { RelationKind } from "../../model/related";
  * and the collection's id, and the document seeds itself from the
  * collection's stored provenance row). **`related` since `P5-T15`** (FR-13: the
  * item context menu's "Find Related Papers…", `{ mode: "related", seedItemID }`,
- * `docs/08` §5.2's note of 2026-11-02). `recommend-from-collection` is a later
- * card's; it is named here because the union is the documented surface of this
- * function, and this file registers no menu entry for it.
+ * `docs/08` §5.2's note of 2026-11-02). **`recommend-from-collection` since
+ * `P5-T26`** (FR-44: the collection menu's recommend entry,
+ * `{ mode, collectionID }`, `docs/08` §5.4).
  */
 export type SearchWindowMode =
   "keyword" | "related" | "recommend-from-collection" | "rerun";

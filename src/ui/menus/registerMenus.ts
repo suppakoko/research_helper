@@ -58,6 +58,8 @@
  * *(Updated 2026-10-29, `P4-T19`: `-report` is here too, first in the
  * submenu, and opens the report window — `docs/08` §2.5's note of that
  * date. `-recommend` is still a later card's.)*
+ * *(Updated 2026-11-05, `P5-T26`: `-recommend` is here, last in the search group,
+ * behind the hidden `recommend.enabled` — {@link recommendItem}.)*
  * *(Updated 2026-11-02, `P5-T15`: the item-context menu is here now, as
  * {@link itemMenuOptions}, with one entry; `docs/08` §2.5's note of that date.
  * §2.4's `-item-summarize` is not built.)*
@@ -88,6 +90,7 @@
 
 import { config } from "../../../package.json";
 import {
+  L10N_MENU_COLLECTION_RECOMMEND,
   L10N_MENU_COLLECTION_REMOVE_NOTES,
   L10N_MENU_COLLECTION_REPORT,
   L10N_MENU_COLLECTION_RERUN,
@@ -157,6 +160,20 @@ export interface SearchMenuCommands {
   ) => unknown;
   /** Where a failure goes. Must not throw. */
   readonly onError: (message: string, error: unknown) => void;
+  /**
+   * The hidden `recommend.enabled` (`P5-T26`; `docs/07` §8.5). Read when the options
+   * are built and at each `onShowing`. Absent or false, the entry is not in the
+   * submenu. `src/bootstrap/registerUI.ts` binds it.
+   */
+  readonly recommendEnabled?: () => boolean;
+  /**
+   * Opens the recommend window (`docs/08` §5.4), and nothing while `recommend.enabled`
+   * is off. `openRecommendWindowCommand` in `src/bootstrap/registerUI.ts`.
+   */
+  readonly openRecommendWindow?: (
+    host: MenuHostWindow,
+    collectionID: number,
+  ) => unknown;
   /**
    * Whether a collection has a stored `search_provenance` row (`P2-T17`,
    * FR-12). Absent — no store, or a database that could not be opened — and
@@ -479,6 +496,45 @@ function rerunItem(
 }
 
 /**
+ * "Recommend New Papers from This Collection…" (`P5-T26`; `docs/08` §2.5, §5.4). The
+ * caller left it out while `recommend.enabled` was off; `onShowing` reads the
+ * preference again, for a change since registration.
+ */
+function recommendItem(
+  commands: SearchMenuCommands,
+  openWindow: NonNullable<SearchMenuCommands["openRecommendWindow"]>,
+): _ZoteroTypes.MenuManager.MenuData<_ZoteroTypes.MenuManager.LibraryMenuContext> {
+  return {
+    ...collectionCommandItem(
+      commands,
+      L10N_MENU_COLLECTION_RECOMMEND,
+      "Recommend entry",
+      openWindow,
+    ),
+    onShowing: (_event, context) => {
+      try {
+        context.setVisible(
+          commands.recommendEnabled?.() === true &&
+            singleCollectionId(context) !== undefined,
+        );
+      } catch (error) {
+        commands.onError("Recommend entry visibility check failed", error);
+      }
+    },
+  };
+}
+
+/** The recommend entry, while it is on and something can open its window. */
+function recommendItems(
+  commands: SearchMenuCommands,
+): readonly _ZoteroTypes.MenuManager.MenuData<_ZoteroTypes.MenuManager.LibraryMenuContext>[] {
+  const openWindow = commands.openRecommendWindow;
+  return openWindow !== undefined && commands.recommendEnabled?.() === true
+    ? [recommendItem(commands, openWindow)]
+    : [];
+}
+
+/**
  * One of the two LLM-job entries above the separator (`P3-T29`; `docs/08`
  * §2.5's note of 2026-10-29): the command with the one selected collection
  * and the window that owns the clicked element. The same exactly-one refusal
@@ -646,6 +702,8 @@ export function collectionMenuOptions(
           },
           // FR-12 (`P2-T17`). No separator above it — see this file's header.
           rerunItem(commands),
+          // FR-44 (`P5-T26`): the search group's last, as `docs/08` §2.5 draws it.
+          ...recommendItems(commands),
         ],
       },
     ],

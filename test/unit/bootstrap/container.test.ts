@@ -1075,7 +1075,10 @@ describe("P1-T31: ServiceGraph.progress hands out one reporter per job", () => {
     first.reporter.done("succeeded", "done 1");
     first.dispose();
 
-    expect(firstPopup.closed()).toBe(true);
+    // Corrected 2026-11-06: this read `closed() === true`, which was the defect. Every
+    // job is disposed straight after `done()`, so its completion toast went down
+    // 3 ms after it was raised. It now goes by its own close timer.
+    expect(firstPopup.closed()).toBe(false);
     expect(secondPopup.closed()).toBe(false);
     expect(graph.progress.openJobs).toBe(1);
 

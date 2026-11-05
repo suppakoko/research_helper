@@ -2245,6 +2245,8 @@ npm run typecheck && npm run test:unit -- keys recommendViewModel && npm run tes
 `searchDialog.*` are `P4-T20`'s while it runs (item 325); wait for its commit. Shares those files with
 `P5-T16`; run the two in sequence.
 
+> *Added 2026-11-05 (`P5-T26`; coordinator, under `plan/00` §6 item 313): this card's name `collectionMenuCommands` is `SEARCH_MENU_COMMANDS` in `src/bootstrap/registerUI.ts`. The two extra fixes went in: `noteEgress` now fails closed, with the correction in `docs/07` §12.5 item 8, and `applyRerun` escapes the heading's `$collection`. The round's report implied that `research-helper-search-state-empty` receives `$query` today. It does not: `EMPTY_HEADLINE_OMITTED` means no view model publishes that message, so `logic.emptyHeadlineRef` holds the rule for the card that does. `docs/08` §5.4 holds how the window reads.*
+
 ---
 
 ### P5-T27 — Recommendation results: dismiss, clusters, import
@@ -2313,6 +2315,10 @@ npm run typecheck && npm run test:integration -- --exit-on-finish --abort-on-fai
 
 **Notes.** Needs: `P1-T14`, `P2-T31` (built).
 
+> *Added 2026-11-05 (`P5-T26`; coordinator, under `plan/00` §6 item 313): what is ready for this card. `recommendViewModel.ts` publishes `RecommendResultRow`s, built by its `rowView` from `RecommendationRow`, with `recommended: true`, and `buildRow` returns after the Year cell for such a row, so the reason line, the preprint badge and any new columns go there, as `relatedColumns` shows; `applyRecommendMode` hides Source, Type and DOI. `find` in that file passes `showDismissed: false`, `peerReviewedOnly: false` and `RECOMMEND_DEFAULT_EXPLORATION`, which this card's controls replace. `refreshImportGate` and `import()` refuse in this mode, and the host has no `importRows`, so the import is this card's to add, with `searchDialog.js`'s `relatedImportRequest` and `relatedImportInput` as the pattern. `lastRows` is not kept yet. `RecommendPipeline.reject` has no caller yet.*
+
+> *Added 2026-11-05 (`P5-T27`; coordinator, under `plan/00` §6 item 313): `docs/08` §5.4's section "The results" holds this card's fourteen decisions, including that a stale label matters and that `novelty` is not a row's reason on the word space. Beyond the Files list, because the card needs them: `src/pipeline/recommend/score.ts` (`RecommendationRow.records` and `existingItemID`), `src/ui/viewModels/relatedViewModel.ts` (`importOutcomeView`, now shared), `addon/content/style/searchDialog.css`, `typings/i10n.d.ts`, and the unit tests. `test/integration/pipeline/recommendFlow.spec.ts` is uncompiled in Zotero and unrun. It doubles `Zotero.HTTP.request` and answers from one hand-written Europe PMC page, which is not evidence about any service.*
+
 ---
 
 ### P5-T28 — Prove the no-key path end to end
@@ -2333,11 +2339,28 @@ lexical floor, make **zero** requests to `api.semanticscholar.org`, and say what
 
 > *Added 2026-11-05 (`P5-T17`): the related half's import is `host.related.importRows({ keys, collectionID, linkToSeed })`, after a run has drawn rows, and it sends nothing itself: it hands the search pipeline `works` with `records`, so `BackfillingAbstracts` does not run. The window starts a run by itself, so a spec opening the real window on a seed with an identifier sends real requests unless the transport is faked first.*
 
+> *Added 2026-11-05 (`P5-T27`): the recommend half is `host.recommend`: `build()`, then `find({ slider, peerReviewedOnly, showDismissed })`, and the rows' `dismiss(key)` and `importRows({ keys, collectionID, parentIsSource })`. `test/integration/pipeline/recommendFlow.spec.ts` already has what this card's second half needs: `Zotero.HTTP.request` doubled before anything runs, every URL recorded, and an assertion that none is `api.semanticscholar.org`. Its collection is 6 items and this card's is 30. The window starts no run by itself in this mode, so the double need only be in place before "Build profile". A keyless list has no group headings and no novelty on a row, and carries `keyRequestUrl`.*
+
+> *Added 2026-11-06 (`P5-T28`; the spec is written and typechecks, uncompiled in Zotero and unrun; a coordinator's integration round runs it next).*
+>
+> **DECIDED 2026-11-06 (coordinator, under `plan/00` §6 item 313):**
+> 1. **The answers live in `test/integration/support/noKeyTransport.ts`, outside this card's first `Files` line.** The spec runs only in Zotero, so a platform-free double lets `test/unit/integration/noKeyTransport.test.ts` check every route over the committed files in Node. The precedent is `liveRequestGuard.ts` and `liveRequests.test.ts`. Callers: the spec's `before` builds it (`loadNoKeyRecordings`, `createNoKeyDouble`), and so does that Node test.
+> 2. **Two answers are hand-written, and labelled `hand-written` on every call.** No neighbour in the recorded `elink` answer is in a recorded `efetch` answer, so `elink` is written in the recorded shape and names the 20 PMIDs of `search-typical-efetch`. No recorded Crossref row without an abstract has one in a recorded Europe PMC page, so the fill-in's lookup is written for those DOIs. The Node test measures both reasons, so it fails if a new recording removes one.
+> 3. **The related seed is the spec's own: DOI `10.1007/s11263-015-0816-y` (recorded at Crossref, with a recorded title answer for its 60 reference DOIs) and PMID `37258680` (recorded at Europe PMC).** They are two different papers. It uses more recording than the true pair of the *Nature* DOI and that PMID, whose reference titles would have to be hand-written. Its two Crossref requests match their recorded files byte for byte (origin `recorded`).
+> 4. **The double refuses what it does not expect, not only Semantic Scholar:** an unknown host, the PMC converter, bioRxiv, an unrecorded work or PMID. The request rejects and the spec fails on `refused`. A request that `isLiveRequest` calls neither the plugin's nor a service's goes on to the real method, because Zotero's own timers do not stop for a test and the suite's guard already lets those through.
+> 5. **A row's list is read from its title against that list's recorded body,** because the window draws no source for a row. **A row is proof of the fill-in** when its title is a recorded Crossref journal article with no abstract and the double answered that DOI: `contentFilters` drops such a row otherwise.
+> 6. **`sources` is set to the default written out, and `searchYears` to 20,** so the recorded 2021–2025 rows stay in the window as the years pass. Both, and `recommendEnabled`, are restored in `after`. The PMIDs go in the `extra` line `PMID: …`, which the item reader takes on every schema.
+>
+> **Measured 2026-11-06 under Node, one run each, through the real adapters and the real pipelines over this double (not in Zotero; a scratch harness, not committed).** Related: 130 rows, 20 from PubMed's similar list, 25 from Europe PMC's citations, 25 from its references, 60 from Crossref's references, `keyNotice` true, `similarity.space` `lexical`, nothing refused. Recommend: 30 rows, `keyNotice` true, nothing refused, `CRISPR-Cas9: Gene Editing` there through the fill-in. The rest, and what a keyless run loses to generator (c) and to `plan/00` §6 item 341(c), is `docs/05` §7.4's note, item 16. Item 345(c) costs nothing on this seed, since 0 of its 60 DOIs are `10.48550`: `P5-T30` reads a recent one.
+>
+> **What the integration round must prove in Zotero:** (1) the spec bundles, with `fixtureReplay.ts` and the fixture reads through `IOUtils`, including the `related` subdirectories; (2) both runs refuse nothing and send nothing to `api.semanticscholar.org`; (3) each list has a row in a real window, read through `DOMParser` rather than the Node parser; (4) the Crossref row survives the fill-in on the real item read, the real library's term weights and the real clock, which is the assertion most able to move, because only the top 30 are listed; (5) both notices are shown with the key request link, and the status rows read "no key" and a count.
+
 **Read first.**
 - `docs/11` R-3; `docs/13` §8.3 ("Without a Semantic Scholar key …"); `docs/10` §5 Q8
 
 **Files.**
 - create `test/integration/pipeline/noKeyRelatedness.spec.ts`
+- *Added 2026-11-06 (decision 1 above):* create `test/integration/support/noKeyTransport.ts` and `test/unit/integration/noKeyTransport.test.ts`
 
 *Updated 2026-11-02 (decisions): the two document rows this card carried — `docs/10` §5 Q8 marked decided,
 and `docs/11`'s Phase 2 "R-3 (fallback proven)" in §1 and §3.1 — were done on 2026-11-02 by the pass that
@@ -2460,6 +2483,10 @@ Zotero profile and recorded, and the two features are switched on.
 > *Added 2026-11-05 (`plan/00` §6 item 346(b)): record how many recommend rows had a non-zero `coupling`, because generator (c) fetches citations and not references, and 0.08 of the score does nothing if none did.*
 
 > *Added 2026-11-05 (`P5-T25`; `plan/00` §6 items 346(b) and 346(d)): both numbers are on the `info` log line "recommend: scored", as `couplingRows` and `scoreMs`, beside the drop counts and the space; `scoreMs` holds `lexicalSpace`'s build on the word space. Raise the log level to `info` for the run to read it.*
+
+> *Added 2026-11-06 (`plan/reports/P5-T28.md`; `plan/00` §6 item 353(b)): on the keyless recommend run, record how many listed rows came from forward citations and how many of those requests' rows held a DOI or an abstract. On recorded answers the figures are 0 rows and 0 of 25, for 10 of the run's 20 requests. If the live run shows the same, a lookup by PMID is added.*
+
+> *Added 2026-11-06 (`plan/reports/integration-round-354.md`; `plan/00` §6 item 354(c)): with a key, so that real topic centroids exist, read the recommend list's heading rows in a real window: that a heading row spans the six columns and its left and right edges agree with the table's. The round proved this only on a list drawn by hand (colSpan 6; left 13 and 13; right 1006 and 1006).*
 
 **Do.**
 1. Related: a DOI seed → count of candidates with reasons (≥ 20); import 10 → 10 items created or

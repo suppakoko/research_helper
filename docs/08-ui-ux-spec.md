@@ -579,6 +579,8 @@ Two concrete hazards make that more than a style preference:
    └────────────────────────────────────────┘
 ```
 
+> **As built 2026-11-05 (`P5-T26`).** `collectionMenuOptions` adds "Recommend New Papers from This Collection…" last in the submenu's search group, after "Re-run This Search…", as the wireframe above draws it. The hidden `recommend.enabled` has three readers, as `related.enabled` has: while it is off the entry is not in the menu at all (read at registration, through `SearchMenuCommands.recommendEnabled`), its `onShowing` hides it if the preference is turned off without a restart, and `openRecommendWindowCommand` opens nothing. The entry shows for exactly one selected collection and carries the `mode` and `collectionID` of §2.4's block. The flow is §5.4.
+
 > **As built 2026-11-02 (`P5-T15`; FR-13; owner, `plan/00` §6 item 321(b)).** `itemMenuOptions` in
 > `src/ui/menus/registerMenus.ts` registers §2.4's `rh-menu-item` with one entry, "Find Related Papers…"; the
 > "Summarize with AI" row above is not built, and the item pane's section is that command's surface today. The
@@ -1190,6 +1192,20 @@ If you supply `getRowData` and no `renderItem`, the helper builds `renderItem` v
 
 Whichever you use, **always set `getRowString`** (accessible row name + type-to-find) and **`label`** (accessible table name), and leave `disableFontSizeScaling` false.
 
+> **Measured and corrected 2026-11-06, Zotero 10.0.3, in all three modes: a long list stretched the window.** The dialog's own
+> content box (`part="content-box"` in the `dialog` element's shadow tree) is a flex item with an automatic minimum height,
+> so 40 rows made it 1594 px tall in a 600 px window: OK and Cancel ended at 1639, off the window, and `#rh-results-scroll`
+> never scrolled, because its box had grown to hold every row. Earlier measures of this table were on a few rows. The fix is in
+> `addon/content/style/searchDialog.css`: `#rh-search-dialog::part(content-box)` and `#rh-results-container` have a minimum
+> height of 0, so the table scrolls inside its own box and the selection row, the import row, OK and Cancel stay in view. With
+> 40 rows in the keyword window at its opening size the buttons end at 586 of 600 and the table's box is 150 px, which shows four rows;
+> the window is resizable, and the owner may prefer a larger opening size. `searchDialog-table.spec.ts` holds this.
+>
+> One case remains and is recorded: `#rh-search-dialog`'s `min-height: 600px` is what sizes the window on opening (the
+> `minheight` feature is on the outer window, so it allows a content height of 561). A window dragged below a content height
+> of 600 clips the bottom of the dialog by the difference, up to 39 px, which takes most of OK. Dropping the minimum below 600
+> with a media query made the window open at a content height of 395, so that was not done.
+
 ### 4.4 Import pipeline (what the button does)
 
 ```
@@ -1567,6 +1583,110 @@ Note the **year filter is off by default here** (FR-18). The 3-year restriction 
 *Changed 2026-11-05 (`plan/08` `P5-T16`).* The row "Seed is a preprint with a published version: offer to also fetch relations for the published DOI" is removed, because the owner moved it to the backlog (`plan/08` §0.4). The title-match list took its place in the table above: under FR-14 a list is shown rather than a guess made.
 
 ---
+
+### 5.4 Recommend flow
+
+`P5-T26` builds this section; `P5-T27` adds the row controls. The entry is in the collection submenu (§2.5) and opens this window with `{ mode: "recommend-from-collection", collectionID }`. **Opening sends nothing.** The window starts no run by itself, unlike §5.2's, so a real window can open under `menus.spec.ts` with no transport faked.
+
+```
+┌ Research Helper — Recommend New Papers ───────────────────────────┐
+│                                       [From collection: mRNA LNP] │
+│ [Build profile]  [Find papers]                                    │
+│ ───────────────────────────────────────────────────────────────── │
+│ Focus    Lipid nanoparticle delivery of mRNA to the liver.        │
+│ Terms    [lipid nanoparticle ×] [mRNA ×] [ionizable lipid ×] …    │
+│ Removed  [liver  Put back]                                        │
+│ [ Add a term ____________ ] [Add]                                 │
+│ Authors  Cullis P (9) · Anderson D (7) · Kariko K (4)             │
+│ Venues   Nature · J Control Release                               │
+│ Heuristic profile: no model was used…     (only when none was)    │
+│                                                                   │
+│ Find papers sends these to literature databases: the search       │
+│ queries below, up to 15 of this collection's paper identifiers,   │
+│ up to 10 dismissed papers' identifiers, and the names of the 5    │
+│ most frequent authors.                                            │
+│ The queries go to the databases chosen in Preferences. Requests   │
+│ about papers and authors go to their own services whichever are   │
+│ chosen.                                                           │
+│ Search queries                                                    │
+│   "lipid nanoparticle" OR "mRNA"                                  │
+│ Recommendations  not asked: no key   …                            │
+│ ───────────────────────────────────────────────────────────────── │
+│ Filter: [ ______ ]  [ ] Hide items already in my library          │
+│ ☐ Title                                 Authors          Year     │
+│ ☑ Cationic lipids for hepatic delivery  Kim, Park        2025     │
+│ ───────────────────────────────────────────────────────────────── │
+│ Add to: [ mRNA LNP ▾ ]                                            │
+│ Status line                                            [Cancel]   │
+│                                            [Import 0] [Close]     │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+> **As built 2026-11-05 (`P5-T26`).** `recommendViewModel.ts` in `src/ui/viewModels/` is published as `host.recommend` by `publishSearchWindowHost`, and `addon/content/searchDialog.js` is its one caller. It folds each `RecommendPipeline.execute` ending into one whole state, as `relatedViewModel.ts` does, so `render` draws this mode too. `buildRow` and the panels are shared. Import stays off until `P5-T27`, which adds the reason line, the preprint badge and the controls.
+
+> **DECIDED 2026-11-05 (coordinator, under `plan/00` §6 item 313), how this window reads.**
+>
+> 1. **The two buttons.** "Build profile" starts a `profile-only` run and "Find papers" an `edited-profile` run. "Find papers" stays disabled until a profile is on screen, and its handler refuses without one too. Both are disabled while a run goes. A profile on screen can be built again; the pipeline reuses a stored one while the collection is unchanged.
+> 2. **The cost question.** The host applies `shouldOpenCostDialog`, `skippedNoticeLine` and `settleDisclosure` itself in `confirmProfileCall`, because `RecommendPipeline.run` declines every question. The function is its own rather than a widened `confirmReportRun`, because a profile call has no plan to choose and no downgrade. A spend ceiling that stops the call opens the same ceiling dialog as the summarize window. Closing the window, or Cancel, answers a question still open as cancelled, so the run ends and `settleDisclosure` sees a refusal.
+> 3. **Which terms are chips.** Added terms first, then the 20 heaviest of `termWeights` (`RECOMMEND_TERMS_SHOWN`), less the removed ones. `termWeights` holds up to 100, which would push the table off the window. The rest are not drawn, and adding one puts it in `addedTerms`.
+> 4. **Removing, adding and undoing.** Removing an added term drops it. Removing any other puts it in `removedTerms`, and it is drawn on a "Removed" line with "Put back", because stored edits come back with the profile and would otherwise never be undone. Adding a removed term puts it back, because `recommendKeywordQueries` drops a term that is both. Terms compare as `recommendKeywordQueries` compares them, through `recommendTermKey`. Adding collapses white space and control characters and trims; a blank or punctuation-only entry, or a term already drawn, changes nothing.
+> 5. **A pasted key.** A term that `redact` would change is refused with a warning, and neither drawn nor kept, because an added term is sent as a search query (`09-security-privacy-and-api-keys.md` §3 row 6). The window never shows it back.
+> 6. **Edits across runs.** The window starts from `profile.userEdits`, and once the user has touched a term the window's edits win over any profile a later run returns.
+> 7. **Plain text.** The focus statement, terms, authors, venues and queries are `textContent`, because a model and the library wrote them. A chip's remove button is a message whose value is the glyph and whose `.title` and `.aria-label` hold the term; attributes are not parsed, so that argument is passed raw and not through `logic.fluentText`. The chip's `.value` holding the collection's name is an attribute too.
+> 8. **The notices.** "Heuristic profile" reads `profile.origin`, so a stored heuristic profile says so as well, and `heuristicReason` chooses its words when this run built it. `warningId` is a warning line. `vectorsIncomplete`, `profileRebuilt` and `keyNotice` each have a line of their own. The notice about literature databases is drawn with the profile, so it is on screen whenever "Find papers" can be pressed; its figures come from `RECOMMEND_MAX_POSITIVES`, `MAX_NEGATIVES` and `RECOMMEND_WATCH_AUTHORS`, so it cannot drift from the code when `P5-T29` measures the 15.
+> 9. **What Find sends for what `P5-T27` adds.** Until its controls exist the run asks with `showDismissed: false`, `peerReviewedOnly: false` and `exploration: 0.25` (`RECOMMEND_DEFAULT_EXPLORATION`, the slider's 25 of 100).
+> 10. **What this mode hides.** The keyword box, Search, the whole years and maximum row, Databases, the screening row, the empty panel's advice and the duplicate policy, because a recommend run reads none of them. The filter stays. The already-in-library box starts unticked and writes no preference, as §5.2's decision 8. The table's Source, Type and DOI columns are hidden, and `P5-T27` decides what replaces them. A row starts ticked by `checkedByDefault`.
+> 11. **Failures.** Too few papers fills `rh-error-recommend-too-few-items`'s `$count` from `RecommendFailed.tooFewItems` and offers no retry. Any other failure uses `failureView`'s rows with "Recommendations could not be made." as its headline, and the machine code in the disclosure. The profile stays on screen through a failure of "Find papers", so the edits are not lost. A collection that is gone when the window opens shows its own line, and "Build profile" is disabled.
+
+#### The results (`P5-T27`)
+
+```
+│ [Build profile]  [Find papers]                                        │
+│ Familiar ──●────────── Exploratory   [ ] Peer-reviewed only           │
+│                                      [ ] Show dismissed               │
+│ …the profile panel, as above…                                         │
+│ ───────────────────────────────────────────────────────────────────── │
+│ ☐ Title                      Authors  Year  Why              Dismiss  │
+│   lipid nanoparticle                                                  │
+│ ☑ Cationic lipids for…       Kim      2025  Cites 3 papers…  [Not     │
+│                                             · Recent          interes…│
+│ ☑ [Preprint (not peer        Sato     2026  Found by several [Not     │
+│    reviewed)] Hepatic…                      searches          interes…│
+│   Topic 2                                                             │
+│ ☐ ⚠ Already in library: …    Park     2024  Close to your…   [Not     │
+│ ───────────────────────────────────────────────────────────────────── │
+│ Add to: [ mRNA LNP — recommended 2026-11-05 ▾ ]                       │
+│                                            [Import 2 items] [Close]   │
+```
+
+> **As built 2026-11-05 (`P5-T27`).** The controls are in `rh-recommend-controls`, `recommendViewModel.ts` adds `host.recommend.dismiss` and `host.recommend.importRows`, and `publishSearchWindowHost` passes the import's port. The Import button works in this mode. Items 9 and 10 above and the as-built sentence "Import stays off until `P5-T27`" are replaced by what follows. Not yet proved in Zotero: `test/integration/pipeline/recommendFlow.spec.ts` is written and has not been run.
+
+> **DECIDED 2026-11-05 (coordinator, under `plan/00` §6 item 313), how the results read.**
+>
+> 1. **Grouping.** With more than one centroid the rows are grouped under a heading row, because `diversify` interleaves topics. Groups stand in the order of their best row, so the list's top row stays on top; within a group the pipeline's order stands. A profile with no centroid, which is every keyless run, or with one, is one list with no heading, whatever `plan/08`'s note of 2026-11-02 on centroid labels says of a numbered group on the lexical path: with no centroid there is nothing to number.
+> 2. **The heading.** It is `centroidLabels[topicIndex]` as plain text, or "Topic <n>" (`topicIndex` + 1) when the profile has no labels. Rows with no `topicIndex` at k > 1 come last under "Not placed in a topic".
+> 3. **A stale label (`P5-T21`'s finding 5) matters, and is dropped.** `centroidLabels` are built before `userEdits` apply, so a term the user removed can still be a label. A heading that shows a word the user has just taken away reads as the edit not having worked, so a label whose `recommendTermKey` is in the run's `removedTerms` reads "Topic <n>" instead. Grouping itself does not change, because it comes from the vectors. The check reads the edits the list on screen was made with, so a term removed after a run changes the headings at the next "Find papers", with the list.
+> 4. **The Why column** is the row's reasons in the pipeline's order, each its own message, so nothing is assembled from fragments. `$names` holds a source's text and goes through `logic.fluentText` in `logic.reasonRef`; the group label is `textContent`.
+> 5. **`novelty` on the word space is not a row's reason.** There it reads about 0.9 on every row (`05-related-work-discovery.md` §7.4's note, items 1 and 15), so it would be on all thirty lines and tell none apart. A list whose rows lost it to this rule says it once, above the table: `research-helper-search-recommend-novelty-note`. On SPECTER2 it stays on the row as "Further from what you have", because there it does differ. This is the window's rule, in `reasonRefs`; the pipeline's reasons and the stored row keep the id.
+> 6. **`similarity` tells its space and never claims what it did not measure.** On the word space it reads "Close to your collection (basic similarity)", as `plan/reports/P5-T19.md`'s finding 2 asks. A row whose only reason is `similarity` at 0, which is `reasonsOf`'s fallback, or a word-space row left with nothing by item 5, reads "Found for this collection", because "close" would be untrue of it. No number is shown: the scale differs between the spaces, and the related window's score dots are relative to a list for that reason.
+> 7. **The badges.** A preprint row carries "Preprint (not peer reviewed)" in words in the title cell, beside any other badge. An in-library row keeps §4.5's marker and starts unticked.
+> 8. **The per-run controls.** The slider is `html:input type="range"`, 0 to 100 in steps of 5, starting at 25, read by "Find papers" and written nowhere. "Peer-reviewed only" and "Show dismissed" start unticked on every open and are also read by "Find papers". Moving the slider or ticking "Peer-reviewed only" changes nothing until then, because only a run can answer them. Retry repeats the values of the run that failed.
+> 9. **"Not interested".** It calls `RecommendPipeline.reject` and removes the row only when that answers `true`. `false` or a storage error keeps the row and adds a warning that it may come back. It is ignored while a run or an import goes, and for a row already dismissed. The status line then says what the click did: with a key "We'll show fewer like this." as `05-…` §7.6 asks, because the paper is sent as a negative example; on a keyless run only that it stays out for this collection, because no service reads a negative there. The focus moves to the next row's button, because the one pressed has gone. Enter on the button is stopped at `keydown`, so it cannot also reach the dialog's accept.
+> 10. **"Show dismissed" never sends anything when ticked.** It shows or hides the dismissed rows the window holds: those dismissed in this window, and those a run asked for. Rows dismissed in an earlier run are not on hand unless the run asked, so while the box is ticked and the list came from a run that did not ask, a line says they come back with the next "Find papers". A dismissed row reads "Dismissed" where its button was. It starts unticked, and ticking it by hand imports it like any other row. There is no way to undo a dismissal, because the store has none: `plan/00` §6 item 323(b) keeps one action.
+> 11. **The import.** The picker starts on a new collection named `research-helper-search-recommend-target-default`, `<Source collection> — recommended <YYYY-MM-DD>`, in the machine's local date, whatever the opener preselected. That one choice nests under the source collection (`parentIsSource`, `parentCollectionId`), and importing again on the same day reuses it. Any other choice is what it is in §4.2: a listed collection, or a new top-level one with the name given. It runs the search pipeline's preview import with `works` and `records`, as §5.2's decisions 7 to 9 describe, so no abstract fill-in, no provenance note, no `search_provenance` row and no Export. Nothing is stored about the import (`plan/08` §0.2 item 27). The items go into the source collection's library, with the same wart as §5.2's decision 2 for a group library. A source collection gone by then refuses with `research-helper-search-recommend-collection-gone` and writes nothing.
+> 12. **A row owned through its title** carries the matched item (`RecommendationRow.existingItemID`), so ticking it by hand links that item instead of writing a second copy, as §5.2's decision 4. A row owned through an identifier needs none: the importer's own index finds it.
+> 13. **`similarity.notice`** is a warning line: `no-store` and `fetch-failed` reuse the related window's two sentences, and `no-vectors` has its own.
+> 14. **The filter box** matches the title, authors and year of this mode's rows. The Why column is not matched, because its words exist only in Fluent's output. Heading rows are not rows: they have no checkbox and no count, and one with no visible row under it is not drawn.
+
+> **DECIDED 2026-11-06 (coordinator, under `plan/00` §6 item 313): the header gives way to the table.** Measured at a content
+> size of 1019 x 600 in Zotero 10.0.3, with 20 terms and 24 rows, the header wants 436 px of the window's 600. It now scrolls
+> inside itself (`#rh-recommend-header`, and `#rh-related-header` by the same rule) with a minimum of `4em`, and
+> `#rh-results-area` has a floor of `45vh` while a table is showing under one of those headers. The result at that size: a header
+> of 80 px holding Build profile, Find papers and the slider, and 226 px of table, which shows three or four whole rows of two lines
+> and part of the next. Before any table shows there is no floor, so the profile and its disclosure take the room (298 px on the
+> same data). The profile is read by scrolling the header once a list is showing. The keyword window has no such floor, because
+> at `45vh` its last row fell under OK. This is a judgement the owner may wish to look at: the alternative is a larger opening
+> size, which was not tried.
 
 ## 6. Collection Report flow
 
@@ -2402,6 +2522,30 @@ The authoritative requirements are `09-security-privacy-and-api-keys.md` §1.9; 
 | Unrecoverable/unexpected error | Inline banner + `Zotero.logError(e)`; never a modal alert |
 
 **No modal `alert()` or `Services.prompt` for anything the user did not just click.** Modals over a library window are hostile and can appear behind the main window.
+
+> **Measured and corrected 2026-11-06, Zotero 10.0.3: the completion toast was not on screen.** Every view model disposes a job
+> straight after `done()`, and `ZoteroProgressWindowSink.dispose` closed the popup, so a toast went down 3 ms after it was raised,
+> in all three search-window modes. As corrected, the job factory in `src/bootstrap/container.ts` calls
+> `ZoteroProgressWindowSink.releaseJob` first, and a toast then goes by its own close timer: measured 4019 to 4087 ms after it
+> was raised. The plugin's teardown does not come through `releaseJob`, so a toast of a job it finds still open closes at once;
+> a toast of a job already over can outlast a disable by up to 4 s, on Zotero's own timer, and holds nothing of the plugin's.
+> Three corrections went with that, because the toast is now seen:
+>
+> 1. **A job that ended with nothing to say raises nothing** rather than a headline over an empty line (`update` on the same
+>    sink): a profile built, or a failure, whose words are in the window's error panel.
+> 2. **A toast is worded without its window** (`toastFormatter` on all three view models' dependencies, built by
+>    `toastFormatter` in `src/bootstrap/registerUI.ts` from both bundles). The window's `document.l10n` holds its own bundle only
+>    (§10.1), so `rh-error-cancelled` never resolved through it, and a keyword run that ended after its window closed had
+>    nothing to word its toast with.
+> 3. **A cancel's words reach the toast.** The token's own `done("cancelled")` raises the surfaces before the run has said
+>    anything, and the run's words then found the reporter inert. `ProgressNode.done` now lets the words land for the outcome
+>    already drawn. The keyword window's Cancel now raises "Cancelled. 0 items were already imported."; the related and recommend modes' now word a cancelled run with `research-helper-search-related-status-cancelled`, "Cancelled.", which they already drew in the window.
+>
+> **Measured the same day (`plan/00` §6 item 350(d)): leaving a keyword run raises no "cancelled" toast,** because leaving does not
+> cancel it. `createSearchImportViewModel` outlives its window: closing during a run raises no toast and cancels no list, and
+> the run's end raises one toast with its result count, which is the row above for a job that ends while its window is closed.
+> Re-opening during a run joins it: no toast, no list cancelled, and the new window's `running` is true. One thing is left as
+> found: that new window shows its first panel and not the searching panel until the run ends.
 
 ### 8.2 `Zotero.ProgressWindow` usage
 

@@ -1820,6 +1820,7 @@ function publishedApi(): PluginApi {
  * proves the object the plugin actually published in a live Zotero *has* them.
  */
 const VIEW_MODEL_DEPENDENCIES: Record<keyof SearchImportViewModelDeps, true> = {
+  toastFormatter: true,
   pipeline: true,
   jobs: true,
   logger: true,
@@ -4961,6 +4962,18 @@ describe("P5-T16: a related run on stub sources reaches a populated table", () =
     );
     assert.strictEqual(overflows, 0, "no status row runs off the window");
     assert.isAbove(results.height, 100, "the table keeps room");
+    const accept = (
+      el("rh-search-dialog") as unknown as {
+        getButton(name: string): Element;
+      }
+    )
+      .getButton("accept")
+      .getBoundingClientRect();
+    assert.isTrue(accept.bottom <= body.bottom, "OK is in the window");
+    assert.isTrue(
+      el("rh-search-target-row").getBoundingClientRect().bottom <= accept.top,
+      "the import row ends above OK",
+    );
   });
 
   it("keeps a greyed row at 4.5:1 or better in the light and the dark theme (P5-T16 line 14, NFR-13)", async () => {

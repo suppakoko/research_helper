@@ -32,6 +32,18 @@
   padding: 12px;
 }
 
+/*
+ * The window holds its list; the list does not stretch the window. The dialog's
+ * own content box is a flex item with an automatic minimum height, so a long
+ * table grew it past the window and took the OK and Cancel buttons with it
+ * (measured 2026-11-06: 40 rows put them 1039 px below a 600 px window; docs/08
+ * §4.3). With a minimum of zero the box stays the window's height and
+ * #rh-results-scroll does the scrolling, as §4.3 always meant it to.
+ */
+#rh-search-dialog::part(content-box) {
+  min-height: 0;
+}
+
 /* ------------------------------------------------------------------ rows */
 
 #rh-search-dialog > hbox,
@@ -123,6 +135,24 @@
   border: 1px solid var(--fill-quinary, rgba(0, 0, 0, 0.15));
   border-radius: 5px;
   overflow: auto;
+  min-height: 4em;
+}
+
+/* A table gets a floor of its own, and a tall header scrolls inside itself
+   rather than taking the table's room. Only while a table is showing: the profile
+   and its disclosure are what the window is for until then. DECIDED 2026-11-06
+   (docs/08 §5.4). */
+#rh-related-header:not([hidden])
+  ~ #rh-results-area:has(> #rh-results-container:not([hidden])),
+#rh-recommend-header:not([hidden])
+  ~ #rh-results-area:has(> #rh-results-container:not([hidden])) {
+  min-height: 45vh;
+}
+
+#rh-related-header,
+#rh-recommend-header {
+  min-height: 4em;
+  overflow-y: auto;
 }
 
 .rh-state {
@@ -183,8 +213,10 @@
  * scales it (§9). */
 
 #rh-results-container {
-  /* The table and §4.5's selection row stack; the table takes the slack. */
+  /* The table and §4.5's selection row stack; the table takes the slack, and the
+     minimum of zero is what keeps the selection row in view under a long list. */
   padding: 0;
+  min-height: 0;
 }
 
 .rh-table-scroll {
@@ -367,12 +399,76 @@
 
 /* The status rows beside each other, since seven stacked would take the table's
    room. */
-#rh-related-status > hbox {
+#rh-related-status > hbox,
+#rh-recommend-status > hbox {
   margin-inline-end: 1em;
 }
 
-#rh-related-status description {
+#rh-related-status description,
+#rh-recommend-status description {
   margin-inline-end: 0.3em;
+}
+
+/* P5-T26: the recommend mode's profile panel (docs/08 §5.4). `em` so it scales (§9). */
+.rh-recommend-label {
+  min-width: 5em;
+  font-weight: 600;
+}
+
+.rh-recommend-chips {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 0.25em;
+}
+
+.rh-recommend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25em;
+  padding-inline: 0.5em;
+  border: 1px solid var(--fill-quinary, rgba(0, 0, 0, 0.1));
+  border-radius: 1em;
+  overflow-wrap: anywhere;
+}
+
+#rh-recommend-term-input {
+  min-width: 16em;
+}
+
+/* P5-T27: the per-run controls and the results (docs/08 §5.4). A reason is a line
+   of its own, as the related mode's are. */
+#rh-recommend-slider {
+  min-width: 10em;
+}
+
+.rh-recommend-slider-end {
+  margin-inline: 0.5em;
+}
+
+.rh-col-reason {
+  min-width: 12em;
+  max-width: 24em;
+}
+
+.rh-col-dismiss {
+  white-space: nowrap;
+}
+
+/* Words only: a preprint is not a fault to warn of, only a thing to know. */
+.rh-preprint-badge {
+  margin-inline-end: 0.5em;
+  font-style: italic;
+}
+
+.rh-recommend-group {
+  padding-block-start: 0.5em;
+  font-weight: 600;
+  text-align: start;
+}
+
+.rh-row-dismissed-text {
+  color: var(--fill-secondary, inherit);
 }
 
 #rh-related-picker-list {

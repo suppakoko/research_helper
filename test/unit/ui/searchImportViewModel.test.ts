@@ -411,6 +411,8 @@ function harness(options: {
   readonly extra?: Partial<SearchImportViewModelDeps>;
   /** The document's `document.l10n`, handed over on connect (item 206). */
   readonly formatter?: MessageFormatter;
+  /** What the run's toast was given to say. */
+  readonly onDone?: (message: string | undefined) => void;
 }): Harness {
   const states: SearchViewState[] = [];
   const lines: string[] = [];
@@ -472,8 +474,9 @@ function harness(options: {
       })(),
       progress: {
         reporter: {
-          done: (outcome: string): void => {
+          done: (outcome: string, message?: string): void => {
             doneOutcomes.push(outcome);
+            options.onDone?.(message);
           },
         },
         events: {
@@ -2246,6 +2249,49 @@ describe("P2-T14 — the duplicate badge on a flagged pair (step 3)", () => {
       expect(bundle.get(id)?.trim(), id).not.toBe("");
       expect(bundle.get(id), id).toBeDefined();
     }
+  });
+
+  it("words the completion toast without its window, and a cancel from the main bundle (2026-11-06)", async () => {
+    const asked: string[] = [];
+    const toastFormatter: MessageFormatter = {
+      formatMessages: (keys) => {
+        asked.push(...keys.map((key) => key.id));
+        return Promise.resolve(
+          keys.map((key) => ({ value: `said ${key.id}` })),
+        );
+      },
+    };
+    // A window whose own bundle holds nothing the toast needs, as a real one does not
+    // hold rh-error-cancelled.
+    const formatter: MessageFormatter = {
+      formatMessages: (keys) => Promise.resolve(keys.map(() => undefined)),
+    };
+    const toasts: (string | undefined)[] = [];
+    const h = harness({
+      sources: SEVEN_SOURCES,
+      formatter,
+      extra: { toastFormatter },
+      onDone: (message) => {
+        toasts.push(message);
+      },
+      runs: [
+        {
+          output: output({
+            outcome: "succeeded",
+            records: [a],
+            works: singles(),
+          }),
+        },
+        { output: output({ outcome: "cancelled" }) },
+      ],
+    });
+    await h.model.runSearch(query({ sources: ["pubmed"] }));
+    await h.model.runSearch(query({ sources: ["pubmed"] }));
+    expect(toasts).toStrictEqual([
+      "said research-helper-search-result-count",
+      "said rh-error-cancelled",
+    ]);
+    expect(asked).toContain("rh-error-cancelled");
   });
 
   it("hands the duplicate tooltip the bundle's tier name, resolved through the connected formatter (item 206)", async () => {

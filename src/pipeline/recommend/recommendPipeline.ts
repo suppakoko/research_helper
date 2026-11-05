@@ -149,7 +149,7 @@ import type {
 
 /**
  * The menu entry's own string, as every stage's label: the related pipeline's precedent.
- * `P5-T26` adds this string with the menu entry; until then no window names it.
+ * `P5-T26` added this string with the menu entry.
  */
 export const RECOMMEND_DISPLAY_NAME_KEY =
   "research-helper-menu-collection-recommend";
@@ -254,7 +254,11 @@ export interface RecommendPipelineDeps {
   };
   /** The clock `reject` stamps, which has no job's context. */
   readonly clock: { now(): number };
-  /** Writes the egress log before a request goes. Absent: `egress` on the ending only. */
+  /**
+   * Writes the egress log before a request goes. A rejection stops the request and
+   * fails the run (`docs/07` §12.5 item 8, corrected 2026-11-05). Absent: `egress` on
+   * the ending only.
+   */
   readonly recordEgress?: (record: RecommendEgressRecord) => Promise<void>;
 }
 
@@ -949,24 +953,19 @@ export function createRecommendPipeline(
     }
   }
 
-  /** The log of a request about to go. A failure warns and it goes; the ending carries it. */
+  /** The log of a request about to go. A failure stops it, so the ending claims none. */
   async function noteEgress(
     egress: EgressLogEntry,
-    world: Pick<RunWorld, "input" | "ctx" | "state">,
+    world: Pick<RunWorld, "input" | "state">,
   ): Promise<void> {
-    const { input, ctx, state } = world;
-    state.egress = egress;
-    if (deps.recordEgress === undefined) return;
-    const { libraryID, collectionKey, mode } = input;
-    try {
+    const { input, state } = world;
+    if (deps.recordEgress !== undefined) {
+      const { libraryID, collectionKey, mode } = input;
       await deps.recordEgress(
         withEgressLog({ libraryID, collectionKey, mode }, egress),
       );
-    } catch (error) {
-      ctx.logger.warn("recommend: the egress log could not be written", {
-        code: serialize(error).code,
-      });
     }
+    state.egress = egress;
   }
 
   /**

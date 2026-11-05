@@ -74,7 +74,7 @@ href="chrome://__addonRef__/content/style/searchDialog.css" type="text/css"?>
       <!-- The read-only mode chip. §4.2 lists four `mode` values. It reads
            `keyword` until a re-run seed arrives (P2-T17), when the controller
            sets the `rerun` id with the collection name as its argument; the
-           other two modes have no menu entry yet. -->
+           related and recommend modes set their own (P5-T15, P5-T26). -->
       <label
         id="rh-search-mode"
         class="rh-chip"
@@ -175,6 +175,139 @@ href="chrome://__addonRef__/content/style/searchDialog.css" type="text/css"?>
     <!-- 2. Year range and per-database cap — docs/08 §4.2 "Date defaults" and
          §4.5. Both menulists and the number input are populated and seeded in
          init(); nothing here states a year or a count. -->
+    <!-- 1b. The recommend mode's panel: docs/08 §5.4 (P5-T26). Hidden in every
+         other mode. Every line of the profile is data, written as textContent by
+         renderRecommend(); the notice about literature databases is inside the
+         profile, so it is on screen whenever Find papers can be pressed. -->
+    <vbox id="rh-recommend-header" hidden="true">
+      <hbox id="rh-recommend-actions" align="center">
+        <button
+          id="rh-recommend-build"
+          disabled="true"
+          data-l10n-id="research-helper-search-recommend-build"
+        />
+        <button
+          id="rh-recommend-find"
+          disabled="true"
+          data-l10n-id="research-helper-search-recommend-find"
+        />
+      </hbox>
+      <!-- P5-T27: read by "Find papers", and written nowhere (docs/08 §5.4). -->
+      <hbox id="rh-recommend-controls" align="center">
+        <html:span
+          class="rh-recommend-slider-end"
+          data-l10n-id="research-helper-search-recommend-slider-familiar"
+        />
+        <html:input
+          id="rh-recommend-slider"
+          type="range"
+          min="0"
+          max="100"
+          step="5"
+          value="25"
+          data-l10n-id="research-helper-search-recommend-slider"
+        />
+        <html:span
+          class="rh-recommend-slider-end"
+          data-l10n-id="research-helper-search-recommend-slider-exploratory"
+        />
+        <checkbox
+          id="rh-recommend-peer-reviewed"
+          data-l10n-id="research-helper-search-recommend-peer-reviewed"
+        />
+        <checkbox
+          id="rh-recommend-show-dismissed"
+          data-l10n-id="research-helper-search-recommend-show-dismissed"
+        />
+      </hbox>
+      <vbox id="rh-recommend-profile" hidden="true">
+        <hbox id="rh-recommend-focus-row" align="start">
+          <label
+            class="rh-recommend-label"
+            data-l10n-id="research-helper-search-recommend-focus-label"
+          />
+          <description id="rh-recommend-focus" flex="1" />
+        </hbox>
+        <hbox align="start">
+          <label
+            class="rh-recommend-label"
+            data-l10n-id="research-helper-search-recommend-terms-label"
+          />
+          <html:div id="rh-recommend-terms" class="rh-recommend-chips" />
+        </hbox>
+        <hbox id="rh-recommend-removed-row" align="start" hidden="true">
+          <label
+            class="rh-recommend-label"
+            data-l10n-id="research-helper-search-recommend-removed-label"
+          />
+          <html:div id="rh-recommend-removed" class="rh-recommend-chips" />
+        </hbox>
+        <hbox align="center">
+          <html:input
+            id="rh-recommend-term-input"
+            type="text"
+            data-l10n-id="research-helper-search-recommend-term-input"
+          />
+          <button
+            id="rh-recommend-term-add"
+            data-l10n-id="research-helper-search-recommend-term-add"
+          />
+        </hbox>
+        <hbox id="rh-recommend-authors-row" align="start">
+          <label
+            class="rh-recommend-label"
+            data-l10n-id="research-helper-search-recommend-authors-label"
+          />
+          <description id="rh-recommend-authors" flex="1" />
+        </hbox>
+        <hbox id="rh-recommend-venues-row" align="start">
+          <label
+            class="rh-recommend-label"
+            data-l10n-id="research-helper-search-recommend-venues-label"
+          />
+          <description id="rh-recommend-venues" flex="1" />
+        </hbox>
+        <description
+          id="rh-recommend-heuristic"
+          class="rh-hint"
+          hidden="true"
+        />
+        <vbox id="rh-recommend-egress" />
+        <label data-l10n-id="research-helper-search-recommend-queries-label" />
+        <vbox id="rh-recommend-queries" />
+        <description
+          id="rh-recommend-queries-none"
+          class="rh-hint"
+          hidden="true"
+          data-l10n-id="research-helper-search-recommend-queries-none"
+        />
+      </vbox>
+      <hbox
+        id="rh-recommend-key-notice"
+        align="center"
+        class="rh-wrap"
+        hidden="true"
+      >
+        <description
+          class="rh-hint"
+          data-l10n-id="research-helper-search-recommend-key-notice"
+        />
+        <html:a
+          id="rh-recommend-key-request"
+          data-l10n-id="research-helper-search-s2-no-key-request"
+        />
+      </hbox>
+      <hbox id="rh-recommend-status" class="rh-wrap" hidden="true" />
+      <description
+        id="rh-recommend-dismissed-hint"
+        class="rh-hint"
+        hidden="true"
+        data-l10n-id="research-helper-search-recommend-dismissed-hint"
+      />
+      <description id="rh-recommend-list-note" class="rh-hint" hidden="true" />
+      <separator class="groove" />
+    </vbox>
+
     <hbox id="rh-search-scope-row" align="center">
       <label
         id="rh-search-years-label"

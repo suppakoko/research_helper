@@ -1236,6 +1236,22 @@ describe("P5-T16: Cancel", () => {
 });
 
 describe("P5-T16: the toast", () => {
+  it("words a cancel's toast through the window's formatter (2026-11-06)", async () => {
+    const w = world(() => CANCELLED);
+    w.host.connect({
+      ...w.view,
+      formatter: {
+        formatMessages: (requests: readonly { id: string }[]) =>
+          Promise.resolve(requests.map(({ id }) => ({ value: id }))),
+      } as never,
+    });
+    await w.host.run(7);
+    expect(w.done).toHaveBeenCalledWith(
+      "cancelled",
+      "research-helper-search-related-status-cancelled",
+    );
+  });
+
   it("words the count through the window's formatter", async () => {
     const formatMessages = vi.fn(() =>
       Promise.resolve([{ value: "2 results · 1 new" }]),

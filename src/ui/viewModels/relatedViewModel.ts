@@ -286,6 +286,11 @@ export interface RelatedImportPort {
 /** What {@link createRelatedViewModel} needs. */
 export interface RelatedViewModelDeps {
   readonly pipeline: RelatedPipeline;
+  /**
+   * What words the toast: the window links its own bundle only (`docs/08` §10.1), and
+   * `rh-error-cancelled` is the main one's. Absent, the window's formatter is used.
+   */
+  readonly toastFormatter?: MessageFormatter;
   readonly jobs: RelatedJobFactory;
   readonly logger: Logger;
   /** The Semantic Scholar key-request page: `ui/` may not name `sources/`. */
@@ -496,8 +501,12 @@ const CODES_WITH_NO_DATABASE: ReadonlySet<string> = new Set([
  * so the panel carries no lines of its own.
  *
  * @param error - the pipeline's serialized error, already redacted
+ * @param fallback - the headline for any other code; the recommend mode has its own
  */
-export function failureView(error: SerializedError): ErrorView {
+export function failureView(
+  error: SerializedError,
+  fallback: MessageRef = message("research-helper-search-related-state-failed"),
+): ErrorView {
   const seed = SEED_ERROR_MESSAGE[error.messageKey];
   if (seed !== undefined) {
     return {
@@ -528,7 +537,7 @@ export function failureView(error: SerializedError): ErrorView {
     };
   }
   return {
-    headline: message("research-helper-search-related-state-failed"),
+    headline: fallback,
     lines: [],
     details: errorDetails([error]),
     retry: error.retryable,
@@ -547,6 +556,69 @@ export function initialRelatedViewState(): RelatedViewState {
       keyRequestUrl: undefined,
       includeLabels: bareLabels(),
     },
+  };
+}
+
+/**
+ * What an import said, as a patch of the state, and the line a toast repeats when
+ * anything was written. The table stays, because no line of it has changed and no
+ * panel here could offer the import again (`docs/08` §5.2's note, decision 7).
+ *
+ * Callers: `drawImport` in this file, and `importRows` in `recommendViewModel.ts`.
+ *
+ * @param output - the search pipeline's answer
+ * @param standing - the warnings the table already carries
+ * @param fallback - the headline of a failure with no sentence of its own
+ */
+export function importOutcomeView(
+  output: SearchImportOutput,
+  standing: readonly MessageRef[],
+  fallback?: MessageRef,
+): {
+  readonly patch: Partial<
+    Pick<SearchViewState, "status" | "notices" | "warnings">
+  >;
+  readonly summary: MessageRef | undefined;
+} {
+  const write = output.write;
+  const headline =
+    output.outcome === "failed" && output.error !== undefined
+      ? [failureView(output.error, fallback).headline]
+      : [];
+  if (write === undefined) {
+    return {
+      patch: {
+        warnings: [...standing, ...headline],
+        ...(output.outcome === "cancelled" && {
+          status: message("rh-error-cancelled", { imported: 0 }),
+        }),
+      },
+      summary: undefined,
+    };
+  }
+  const summary = importSummary(write, false);
+  return {
+    patch: {
+      status: summary,
+      notices: [
+        ...(output.outcome === "cancelled"
+          ? [message("rh-error-cancelled", { imported: write.created })]
+          : []),
+        summary,
+        message("research-helper-import-abstract-coverage", {
+          percent: write.abstractCoveragePercent,
+        }),
+        ...importPathLines(write),
+      ],
+      warnings: [
+        ...standing,
+        ...headline,
+        ...(write.seedLink?.error === undefined
+          ? []
+          : [message("research-helper-search-related-link-failed")]),
+      ],
+    },
+    summary,
   };
 }
 
@@ -743,7 +815,7 @@ export function createRelatedViewModel(
 
   /** A toast's text, or nothing when it cannot be worded. */
   async function textOf(ref: MessageRef): Promise<string | undefined> {
-    const formatter = view?.formatter;
+    const formatter = deps.toastFormatter ?? view?.formatter;
     if (formatter === undefined) return undefined;
     try {
       const [formatted] = await formatter.formatMessages([
@@ -911,7 +983,13 @@ export function createRelatedViewModel(
       return;
     }
     const toast =
-      output.outcome === "succeeded" ? await toastOf(output) : undefined;
+      output.outcome === "succeeded"
+        ? await toastOf(output)
+        : output.outcome === "cancelled"
+          ? await textOf(
+              message("research-helper-search-related-status-cancelled"),
+            )
+          : undefined;
     unsubscribe();
     // A window closed while the toast was being worded raises nothing.
     if (current()) {
@@ -922,9 +1000,7 @@ export function createRelatedViewModel(
   }
 
   /**
-   * What an import said, drawn beside the rows it read: the table stays, because
-   * no line of it has changed and no panel here could offer the import again
-   * (`docs/08` §5.2's note, decision 7).
+   * What an import said, drawn beside the rows it read.
    *
    * @param output - the search pipeline's answer
    * @param standing - the warnings the table already carries
@@ -934,43 +1010,8 @@ export function createRelatedViewModel(
     output: SearchImportOutput,
     standing: readonly MessageRef[],
   ): MessageRef | undefined {
-    const write = output.write;
-    const headline =
-      output.outcome === "failed" && output.error !== undefined
-        ? [failureView(output.error).headline]
-        : [];
-    if (write === undefined) {
-      publish({
-        ...idle,
-        warnings: [...standing, ...headline],
-        ...(output.outcome === "cancelled" && {
-          status: message("rh-error-cancelled", { imported: 0 }),
-        }),
-      });
-      return undefined;
-    }
-    const summary = importSummary(write, false);
-    publish({
-      ...idle,
-      status: summary,
-      notices: [
-        ...(output.outcome === "cancelled"
-          ? [message("rh-error-cancelled", { imported: write.created })]
-          : []),
-        summary,
-        message("research-helper-import-abstract-coverage", {
-          percent: write.abstractCoveragePercent,
-        }),
-        ...importPathLines(write),
-      ],
-      warnings: [
-        ...standing,
-        ...headline,
-        ...(write.seedLink?.error === undefined
-          ? []
-          : [message("research-helper-search-related-link-failed")]),
-      ],
-    });
+    const { patch, summary } = importOutcomeView(output, standing);
+    publish({ ...idle, ...patch });
     return summary;
   }
 

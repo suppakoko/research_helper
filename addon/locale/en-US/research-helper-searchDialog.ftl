@@ -659,3 +659,176 @@ research-helper-search-screening-cost = Estimated cost of screening: up to about
 # Beside the screening checkbox when the model's price is not known.
 # `{ $model }` is the model's id, not translated.
 research-helper-search-screening-cost-unpriced = The price of { $model } is not known, so the cost of screening cannot be estimated.
+
+
+## The recommend mode (P5-T26; docs/08 §5.4). `{ $collection }` is the
+## collection's name, and `{ $term }` a term, which attributes hold unparsed.
+## `{ $papers }`, `{ $dismissed }` and `{ $authors }` are the code's own limits.
+
+research-helper-search-window-title-recommend = Research Helper — Recommend New Papers
+
+research-helper-search-mode-recommend =
+    .value = From collection: { $collection }
+
+research-helper-search-state-initial-recommend = Recommended papers will be listed here once you have checked the collection's profile.
+
+research-helper-search-recommend-build =
+    .label = Build profile
+
+research-helper-search-recommend-find =
+    .label = Find papers
+
+research-helper-search-recommend-focus-label =
+    .value = Focus
+
+research-helper-search-recommend-terms-label =
+    .value = Terms
+
+research-helper-search-recommend-removed-label =
+    .value = Removed
+
+research-helper-search-recommend-authors-label =
+    .value = Authors
+
+research-helper-search-recommend-venues-label =
+    .value = Venues
+
+research-helper-search-recommend-queries-label =
+    .value = Search queries
+
+research-helper-search-recommend-term-remove = ×
+    .title = Remove “{ $term }”
+    .aria-label = Remove “{ $term }”
+
+research-helper-search-recommend-term-restore = Put back
+    .title = Put “{ $term }” back
+    .aria-label = Put “{ $term }” back
+
+research-helper-search-recommend-term-input =
+    .placeholder = Add a term
+    .aria-label = Add a term
+
+research-helper-search-recommend-term-add =
+    .label = Add
+
+research-helper-search-recommend-term-refused = That looks like an API key, so it was not added.
+
+research-helper-search-recommend-heuristic = Heuristic profile: no model wrote this one, so its terms are counted from the collection's own words.
+
+research-helper-search-recommend-heuristic-no-provider = Heuristic profile: no model is set up, so its terms are counted from the collection's own words.
+
+research-helper-search-recommend-heuristic-too-large = Heuristic profile: this collection is too large to send to the model, so its terms are counted from the collection's own words.
+
+research-helper-search-recommend-egress-notice = Find papers sends these to literature databases: the search queries below, up to { $papers } of this collection's paper identifiers, up to { $dismissed } dismissed papers' identifiers, and the names of the { $authors } most frequent authors.
+
+research-helper-search-recommend-egress-sources = The search queries go to the databases chosen in Preferences. Requests about papers and authors go to Semantic Scholar, PubMed and Europe PMC whichever are chosen.
+
+research-helper-search-recommend-queries-none = No search query: every term has been removed.
+
+research-helper-search-recommend-generator-recommendations = Semantic Scholar recommendations
+
+research-helper-search-recommend-generator-similar = Similar papers
+
+research-helper-search-recommend-generator-forward-citations = Papers citing this collection
+
+research-helper-search-recommend-generator-keyword-search = Keyword search
+
+research-helper-search-recommend-generator-author-watch = Frequent authors
+
+research-helper-search-recommend-source-partial = partly answered
+
+research-helper-search-recommend-source-could-not-ask = not asked: nothing to ask with
+
+research-helper-search-recommend-key-notice = Recommendations work better with a Semantic Scholar key. Without one, its lists are not asked and similarity is the basic kind.
+
+research-helper-search-recommend-vectors-incomplete = Some papers' vectors could not be fetched, so this profile was not kept and will be built again next time.
+
+research-helper-search-recommend-profile-rebuilt = The collection changed after its profile was shown, so the profile was built again before searching.
+
+research-helper-search-recommend-state-empty = No papers were found for this profile. Try changing its terms.
+
+research-helper-search-recommend-state-failed = Recommendations could not be made.
+
+research-helper-search-recommend-collection-gone = This collection is no longer in your library.
+
+research-helper-search-recommend-status-building = Building the collection's profile…
+
+research-helper-search-recommend-status-finding = Finding papers…
+
+## P5-T27: the results (docs/08 §5.4). No row's words are assembled from pieces.
+
+research-helper-search-recommend-col-reason =
+    .label = Why
+
+research-helper-search-recommend-col-dismiss =
+    .label = Dismiss
+
+research-helper-search-recommend-slider =
+    .aria-label = How far from this collection to look, from familiar to exploratory
+
+research-helper-search-recommend-slider-familiar = Familiar
+
+research-helper-search-recommend-slider-exploratory = Exploratory
+
+research-helper-search-recommend-peer-reviewed =
+    .label = Peer-reviewed only
+
+research-helper-search-recommend-show-dismissed =
+    .label = Show dismissed
+
+research-helper-search-recommend-dismissed-hint = Papers dismissed in an earlier run come back when you press Find papers.
+
+research-helper-search-recommend-not-interested = Not interested
+    .title = Stop showing this paper for this collection
+
+research-helper-search-recommend-row-dismissed = Dismissed
+
+research-helper-search-recommend-preprint = Preprint (not peer reviewed)
+
+research-helper-search-recommend-reason-recommended = Recommended by Semantic Scholar
+
+research-helper-search-recommend-reason-cites =
+    { $count ->
+        [one] Cites { $count } paper in your collection
+       *[other] Cites { $count } papers in your collection
+    }
+
+research-helper-search-recommend-reason-author =
+    { $count ->
+        [one] { $names } is in your collection
+       *[other] { $names } are in your collection
+    }
+
+research-helper-search-recommend-reason-similarity = Close to your collection
+
+research-helper-search-recommend-reason-similarity-basic = Close to your collection (basic similarity)
+
+research-helper-search-recommend-reason-recency = Recent
+
+research-helper-search-recommend-reason-velocity = Cited quickly
+
+research-helper-search-recommend-reason-novelty = Further from what you have
+
+research-helper-search-recommend-reason-venue = In a journal from your collection
+
+research-helper-search-recommend-reason-agreement = Found by several searches
+
+research-helper-search-recommend-reason-coupling = Shares references with your collection
+
+research-helper-search-recommend-reason-found = Found for this collection
+
+research-helper-search-recommend-group-numbered = Topic { $number }
+
+research-helper-search-recommend-group-none = Not placed in a topic
+
+research-helper-search-recommend-novelty-note = This list leans towards papers further from your collection. Basic similarity reads much the same on every paper here, so the rows do not say so one by one.
+
+research-helper-search-recommend-dismissed-status = Dismissed. We'll show fewer like this.
+
+research-helper-search-recommend-dismissed-status-no-key = Dismissed. This paper will stay out of this collection's recommendations.
+
+research-helper-search-recommend-dismiss-failed = That paper could not be marked as not interested, so it may come back on the next run.
+
+research-helper-search-recommend-target-default = { $collection } — recommended { $date }
+
+research-helper-search-recommend-similarity-no-vectors = Similarity is the basic kind on this run, because no paper in this collection has a vector from Semantic Scholar.

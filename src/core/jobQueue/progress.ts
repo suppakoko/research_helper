@@ -523,6 +523,22 @@ class ProgressNode implements ProgressReporter {
   }
 
   done(outcome: "succeeded" | "failed" | "cancelled", message?: string): void {
+    // The token's own `done("cancelled")` raises the surfaces the moment Cancel is
+    // pressed, before the run can say what it stopped having done, and the run's
+    // words then found the tree inert: the keyword window's Cancel toast was a
+    // headline over an empty line (measured 2026-11-06). The words may still land,
+    // for the outcome already drawn.
+    if (
+      this.isRoot &&
+      this.root.terminal &&
+      !this.root.disposed &&
+      outcome === this.root.status &&
+      message !== undefined
+    ) {
+      this.root.message = message;
+      emit(this.root, true);
+      return;
+    }
     if (this.inert) return;
     this.finished = true;
     if (message !== undefined) this.root.message = message;

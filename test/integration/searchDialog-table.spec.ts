@@ -823,6 +823,49 @@ describe("P1-T21: the result table in a live Search & Import window", () => {
     );
   });
 
+  it("holds 40 rows inside the window, with OK, Cancel and the selection row in view (§4.3)", async function () {
+    controller.setResults(fortyResults());
+    (el("rh-search-hide-existing") as unknown as { checked: boolean }).checked =
+      false;
+    controller.applyFilter();
+    await Zotero.Promise.delay(250);
+    const view = win as unknown as Window;
+    const scroll = el("rh-results-scroll");
+    const accept = (
+      el("rh-search-dialog") as unknown as {
+        getButton(name: string): Element;
+      }
+    ).getButton("accept");
+    log(
+      `40 rows in a ${String(view.innerHeight)} px window: OK ends at ` +
+        `${String(Math.round(accept.getBoundingClientRect().bottom))}, the table's box ` +
+        `is ${String(scroll.clientHeight)} px and holds ${String(scroll.scrollHeight)} px`,
+    );
+    assert.isTrue(
+      accept.getBoundingClientRect().bottom <= view.innerHeight,
+      "OK is in the window",
+    );
+    assert.isTrue(
+      el("rh-results-selection-row").getBoundingClientRect().bottom <=
+        view.innerHeight,
+      "the selection row is in the window",
+    );
+    assert.isTrue(
+      scroll.scrollHeight > scroll.clientHeight,
+      "the table scrolls inside its own box",
+    );
+    const [lastRow] = [
+      ...(el("rh-search-dialog") as unknown as Element).children,
+    ]
+      .filter((child) => child.getBoundingClientRect().height > 0)
+      .slice(-1);
+    assert.isTrue(
+      (lastRow?.getBoundingClientRect().bottom ?? 0) <=
+        accept.getBoundingClientRect().top,
+      "the last row of the window ends above OK",
+    );
+  });
+
   it("moves between rows and selects all from the keyboard (docs/08 §9)", async function () {
     controller.setResults(fortyResults());
     const boxes = controller.rowCheckboxes();

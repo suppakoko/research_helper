@@ -60,6 +60,7 @@ import {
 } from "../../../src/pipeline/shared/budget";
 import type { SemanticScholarSource } from "../../../src/sources/semanticscholar/semanticscholarSource";
 import type { LiteratureSource } from "../../../src/sources/types";
+import { createJobStore } from "../../../src/zotero/db";
 import {
   chatResponse,
   mockLLM,
@@ -812,6 +813,50 @@ describe("P5-T25: a run in this Zotero, with the model and the sources doubled",
       (await egressRecords(made.key)).length,
       2,
       "and an answer leaves one more",
+    );
+  });
+
+  it("a real failure of the egress log stops the request and fails the run with no egress (plan/00 item 351(b))", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    const made = await memberCollection();
+    const { pipeline } = pipelineHere();
+    const services = graph as Graph;
+    const open = await services.database.ready;
+    if (open === undefined) assert.fail("the plugin database did not open");
+    httpUrls.length = 0;
+    const cancel = createCancellationTokenSource();
+    // The real queue with no store: its own ConfigurationError is the failure.
+    services.jobs.detachStore();
+    let outcome: Awaited<ReturnType<typeof runOn>>;
+    try {
+      outcome = await runOn(
+        pipeline,
+        {
+          libraryID: made.libraryID,
+          collectionKey: made.key,
+          mode: "profile-only",
+        },
+        cancel.token,
+        [new NetworkError("this request must not go")],
+      );
+    } finally {
+      services.jobs.attachStore(createJobStore(open.connection));
+      cancel.dispose();
+    }
+    const { output, modelCalls } = outcome;
+    debug(
+      `${LOG_PREFIX} the egress log refused: outcome ${output.outcome}, ` +
+        `${String(modelCalls)} model calls, egress ${String(output.egress)}, ` +
+        `${JSON.stringify(httpUrls.filter((url) => !url.startsWith("http://localhost")))}`,
+    );
+    assert.strictEqual(output.outcome, "failed");
+    assert.strictEqual(modelCalls, 0, "the request did not go");
+    assert.strictEqual(output.egress, undefined, "no egress on the output");
+    assert.strictEqual((await egressRecords(made.key)).length, 0, "no record");
+    assert.deepEqual(
+      httpUrls.filter((url) => !url.startsWith("http://localhost")),
+      [],
+      "nothing went out on the transport",
     );
   });
 

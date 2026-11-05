@@ -1116,17 +1116,14 @@ describe("the egress log", () => {
     expect(recordEgress).toHaveBeenCalledTimes(1);
   });
 
-  it("a log that cannot be written warns, and the run goes on", async () => {
+  it("a log that cannot be written stops the request and fails the run, and the ending claims none", async () => {
     const world = await worldOf({
       recordEgress: () => Promise.reject(new Error("no queue")),
     });
-    const output = expectProfile(await world.execute(PROFILE_ONLY));
-    expect(output.egress).toBeDefined();
-    expect(
-      world.logs.some((line) =>
-        line.includes("egress log could not be written"),
-      ),
-    ).toBe(true);
+    const output = await world.execute(PROFILE_ONLY);
+    expect(output.outcome).toBe("failed");
+    expect(output.egress).toBeUndefined();
+    expect(world.provider.calls).toHaveLength(0);
   });
 
   it("is on the ending of a run cancelled after the request was sent", async () => {
