@@ -3137,6 +3137,21 @@ the caller of what the card builds; if it does not, the caller is added with a d
     - (d) The new integration checks read the drawn box and computed style, not the property, through `test/integration/support/drawnGeometry.ts`. `hiddenButDrawn` lists any element hidden and still drawn, so a later rule of the same kind fails a test.
     - (e) Not checked, and stated so: a keyed run (`P5-T30` and `P5-T31` read it); the related window's missing-seed state; the elements of `.rh-related-context`, `.rh-related-candidate` and `.rh-related-candidate-details` while hidden, covered by the rule but not built in the measurement; which element fills 9 px past the header's edge in the fullest profile, with all text in view.
 
+357. **The owner reviewed the Korean batch of 116 strings in chat, 2026-11-06** (`G-41`; `plan/reports/ko-review-336.ftl`). The review page's `review` collection held no answer, and the owner chose chat batches when asked.
+    **DECIDED 2026-11-06 by the owner:**
+    - (a) `research-helper-search-related-target-default` and `research-helper-search-recommend-target-default` keep the English value in `ko-KR`, because each becomes a stored collection name. They go into the `ko-KR` file with the English value, so they count as present.
+    - (b) "Venues" is 게재처. "Heuristic profile" is 단어 집계 프로필, in all three sentences that begin with it.
+    - (c) The other 110 strings are approved as drafted, in eight batches, including three changes the coordinator showed with the drafts: `research-helper-search-recommend-source-could-not-ask` matches the related window's wording, `research-helper-search-recommend-reason-venue` loses a "자주" the English does not have, and `research-helper-search-recommend-egress-sources` is reworded in both languages.
+    - (d) **The English of `research-helper-search-recommend-egress-sources` was wrong about what leaves the machine.** It read "Requests about papers and authors go to Semantic Scholar, PubMed and Europe PMC whichever are chosen", but item 343(c) records that `sources` governs only the keyword search, so those requests reach PubMed and Europe PMC whether or not they are chosen. The approved English reads "Requests about papers and authors go to PubMed and Europe PMC whether or not they are chosen there, and to Semantic Scholar when a key is set." The insertion round checks that sentence against the code and the no-key run's hosts before it goes in. If any other host is reached, such as Crossref through `P5-T32`'s fill-in, the round stops and reports, and the owner is asked again: a notice of what leaves the machine must name every host.
+    - (e) The coordinator then read `recommendPipeline.ts`: the fill-in asks Europe PMC and Crossref for missing titles, and Semantic Scholar only with a key, whatever `sources` says. So the sentence in (d) also missed Crossref. The owner approved, the same day, a sentence that names it:
+      "Requests about papers and authors go to PubMed, Europe PMC and Crossref whether or not they are chosen there, and to Semantic Scholar when a key is set." The Korean in `ko-review-336.ftl` says the same. The insertion round still checks it against the code and the no-key run's hosts, and stops if any other host is reached.
+
+358. **Owner decisions in chat, 2026-11-06.**
+    **DECIDED 2026-11-06 by the owner:**
+    - (a) A keyword window keeps its run going when closed, and its toast reports the end. The related and recommend modes keep cancelling when left. This closes the question in items 354(d) and 355.
+    - (b) The two recorded gaps are fixed now, though neither blocks a finishing condition: item 345(d)'s venue gap, `fieldOf(item, "publicationTitle")` in `src/zotero/notes.ts` reading no venue for a conference paper, and item 348(e)'s Import gate, which reads only the ticked count, so "New collection…" with its name prompt dismissed does nothing visible. They run after the Korean insertion round, so that one build and Zotero owner holds the tree at a time.
+    - (c) The owner's next keyed work is the Semantic Scholar key: rotate it, then `P5-T31`'s recording by `docs/13` §3.5, then `P5-T29` and `P5-T30`.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4
