@@ -36,7 +36,7 @@ import {
   SEMANTICSCHOLAR_HOST,
 } from "../../../src/core/rateLimit/hostLimiter";
 import type { SecretStore } from "../../../src/core/secretStore";
-import { KO_PENDING_REVIEW } from "../../../src/i18n/keys";
+import { KO_PENDING_REVIEW, KO_PRESENT } from "../../../src/i18n/keys";
 import type { CanonicalWork, WorkType } from "../../../src/model/canonicalWork";
 import type { ExternalIds } from "../../../src/model/ids";
 import type { SourceRecord } from "../../../src/model/sourceRecord";
@@ -865,7 +865,7 @@ describe("nothing to go on", () => {
   });
 
   it.each(["rh-error-seed-no-identifier", "rh-error-seed-no-match"] as const)(
-    "%s names DOI, PMID, arXiv ID and title in en-US, and waits for review in ko-KR",
+    "%s names DOI, PMID, arXiv ID and title in en-US, and has the owner's Korean in ko-KR (G-41, plan/00 §6 item 357)",
     (id) => {
       const line = read("addon/locale/en-US/research-helper-mainWindow.ftl")
         .split("\n")
@@ -874,9 +874,10 @@ describe("nothing to go on", () => {
         expect(line).toContain(name);
       }
       const korean = read("addon/locale/ko-KR/research-helper-mainWindow.ftl");
-      expect(korean).toContain(`# NEEDS REVIEW ${id} = `);
-      expect(korean).not.toContain(`\n${id} = `);
-      expect(KO_PENDING_REVIEW).toContain(id);
+      expect(korean).not.toContain(`# NEEDS REVIEW ${id} = `);
+      expect(korean).toContain(`\n${id} = `);
+      expect(KO_PENDING_REVIEW).not.toContain(id);
+      expect(KO_PRESENT).toContain(id);
     },
   );
 });

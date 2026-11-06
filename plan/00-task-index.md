@@ -3152,6 +3152,13 @@ the caller of what the card builds; if it does not, the caller is added with a d
     - (b) The two recorded gaps are fixed now, though neither blocks a finishing condition: item 345(d)'s venue gap, `fieldOf(item, "publicationTitle")` in `src/zotero/notes.ts` reading no venue for a conference paper, and item 348(e)'s Import gate, which reads only the ticked count, so "New collection…" with its name prompt dismissed does nothing visible. They run after the Korean insertion round, so that one build and Zotero owner holds the tree at a time.
     - (c) The owner's next keyed work is the Semantic Scholar key: rotate it, then `P5-T31`'s recording by `docs/13` §3.5, then `P5-T29` and `P5-T30`.
 
+359. **The owner's Korean is in, 2026-11-06** (`plan/reports/integration-round-359.md`; items 357, 358). Three consecutive runs on the final tree: 350 passed, 0 failed, 2 pending. ko-KR 469 present, 1 absent (`P0-T24`'s deliberate fixture); `KO_PENDING_REVIEW` is empty. Guard: 1210 channels read in each run, none cancelled.
+    **DECIDED 2026-11-06 (coordinator, under item 313):**
+    - (a) The egress sentence went in, in both languages, after a trace by name and two real runs: only `planKeyword` reads `sources`; `planSimilar`, `planForwardCitations`, `planAuthorWatch`, `fillInSurvivors` and `backfillAbstracts` reach PubMed, Europe PMC and Crossref regardless, and every Semantic Scholar call waits on `hasUsableApiKey`. A run with only arXiv chosen still reached PubMed and Europe PMC. The Crossref title fill-in for an untitled survivor was not seen in a real run, because no recorded run produced one; it rests on the code and a unit test.
+    - (b) At 1019 × 600 in Korean every notice line, the query and the three buttons are in view; Korean takes one more chip line and one more notice line than English. No label was clipped by the scan.
+    - (c) **Two faults the coordinator saw in the screenshots are fixed next, with item 358(b)'s two fixes:** Korean breaks lines inside words (등장/하는, 설/정되어), which reads as broken Korean, so the dialog gets `word-break: keep-all` for Korean; and in the related window's table state at 1019 × 600, in both languages, the import note runs under OK and Cancel, and the header's scroll area shows a cut-off line of blue fragments under the seed's meta line. The round reported the first and not the second.
+    - (d) Not checked: a keyed run; import-step hosts after Find; Korean at a larger font, high contrast or dark mode.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4

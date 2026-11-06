@@ -721,7 +721,10 @@ research-helper-search-recommend-heuristic-too-large = Heuristic profile: this c
 
 research-helper-search-recommend-egress-notice = Find papers sends these to literature databases: the search queries below, up to { $papers } of this collection's paper identifiers, up to { $dismissed } dismissed papers' identifiers, and the names of the { $authors } most frequent authors.
 
-research-helper-search-recommend-egress-sources = The search queries go to the databases chosen in Preferences. Requests about papers and authors go to Semantic Scholar, PubMed and Europe PMC whichever are chosen.
+# Owner's wording, 2026-11-06 (plan/00 §6 item 357(d), (e)). Only the keyword search reads
+# `sources`; the other lists, the title fill-in and the abstract fill-in do not, and every
+# Semantic Scholar call waits on `hasUsableApiKey`. A new host on that path changes this sentence.
+research-helper-search-recommend-egress-sources = The search queries go to the databases chosen in Preferences. Requests about papers and authors go to PubMed, Europe PMC and Crossref whether or not they are chosen there, and to Semantic Scholar when a key is set.
 
 research-helper-search-recommend-queries-none = No search query: every term has been removed.
 

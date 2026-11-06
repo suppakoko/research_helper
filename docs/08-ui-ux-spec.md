@@ -1750,6 +1750,34 @@ Note the **year filter is off by default here** (FR-18). The 3-year restriction 
 > the same as before. `recommendWindow.spec.ts` and `relatedWindow.spec.ts` check this by box and computed style, through
 > `drawnBox` and `hiddenButDrawn` in `test/integration/support/drawnGeometry.ts`.
 
+> **Changed 2026-11-06 (owner, `plan/00` §6 item 357(d), (e)): the notice's second paragraph names every host.** The wireframe
+> above paraphrases the old wording. `research-helper-search-recommend-egress-sources` now reads, in `en-US`: "The search queries
+> go to the databases chosen in Preferences. Requests about papers and authors go to PubMed, Europe PMC and Crossref whether or not
+> they are chosen there, and to Semantic Scholar when a key is set." Its Korean is the owner's, from `plan/reports/ko-review-336.ftl`.
+> Checked against the code the same day: only the keyword search reads `sources` (`planKeyword` in
+> `src/pipeline/recommend/generators.ts`); `planSimilar` (PubMed), `planForwardCitations` (Europe PMC without a key),
+> `planAuthorWatch` (Europe PMC), and `fillInSurvivors` in `recommendPipeline.ts` (Europe PMC and Crossref for a missing title, then
+> `backfillAbstracts` on Europe PMC) take their sources from the registry, whatever `sources` holds. Every Semantic Scholar path waits
+> on the one `hasUsableApiKey` probe of `runStages`. In Zotero 10.0.3, with only arXiv chosen and no key, a recommend run on
+> `noKeyRelatedness.spec.ts`'s doubled answers asked PubMed's `elink` and `efetch`, Europe PMC's author watch, citations and DOI
+> lookup, and arXiv, and sent nothing to PubMed's or Europe PMC's keyword search, to Crossref or to Semantic Scholar. Crossref is
+> reached outside the keyword search only for a survivor with no title; no recorded run has had one, so that path rests on the code
+> (`fillInSurvivors` reads the registry, not `sources`) and on `recommendPipeline.test.ts`'s keyless case, which asks Crossref. The model call of "Build profile" is not in this sentence: the cost dialog's own notice,
+> `research-helper-egress-profile-notice`, says what goes to the model before it is sent.
+>
+> **Measured 2026-11-06 in Zotero 10.0.3, in Korean, at a content size of 1019 x 600 (`plan/00` §6 items 354(e), 355(d)).** On
+> `recommendWindow.spec.ts`'s collection with 20 terms, the profile state's header holds 432 px in the room it needs, edge at 475:
+> both lines of the notice (343 to 377), both lines of the sources paragraph (382 to 417), the "검색어" label and the query (442 to
+> 459) are in view, with "논문 찾기" at 44 to 72 and OK and Cancel at 559 to 586, so nothing needs a scroll. Korean wraps the chips on
+> five lines where English took four on that run, and the English header held 399. The results state reads as in English: the header
+> gives way to the table at 80 px, the table's box is 226 px, and the profile and its notice are read by scrolling the header. The
+> related window's table is the same box as in English; its header's key notice takes two lines (43 px) where English takes one, inside
+> the header's own scroll. No element with text, in either window, was wider than its box or past its parent or the window, and no
+> button, checkbox or label was cropped. **Recorded, not fixed (it is the same in English):** in the related window's table state at
+> 1019 x 600, and at its own opening size, the import row's note (`rh-search-duplicates-group`, 557 to 580) runs under OK and Cancel
+> (559 to 586); the Korean note is longer and passes under both buttons. A fix would move the English boxes too. Korean breaks lines
+> between syllables, inside words, as the platform does by default; that is the owner's judgement, not a measured fault.
+
 ## 6. Collection Report flow
 
 Launched from **collection context menu ▸ Research Helper ▸ Generate Research Trends Report…**

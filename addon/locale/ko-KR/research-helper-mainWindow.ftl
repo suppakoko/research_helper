@@ -68,7 +68,10 @@ research-helper-menu-search-import =
 research-helper-menu-collection-rerun =
     .label = 이 검색 다시 실행…
 
-# NEEDS REVIEW research-helper-menu-collection-recommend .label = Recommend New Papers from This Collection…
+# FR-44's entry (P5-T26).
+# Korean drafted by the coordinator and reviewed by the owner on 2026-11-06 (G-41, plan/00 §6 item 357).
+research-helper-menu-collection-recommend =
+    .label = 이 컬렉션을 기반으로 새 논문 추천…
 
 # FR-19's entry (P3-T29), taken verbatim from `docs/08` §10.2, which ships the
 # owner's Korean for it beside the en-US "Summarize All Papers in Collection".
@@ -196,11 +199,12 @@ rh-error-privacy-routing = OpenRouter에는 개인정보 모드 조건에 맞게
 # plan/00 §6 item 274).
 rh-error-budget = 지출 한도({ $limit })에 도달해 멈췄습니다. 지금까지 쓴 금액: { $spent }. 이미 만든 요약은 그대로 있습니다.
 
-# `SeedUnresolvedError` (docs/07 §10.1; P5-T11). Pending G-41; on KO_PENDING_REVIEW. Nothing machine-translated.
-# NEEDS REVIEW rh-error-seed-gone = This item is no longer in your library, so related papers cannot be looked up.
-# NEEDS REVIEW rh-error-seed-no-identifier = This item has no DOI, PMID, arXiv ID or title, so related papers cannot be looked up. Add one of them to the item and try again.
-# NEEDS REVIEW rh-error-seed-no-match = No paper matched this item's title closely enough, and the item has no DOI, PMID or arXiv ID. Add one of them to the item, or correct its title, and try again.
-# NEEDS REVIEW rh-error-recommend-too-few-items = This collection has { $count } items. Recommendations need at least 5.
+# `SeedUnresolvedError` (docs/07 §10.1; P5-T11) and P5-T25's refusal below 5 items.
+# Korean drafted by the coordinator and reviewed by the owner on 2026-11-06 (G-41, plan/00 §6 item 357).
+rh-error-seed-gone = 이 항목이 더 이상 라이브러리에 없어 관련 논문을 찾을 수 없습니다.
+rh-error-seed-no-identifier = 이 항목에는 DOI, PMID, arXiv ID, 제목이 모두 없어 관련 논문을 찾을 수 없습니다. 이 중 하나를 항목에 추가한 뒤 다시 시도하세요.
+rh-error-seed-no-match = 이 항목의 제목과 충분히 일치하는 논문을 찾지 못했고, 항목에 DOI, PMID, arXiv ID도 없습니다. 이 중 하나를 항목에 추가하거나 제목을 고친 뒤 다시 시도하세요.
+rh-error-recommend-too-few-items = 이 컬렉션에는 항목이 { $count }개 있습니다. 추천을 받으려면 항목이 5개 이상 필요합니다.
 
 
 ## The preference pane's key-storage badge (docs/09 §1.9; P1-T44, P2-T34)

@@ -943,7 +943,7 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
     }
   });
 
-  it("P5-T26: resolves the recommend entry and the notice before Find papers in both locales, the Korean falling back to English until G-41", async function () {
+  it("P5-T26: resolves the recommend entry and the notice before Find papers in both locales, with the owner's Korean in the ko-KR file (G-41, plan/00 §6 item 357)", async function () {
     const added: readonly (readonly [ShippedSurface, readonly string[]])[] = [
       ["mainWindow", [L10N_MENU_COLLECTION_RECOMMEND]],
       [
@@ -971,16 +971,26 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
         pinnedLocalization(surface, ["ko-KR", "en-US"]),
         ids,
       );
+      const korean = await bundleFor(surface, "ko-KR");
+      const notInKoreanFile = ids.filter(
+        (id) => korean?.hasMessage(id) !== true,
+      );
       log(
         `P5-T26 ${surface}: en-US ${english.resolved.length} of ${ids.length}, ` +
-          `ko-KR chain ${chain.resolved.length} of ${ids.length}`,
+          `ko-KR chain ${chain.resolved.length} of ${ids.length}, ` +
+          `not in the ko-KR file ${JSON.stringify(notInKoreanFile)}`,
       );
       assert.deepEqual(english.unresolved, [], `${surface} in en-US`);
       assert.deepEqual(chain.unresolved, [], `${surface} along ko-KR, en-US`);
+      assert.deepEqual(
+        notInKoreanFile,
+        [],
+        "the owner's Korean is in the ko-KR file (G-41, item 357)",
+      );
     }
   });
 
-  it("P5-T27: resolves the results' strings in both locales, the Korean falling back to English until G-41", async function () {
+  it("P5-T27: resolves the results' strings in both locales, with the owner's Korean in the ko-KR file (G-41, plan/00 §6 item 357)", async function () {
     const ids = [
       "col-reason",
       "col-dismiss",
@@ -1022,12 +1032,137 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
       pinnedLocalization("searchDialog", ["ko-KR", "en-US"]),
       ids,
     );
+    const korean = await bundleFor("searchDialog", "ko-KR");
+    const notInKoreanFile = ids.filter((id) => korean?.hasMessage(id) !== true);
     log(
       `P5-T27 searchDialog: en-US ${english.resolved.length} of ${ids.length}, ` +
-        `ko-KR chain ${chain.resolved.length} of ${ids.length}`,
+        `ko-KR chain ${chain.resolved.length} of ${ids.length}, ` +
+        `not in the ko-KR file ${JSON.stringify(notInKoreanFile)}`,
     );
     assert.deepEqual(english.unresolved, [], "searchDialog in en-US");
     assert.deepEqual(chain.unresolved, [], "searchDialog along ko-KR, en-US");
+    assert.deepEqual(
+      notInKoreanFile,
+      [],
+      "the owner's Korean is in the ko-KR file (G-41, item 357)",
+    );
+  });
+
+  it("G-41: the batch of 116 resolves from ko-KR alone, in Korean, except the two target defaults the owner kept in English (plan/00 §6 item 357)", async function () {
+    const HANGUL = /[가-힣]/;
+    const isolated = (text: string): string => text.replace(/[⁨⁩]/g, "");
+    const RELATED_BEFORE = new Set(
+      [
+        "seed-label",
+        "seed-missing",
+        "include-label",
+        "include-reference",
+        "include-citation",
+        "include-recommendation",
+        "include-similar",
+      ].map((part) => `research-helper-search-related-${part}`),
+    );
+    const batch: readonly (readonly [ShippedSurface, readonly string[]])[] = [
+      [
+        "mainWindow",
+        [
+          "rh-error-seed-gone",
+          "rh-error-seed-no-identifier",
+          "rh-error-seed-no-match",
+          "rh-error-recommend-too-few-items",
+          L10N_MENU_COLLECTION_RECOMMEND,
+        ],
+      ],
+      [
+        "searchDialog",
+        SEARCH_DIALOG_MESSAGE_IDS.filter(
+          (id) =>
+            (/^research-helper-search-(related|recommend)-/.test(id) &&
+              !RELATED_BEFORE.has(id)) ||
+            /^research-helper-search-(window-title|mode|state-initial)-recommend$/.test(
+              id,
+            ),
+        ),
+      ],
+    ];
+    // Every argument any of them takes; Fluent ignores what a message does not use.
+    const args = {
+      count: 3,
+      value: "0.42",
+      dots: 4,
+      code: "E357",
+      title: "p357-title",
+      collection: "p357-collection",
+      date: "2026-11-06",
+      term: "p357-term",
+      papers: 15,
+      dismissed: 10,
+      authors: 5,
+      names: "p357-names",
+      number: 2,
+    };
+    const render = async (
+      surface: ShippedSurface,
+      ids: readonly string[],
+      locale: string,
+    ): Promise<(string | undefined)[]> =>
+      (
+        await pinnedLocalization(surface, [locale]).formatMessages(
+          ids.map((id) => ({ id, args })),
+        )
+      ).map((message) =>
+        message
+          ? isolated(
+              [
+                message.value ?? "",
+                ...(message.attributes ?? []).map(
+                  (attribute) => `${attribute.name}=${attribute.value}`,
+                ),
+              ].join("\n"),
+            )
+          : undefined,
+      );
+    let total = 0;
+    for (const [surface, ids] of batch) {
+      total += ids.length;
+      const korean = await bundleFor(surface, "ko-KR");
+      const inKorean = await render(surface, ids, "ko-KR");
+      const inEnglish = await render(surface, ids, "en-US");
+      const notKorean = ids.filter(
+        (id, index) =>
+          !id.endsWith("-target-default") &&
+          !HANGUL.test(inKorean[index] ?? ""),
+      );
+      const keptEnglish = ids.filter(
+        (id, index) =>
+          id.endsWith("-target-default") &&
+          inKorean[index] !== undefined &&
+          inKorean[index] === inEnglish[index],
+      );
+      log(
+        `item 357 ${surface}: ${ids.length} ids, ` +
+          `${inKorean.filter((value) => value !== undefined).length} resolve from ko-KR alone, ` +
+          `not Korean ${JSON.stringify(notKorean)}, English by choice ${JSON.stringify(keptEnglish)}`,
+      );
+      for (const id of ids) {
+        assert.isTrue(
+          korean?.hasMessage(id) === true,
+          `${id} in the ko-KR file`,
+        );
+      }
+      assert.deepEqual(
+        ids.filter((_, index) => inKorean[index] === undefined),
+        [],
+        `${surface}: every id resolves from ko-KR alone`,
+      );
+      assert.deepEqual(notKorean, [], `${surface}: every other id is Korean`);
+      assert.deepEqual(
+        keptEnglish,
+        ids.filter((id) => id.endsWith("-target-default")),
+        `${surface}: the target defaults are the English, by the owner's choice`,
+      );
+    }
+    assert.strictEqual(total, 116, "the batch is the 116 of ko-review-336.ftl");
   });
 
   it("G-41: P4-T21's stop reason, P5-T22's two strings and FINDING P4-T22-2's two labels resolve in Korean, with no English behind them (plan/00 §6 item 335(l))", async function () {

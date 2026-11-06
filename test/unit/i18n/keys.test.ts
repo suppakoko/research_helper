@@ -1424,10 +1424,10 @@ describe("src/i18n/keys.ts — P4-T21's two strings (docs/08 §6.3's notes of 20
 });
 
 /**
- * `P5-T16`'s related results (`docs/08` §5.2, §5.3). Pending the owner's Korean
- * (`G-41`), so each is a commented stub in `ko-KR`, on the pending list, and declared
- * in `en-US`. The list is read back from the bundle's own section, so a string added
- * there without its keys fails here.
+ * `P5-T16`'s related results (`docs/08` §5.2, §5.3). The owner reviewed their Korean on
+ * 2026-11-06 (`G-41`, plan/00 §6 item 357), so each is declared in both bundles, has no
+ * stub left, and is on `KO_PRESENT`. The list is read back from the bundle's own section,
+ * so a string added there without its keys fails here.
  */
 describe("P5-T16: the related results' strings", () => {
   const bundle = (locale: string): string =>
@@ -1462,24 +1462,32 @@ describe("P5-T16: the related results' strings", () => {
     expect(ids).toHaveLength(43);
   });
 
-  it("puts each on the window's surface and on the pending list", () => {
+  it("puts each on the window's surface and on the present list (G-41, plan/00 §6 item 357)", () => {
     for (const id of ids) {
       expect(keys.SEARCH_DIALOG_MESSAGE_IDS, id).toContain(id);
-      expect(keys.KO_PENDING_REVIEW, id).toContain(id);
-      expect(keys.KO_PRESENT, id).not.toContain(id);
+      expect(keys.KO_PRESENT, id).toContain(id);
+      expect(keys.KO_PENDING_REVIEW, id).not.toContain(id);
     }
   });
 
-  it("gives each a commented stub in ko-KR and no live message", () => {
+  it("gives each one live message in ko-KR and no stub", () => {
     const korean = bundle("ko-KR");
     const lines = korean.split(/\r?\n/);
     for (const id of ids) {
-      expect(korean, id).toContain(`# NEEDS REVIEW ${id} `);
+      expect(korean, id).not.toContain(`# NEEDS REVIEW ${id} `);
       expect(
-        lines.some((line) => line.startsWith(`${id} =`)),
+        lines.filter((line) => line.startsWith(`${id} =`)),
         id,
-      ).toBe(false);
+      ).toHaveLength(1);
     }
+  });
+
+  it("keeps the English value of the target default in ko-KR, by the owner's choice (item 357(a))", () => {
+    const id = "research-helper-search-related-target-default";
+    const line = (text: string): string | undefined =>
+      text.split(/\r?\n/).find((entry) => entry.startsWith(`${id} =`));
+    expect(line(bundle("ko-KR"))).toBeDefined();
+    expect(line(bundle("ko-KR"))).toBe(line(bundle("en-US")));
   });
 
   it("gives arguments to exactly the messages with placeables", () => {
@@ -1530,24 +1538,32 @@ describe("P5-T26: the recommend mode's strings", () => {
     expect(ids).toHaveLength(68);
   });
 
-  it("puts each on the window's surface and on the pending list", () => {
+  it("puts each on the window's surface and on the present list (G-41, plan/00 §6 item 357)", () => {
     for (const id of ids) {
       expect(keys.SEARCH_DIALOG_MESSAGE_IDS, id).toContain(id);
-      expect(keys.KO_PENDING_REVIEW, id).toContain(id);
-      expect(keys.KO_PRESENT, id).not.toContain(id);
+      expect(keys.KO_PRESENT, id).toContain(id);
+      expect(keys.KO_PENDING_REVIEW, id).not.toContain(id);
     }
   });
 
-  it("gives each a commented stub in ko-KR and no live message", () => {
+  it("gives each one live message in ko-KR and no stub", () => {
     const korean = bundle("ko-KR");
     const lines = korean.split(/\r?\n/);
     for (const id of ids) {
-      expect(korean, id).toContain(`# NEEDS REVIEW ${id} `);
+      expect(korean, id).not.toContain(`# NEEDS REVIEW ${id} `);
       expect(
-        lines.some((line) => line.startsWith(`${id} =`)),
+        lines.filter((line) => line.startsWith(`${id} =`)),
         id,
-      ).toBe(false);
+      ).toHaveLength(1);
     }
+  });
+
+  it("keeps the English value of the target default in ko-KR, by the owner's choice (item 357(a))", () => {
+    const id = "research-helper-search-recommend-target-default";
+    const line = (text: string): string | undefined =>
+      text.split(/\r?\n/).find((entry) => entry.startsWith(`${id} =`));
+    expect(line(bundle("ko-KR"))).toBeDefined();
+    expect(line(bundle("ko-KR"))).toBe(line(bundle("en-US")));
   });
 
   it("gives arguments to exactly the messages with placeables", () => {
@@ -1565,18 +1581,38 @@ describe("P5-T26: the recommend mode's strings", () => {
     );
   });
 
-  it("the entry's own string, on the main window's surface and pending", () => {
+  it("the entry's own string, on the main window's surface and reviewed (item 357)", () => {
     const id = keys.L10N_MENU_COLLECTION_RECOMMEND;
     expect(keys.MAIN_WINDOW_MESSAGE_IDS).toContain(id);
-    expect(keys.KO_PENDING_REVIEW).toContain(id);
-    expect(keys.KO_PRESENT).not.toContain(id);
+    expect(keys.KO_PRESENT).toContain(id);
+    expect(keys.KO_PENDING_REVIEW).not.toContain(id);
     expect(bundle("en-US", "mainWindow")).toContain(
       `${id} =\n    .label = Recommend New Papers from This Collection…`.replace(
         /\n/g,
         bundle("en-US", "mainWindow").includes("\r\n") ? "\r\n" : "\n",
       ),
     );
-    expect(bundle("ko-KR", "mainWindow")).toContain(`# NEEDS REVIEW ${id} `);
+    expect(bundle("ko-KR", "mainWindow")).not.toContain(
+      `# NEEDS REVIEW ${id} `,
+    );
+    expect(
+      bundle("ko-KR", "mainWindow")
+        .split(/\r?\n/)
+        .filter((line) => line.startsWith(`${id} =`)),
+    ).toHaveLength(1);
+  });
+
+  it("names every host of a Find run's paper and author requests in English (owner, item 357(d), (e))", () => {
+    const id = "research-helper-search-recommend-egress-sources";
+    expect(
+      bundle("en-US")
+        .split(/\r?\n/)
+        .find((line) => line.startsWith(`${id} =`)),
+    ).toBe(
+      `${id} = The search queries go to the databases chosen in Preferences. ` +
+        "Requests about papers and authors go to PubMed, Europe PMC and Crossref " +
+        "whether or not they are chosen there, and to Semantic Scholar when a key is set.",
+    );
   });
 
   it("the pipeline's display name is that string", () => {
