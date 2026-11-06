@@ -746,8 +746,10 @@ var RHSearchWindow = {
      * The name is collected by §4.5's own affordance instead — the
      * `[ New collection… ]` button beside the picker, which
      * {@link RHSearchWindow.newCollection} now implements. Pressing Import while
-     * the picker is on bare "New collection…" is refused on the privileged side
-     * with a `warn`, which is a dead affordance and is reported with the card.
+     * the picker is on bare "New collection…" was refused on the privileged side
+     * with a `warn`, a dead affordance. Since item 358(b) (2026-11-06) Import
+     * asks for the name instead ({@link RHSearchWindow.ensureTargetNamed}), and
+     * this gate is unchanged.
      *
      * @param {number} selectedCount
      * @returns {boolean}
@@ -3882,6 +3884,11 @@ var RHSearchWindow = {
     if (!this.logic.importEnabled(this.state.selectedCount)) {
       return;
     }
+    // Items 348(e) and 358(b): a picker on bare "New collection…" names no
+    // collection, and every mode's model refuses it with only a log line.
+    if (!this.ensureTargetNamed()) {
+      return;
+    }
     // P5-T27: as the related mode's, a recommended row is not a record.
     if (this.inRecommendMode()) {
       if (this.host.recommend) {
@@ -4151,6 +4158,32 @@ var RHSearchWindow = {
   },
 
   /**
+   * Make the target picker name a collection before an import, asking for the
+   * name when it is on bare "New collection…" (`plan/00` §6 items 348(e) and
+   * 358(b)).
+   *
+   * Import's gate stays `docs/08` §4.2's "disabled until ≥1 selected", so the
+   * button is on while the picker names nothing: the window opened with no
+   * collection, a related seed with no readable title, or the picker's own
+   * "New collection…" entry chosen and its prompt dismissed. Each mode's model
+   * then refused with a log line only, so the press did nothing visible. Asking
+   * here is §4.4's first step, "resolve target collection (create if 'New
+   * collection…')", and the user has just pressed Import, so §8.1's rule on
+   * modals holds. The prompt is {@link RHSearchWindow.promptForCollectionName}'s,
+   * with its one existing string. A dismissed prompt imports nothing, as a
+   * dismissed export chooser exports nothing.
+   *
+   * @returns {boolean} whether the picker now names a collection
+   */
+  ensureTargetNamed() {
+    if (this.logic.targetNamed(this.value(this.spec.target))) {
+      return true;
+    }
+    const name = this.promptForCollectionName();
+    return name !== "" && this.adoptNewCollection(name) !== "";
+  },
+
+  /**
    * "New collection…" — ask for the name, then put it in the picker.
    *
    * `docs/08` §4.4's first write step is "resolve target collection (create if
@@ -4172,9 +4205,12 @@ var RHSearchWindow = {
    * transaction, which is what keeps FR-10's "cancel creates no items" true.
    *
    * A build where `Services.prompt` is unavailable degrades to leaving the
-   * picker alone, which leaves Import disabled rather than importing into a
-   * collection nobody named. `host.createCollection` is still called when the
-   * host offers one, so a privileged side that wants to own this flow can.
+   * picker alone, so Import imports nothing rather than into a collection
+   * nobody named ({@link RHSearchWindow.ensureTargetNamed}; corrected
+   * 2026-11-06, item 358(b): Import was never disabled by this, because its
+   * gate reads only the ticked count). `host.createCollection` is still called
+   * when the host offers one, so a privileged side that wants to own this flow
+   * can.
    */
   newCollection() {
     if (typeof this.host.createCollection === "function") {

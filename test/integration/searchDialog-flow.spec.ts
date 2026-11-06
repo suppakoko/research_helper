@@ -281,7 +281,11 @@
  * - **The "New collection…" prompt is not opened.** `Services.prompt.prompt()`
  *   is modal and would block the run until Mocha's timeout, so the picker half
  *   is driven through `adoptNewCollection(name)` — the seam that exists for
- *   exactly this — and the prompt itself is **unexercised**.
+ *   exactly this — and the prompt itself is **unexercised**. *Superseded in part
+ *   2026-11-06 (`plan/00` §6 item 358(b)):* one test opens the real prompt from
+ *   Import on bare "New collection…" and answers it from its own document on the
+ *   `common-dialog-loaded` notice; the picker's own button and entry still go
+ *   through `adoptNewCollection(name)`.
  * - **The progress throttle is turned off.** The job factory here passes
  *   `throttleMs: 0`, so every snapshot reaches the view. In the product the
  *   reporter coalesces at 250 ms (`PROGRESS_REPAINT_INTERVAL_MS`), which can skip
@@ -3874,6 +3878,170 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
   // =========================================================================
   // 8. Import (criterion 2) and FR-51's split (criterion 6)
   // =========================================================================
+
+  it("item 358(b): Import on bare “New collection…” asks for a name in a real prompt; dismissed, it writes nothing; named, it imports there", async function () {
+    this.timeout(90_000);
+    setKeyword(KEYWORD);
+    selectSources([PUBMED]);
+    await search({ pubmed: { records: 2, withAbstract: true } });
+    const picker = el("rh-search-target") as unknown as { value: string };
+    picker.value = "new";
+    const ticked = controller.state.selectedCount;
+    assert.isAbove(ticked, 0, "rows are ticked");
+    const accept = (
+      el("rh-search-dialog") as unknown as {
+        getButton(name: string): Element & { click(): void };
+      }
+    ).getButton("accept");
+    // The dialog hands `buttondisabledaccept` down to the button as its
+    // `disabled` attribute, value and all, so an enabled button carries
+    // disabled="false" (toolkit's dialog.js, `inheritedAttributes`, read
+    // 2026-11-06): the value is what says it is on.
+    assert.notStrictEqual(
+      accept.getAttribute("disabled"),
+      "true",
+      "Import is on, as docs/08 §4.2's gate says",
+    );
+    const asked = (
+      el("rh-search-target-new-item").getAttribute("label") ?? ""
+    ).trim();
+    assert.notStrictEqual(asked, "", "the entry's words are drawn");
+    const collectionsBefore = Zotero.Collections.getByLibrary(
+      Zotero.Libraries.userLibraryID,
+    ).length;
+    const noticesBefore = textOf("rh-search-notices");
+
+    // The real prompt, answered from its own document once it is drawn.
+    // `Services.prompt.prompt` spins a nested event loop, so the answer is
+    // given on the dialog's own timer, not here.
+    interface CommonDialog {
+      cancelDialog(): void;
+      acceptDialog(): void;
+    }
+    const observerService = Services.obs as unknown as {
+      addObserver(observer: unknown, topic: string): void;
+      removeObserver(observer: unknown, topic: string): void;
+    };
+    const drawn: { body: string; width: number; height: number }[] = [];
+    let answer: string | undefined;
+    const observer = {
+      observe(subject: unknown): void {
+        const dialog = subject as Window;
+        const body = dialog.document.getElementById("infoBody");
+        const box = body?.getBoundingClientRect();
+        drawn.push({
+          body: (body?.textContent ?? "").trim(),
+          width: box?.width ?? 0,
+          height: box?.height ?? 0,
+        });
+        dialog.setTimeout(() => {
+          const root = dialog.document.getElementById(
+            "commonDialog",
+          ) as unknown as CommonDialog;
+          if (answer === undefined) {
+            root.cancelDialog();
+            return;
+          }
+          (
+            dialog.document.getElementById("loginTextbox") as unknown as {
+              value: string;
+            }
+          ).value = answer;
+          root.acceptDialog();
+        }, 0);
+      },
+    };
+    // Measured 2026-11-06 in Zotero 10.0.3: the prompt is a top-level window of its
+    // own, chrome://global/content/commonDialog.xhtml, and it raises
+    // `common-dialog-loaded` with that window as the subject, holding
+    // `commonDialog` (a dialog), `infoBody` and `loginTextbox`. Should that
+    // ever change, the test must fail rather than wait on a modal until the suite
+    // times out: a timer on this window cancels any prompt still open after
+    // PROMPT_GUARD_MS, so the press returns and counts no prompt drawn.
+    const PROMPT_GUARD_MS = 10_000;
+    let guarded = 0;
+    const press = (): void => {
+      const guard = setTimeout(() => {
+        const windows = (
+          Services.wm as unknown as {
+            getEnumerator(type: null): {
+              hasMoreElements(): boolean;
+              getNext(): Window;
+            };
+          }
+        ).getEnumerator(null);
+        while (windows.hasMoreElements()) {
+          const open = windows.getNext();
+          const root = open.document?.getElementById(
+            "commonDialog",
+          ) as unknown as CommonDialog | null;
+          if (root) {
+            guarded += 1;
+            root.cancelDialog();
+          }
+        }
+      }, PROMPT_GUARD_MS);
+      try {
+        accept.click();
+      } finally {
+        clearTimeout(guard);
+      }
+    };
+    const name = `RH 358b ${String(Date.now())}`;
+    observerService.addObserver(observer, "common-dialog-loaded");
+    try {
+      press();
+      assert.strictEqual(guarded, 0, "no prompt was left for the guard");
+      assert.strictEqual(drawn.length, 1, "one prompt was drawn");
+      assert.strictEqual(drawn[0]?.body, asked, "it asks the entry's question");
+      assert.isTrue(
+        (drawn[0]?.width ?? 0) > 0 && (drawn[0]?.height ?? 0) > 0,
+        "its question has a box on screen",
+      );
+      await Zotero.Promise.delay(250);
+      assert.isFalse(
+        controller.state.running,
+        "a dismissed prompt starts no run",
+      );
+      assert.strictEqual(
+        Zotero.Collections.getByLibrary(Zotero.Libraries.userLibraryID).length,
+        collectionsBefore,
+        "a dismissed prompt creates no collection",
+      );
+      assert.strictEqual(textOf("rh-search-notices"), noticesBefore);
+      assert.strictEqual(picker.value, "new");
+
+      answer = name;
+      const before = runsFinished;
+      press();
+      assert.strictEqual(guarded, 0, "no prompt was left for the guard");
+      assert.strictEqual(drawn.length, 2, "a second press asks again");
+      await waitUntil(() => runsFinished > before, "the named import", 60_000);
+      // Read from the library, not from the notice: Fluent fills the notice on its
+      // own time, and the 2026-11-06 final run 1 read it empty just after the run.
+      const children = (await Zotero.Items.getAsync(
+        collectionNamed(name).getChildItems(true),
+      )) as { isNote(): boolean }[];
+      assert.strictEqual(
+        children.filter((item) => !item.isNote()).length,
+        ticked,
+        "the ticked records are in the named collection",
+      );
+      assert.strictEqual(picker.value, `new:${name}`);
+    } finally {
+      observerService.removeObserver(observer, "common-dialog-loaded");
+      // The import wrote this search's records into the library; the tests after
+      // this one import the same records and count them as new, so they go now.
+      await eraseCollections(
+        Zotero.Collections.getByLibrary(Zotero.Libraries.userLibraryID)
+          // Every "RH 358b" collection, so a run that failed after a mistaken name
+          // leaves nothing behind for the next tests.
+          .filter((one) => one.name.startsWith("RH 358b "))
+          .map((one) => one.key),
+        "item 358(b)",
+      );
+    }
+  });
 
   it("imports exactly the checked set and writes one provenance note", async function () {
     this.timeout(90_000);

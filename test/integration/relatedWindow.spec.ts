@@ -35,7 +35,13 @@ import type { SourceRegistry } from "../../src/sources/registry";
 import { SEMANTICSCHOLAR_KEY_REQUEST_URL } from "../../src/sources/semanticscholar/semanticscholarSource";
 import { openSearchWindow } from "../../src/ui/dialogs/searchDialog";
 import { qualifiedPrefName } from "../../src/zotero/prefStore";
-import { drawnBox, hiddenButDrawn } from "./support/drawnGeometry";
+import {
+  cutAtEdge,
+  drawnBox,
+  drawnUnderButtons,
+  hiddenButDrawn,
+  wordsBrokenOverLines,
+} from "./support/drawnGeometry";
 import {
   pinUILocale,
   restoreUILocale,
@@ -56,6 +62,7 @@ declare const assert: {
   strictEqual<T>(actual: T, expected: T, message?: string): void;
   deepEqual<T>(actual: T, expected: T, message?: string): void;
   isAbove(value: number, floor: number, message?: string): void;
+  isAtMost(value: number, ceiling: number, message?: string): void;
   isTrue(value: unknown, message?: string): void;
   isFalse(value: unknown, message?: string): void;
   include(haystack: string, needle: string, message?: string): void;
@@ -967,4 +974,222 @@ describe("Related window: the import's wiring (P5-T17's wire-pref and wire-libra
       await Zotero.Promise.delay(250);
     }
   });
+});
+
+describe("Related window: the table state's layout, in both languages (plan/00 item 359(c))", () => {
+  // The coordinator's screenshots of 2026-11-06: 24 citing rows, a seed with a DOI,
+  // and the window at 1019 x 600 and at its opening size, 887 x 600. Every claim here
+  // is read from the drawn boxes, never from a property.
+  const STAMP = String(Date.now());
+  const ROWS = 24;
+  let undo: (() => void) | undefined;
+  let seed: Zotero.Item | undefined;
+
+  before(async function () {
+    this.timeout(90_000);
+    const seedDoi = `10.5555/p359c.seed.${STAMP}`;
+    undo = await withStubs((id, slot) =>
+      relatedStub(
+        id,
+        slot,
+        (query) => {
+          if (id !== "europepmc" || query.strategy !== "citations") {
+            return Promise.resolve(emptyPage());
+          }
+          const records = Array.from({ length: ROWS }, (_unused, at) =>
+            record(
+              id,
+              `p359c-${String(at)}`,
+              `P359c citing row ${String(at)}`,
+              `10.5555/p359c.${STAMP}.${String(at)}`,
+              [{ family: `Family${String(at)}` }],
+            ),
+          );
+          return Promise.resolve({
+            ...emptyPage(),
+            records,
+            totalAvailable: ROWS,
+            edges: records.map((_row, at) => ({
+              kind: "citation",
+              rank: at + 1,
+            })),
+          } as unknown as RelatedPage);
+        },
+        () => {
+          const base = record(id, "p359c-seed", "P359c seed", seedDoi, []);
+          return Promise.resolve([
+            {
+              ...base,
+              work: {
+                ...base.work,
+                ids: { doi: seedDoi, pmid: "39000359" } as CanonicalWork["ids"],
+              },
+            },
+          ]);
+        },
+      ),
+    );
+    seed = await savedArticle(`P359c seed ${STAMP}`, seedDoi);
+  });
+
+  after(async function () {
+    this.timeout(60_000);
+    undo?.();
+    undo = undefined;
+    await seed?.eraseTx();
+  });
+
+  for (const locale of ["en-US", "ko-KR"] as const) {
+    it(`${locale}: at 1019 x 600 and 887 x 600 nothing runs under OK and Cancel, and the header's edge cuts no line`, async function () {
+      this.timeout(120_000);
+      if (!seed) {
+        assert.fail("the seed was not made");
+      }
+      const found: UILocaleSnapshot = await pinUILocale([locale], (line) => {
+        debug(`${LOG_PREFIX} ${line}`);
+      });
+      const opened = openRelated(seed.id);
+      try {
+        const controller = await finished(opened);
+        assert.strictEqual(controller.state.panel, "results");
+        assert.strictEqual(controller.state.rows.length, ROWS);
+        const doc = opened.document;
+        const byId = (id: string): Element => {
+          const element = doc.getElementById(id);
+          if (!element) {
+            assert.fail(`#${id} is missing`);
+          }
+          return element;
+        };
+        const dialog = byId("rh-search-dialog");
+        const header = byId("rh-related-header");
+        for (const [width, height] of [
+          [1019, 600],
+          [887, 600],
+        ] as const) {
+          const at = `${locale} at ${String(width)} x ${String(height)}`;
+          // The content's size: `resizeTo` sizes the window with its frame.
+          opened.resizeTo(
+            width + opened.outerWidth - opened.innerWidth,
+            height + opened.outerHeight - opened.innerHeight,
+          );
+          await Zotero.Promise.delay(400);
+          assert.strictEqual(opened.innerWidth, width);
+          assert.strictEqual(opened.innerHeight, height);
+          header.scrollTop = 0;
+          await Zotero.Promise.delay(50);
+
+          const under = drawnUnderButtons(dialog);
+          const cut = cutAtEdge(header);
+          const edge = header.getBoundingClientRect().top + header.clientHeight;
+          const scroll = byId("rh-results-scroll").getBoundingClientRect();
+          const rowsSeen = (
+            Array.from(byId("rh-results-body").children) as Element[]
+          ).filter((row) => {
+            const box = row.getBoundingClientRect();
+            return box.top >= scroll.top && box.bottom <= scroll.bottom;
+          }).length;
+          debug(
+            `${LOG_PREFIX} table state ${at}: header ${String(header.clientHeight)} px ` +
+              `holding ${String(header.scrollHeight)}, edge ${String(Math.round(edge))}; ` +
+              `table ${String(Math.round(scroll.height))} px, ${String(rowsSeen)} whole rows of ` +
+              `${String(Math.round(byId("rh-results-body").firstElementChild?.getBoundingClientRect().height ?? 0))} px; ` +
+              `under OK ${JSON.stringify(under)}; cut ${JSON.stringify(cut)}`,
+          );
+          assert.deepEqual(
+            under,
+            [],
+            `${at}: nothing is drawn under OK and Cancel`,
+          );
+          assert.deepEqual(cut, [], `${at}: the header's edge cuts no line`);
+          // The seed's lines and all four Include boxes are whole above the edge.
+          for (const id of [
+            "rh-related-seed-title",
+            "rh-related-include-reference",
+            "rh-related-include-citation",
+            "rh-related-include-recommendation",
+            "rh-related-include-similar",
+          ]) {
+            const box = byId(id).getBoundingClientRect();
+            assert.isAbove(box.height, 0, `${at}: #${id} is drawn`);
+            assert.isAtMost(box.bottom, edge + 0.5, `${at}: #${id} is whole`);
+          }
+          // The header is as tall as its controls and no taller, so what it holds
+          // past them gives its room to the table.
+          assert.isAtMost(
+            header.clientHeight,
+            byId("rh-related-include").getBoundingClientRect().bottom -
+              header.getBoundingClientRect().top +
+              0.5,
+            `${at}: the header is as tall as its controls`,
+          );
+          assert.isAbove(rowsSeen, 1, `${at}: rows show in the table`);
+          // What the header holds past its edge is read by scrolling it.
+          const status = byId("rh-related-status");
+          assert.isAbove(
+            status.getBoundingClientRect().height,
+            0,
+            `${at}: the status rows are drawn`,
+          );
+          header.scrollTop = header.scrollHeight;
+          await Zotero.Promise.delay(50);
+          const end = header.getBoundingClientRect().top + header.clientHeight;
+          assert.isAtMost(
+            status.getBoundingClientRect().bottom,
+            end + 0.5,
+            `${at}: scrolled to its end, the header shows its status rows`,
+          );
+          header.scrollTop = 0;
+          await Zotero.Promise.delay(50);
+
+          if (locale === "ko-KR") {
+            // Korean breaks between words, not between the syllables of one.
+            const broken = wordsBrokenOverLines(dialog);
+            debug(
+              `${LOG_PREFIX} words broken over lines ${at}: ${JSON.stringify(broken)}`,
+            );
+            assert.deepEqual(
+              broken,
+              [],
+              `${at}: no word is split over two lines`,
+            );
+            // And a string with no break in it still wraps inside its box.
+            const title = byId("rh-related-seed-title");
+            const words = title.textContent;
+            title.textContent = `10.5555/${"x".repeat(400)}`;
+            await Zotero.Promise.delay(100);
+            const box = title.getBoundingClientRect();
+            const range = doc.createRange();
+            range.selectNodeContents(title);
+            const pieces = (
+              Array.from(range.getClientRects() ?? []) as DOMRect[]
+            ).filter((one) => one.width > 0);
+            const textLines = new Set(pieces.map((one) => Math.round(one.top)))
+              .size;
+            const right = Math.max(...pieces.map((one) => one.right));
+            debug(
+              `${LOG_PREFIX} an unbroken title ${at}: box ${String(Math.round(box.left))}..` +
+                `${String(Math.round(box.right))}, text to ${String(Math.round(right))}, ` +
+                `${String(textLines)} lines`,
+            );
+            title.textContent = words;
+            assert.isAbove(textLines, 1, `${at}: an unbroken string wraps`);
+            assert.isAtMost(
+              right,
+              box.right + 0.5,
+              `${at}: and stays in its box`,
+            );
+            assert.isAtMost(right, width, `${at}: and in the window`);
+            await Zotero.Promise.delay(100);
+          }
+        }
+      } finally {
+        opened.close();
+        await Zotero.Promise.delay(250);
+        await restoreUILocale(found, (line) => {
+          debug(`${LOG_PREFIX} ${line}`);
+        });
+      }
+    });
+  }
 });

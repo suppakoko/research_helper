@@ -143,33 +143,39 @@ href="chrome://__addonRef__/content/style/searchDialog.css" type="text/css"?>
           data-l10n-id="research-helper-search-related-include-similar"
         />
       </hbox>
-      <!-- P5-T16: the run's own notice that it found no Semantic Scholar key.
+      <!-- What follows the Seed lines and the Include row. While a table shows it
+           takes no room and is read by scrolling the header, so the header's edge
+           falls under the Include row and never through a line (searchDialog.css,
+           docs/08 §5.4's note of 2026-11-06). -->
+      <vbox id="rh-related-header-more">
+        <!-- P5-T16: the run's own notice that it found no Semantic Scholar key.
            The link's href is set by script from the view state, because this
            markup may name no remote resource (docs/01 §8.3). -->
-      <hbox
-        id="rh-related-key-notice"
-        align="center"
-        class="rh-wrap"
-        hidden="true"
-      >
-        <description
-          id="rh-related-key-text"
-          class="rh-hint"
-          data-l10n-id="research-helper-search-related-key-notice"
-        />
-        <html:a
-          id="rh-related-key-request"
-          data-l10n-id="research-helper-search-s2-no-key-request"
-        />
-      </hbox>
-      <!-- P5-T16: one status row per list a run asked (docs/08 §5.2's note,
+        <hbox
+          id="rh-related-key-notice"
+          align="center"
+          class="rh-wrap"
+          hidden="true"
+        >
+          <description
+            id="rh-related-key-text"
+            class="rh-hint"
+            data-l10n-id="research-helper-search-related-key-notice"
+          />
+          <html:a
+            id="rh-related-key-request"
+            data-l10n-id="research-helper-search-s2-no-key-request"
+          />
+        </hbox>
+        <!-- P5-T16: one status row per list a run asked (docs/08 §5.2's note,
            decision 10). Filled by renderSourceStatus(). -->
-      <hbox
-        id="rh-related-status"
-        class="rh-wrap"
-        role="status"
-        hidden="true"
-      />
+        <hbox
+          id="rh-related-status"
+          class="rh-wrap"
+          role="status"
+          hidden="true"
+        />
+      </vbox>
     </vbox>
 
     <!-- 2. Year range and per-database cap — docs/08 §4.2 "Date defaults" and
@@ -220,92 +226,103 @@ href="chrome://__addonRef__/content/style/searchDialog.css" type="text/css"?>
           data-l10n-id="research-helper-search-recommend-show-dismissed"
         />
       </hbox>
-      <vbox id="rh-recommend-profile" hidden="true">
-        <hbox id="rh-recommend-focus-row" align="start">
+      <!-- What follows Build profile, Find papers and the per-run controls. While a
+           table shows it takes no room and is read by scrolling the header, as the
+           related header's (searchDialog.css, docs/08 §5.4's note of 2026-11-06). -->
+      <vbox id="rh-recommend-header-more">
+        <vbox id="rh-recommend-profile" hidden="true">
+          <hbox id="rh-recommend-focus-row" align="start">
+            <label
+              class="rh-recommend-label"
+              data-l10n-id="research-helper-search-recommend-focus-label"
+            />
+            <description id="rh-recommend-focus" flex="1" />
+          </hbox>
+          <hbox align="start">
+            <label
+              class="rh-recommend-label"
+              data-l10n-id="research-helper-search-recommend-terms-label"
+            />
+            <html:div id="rh-recommend-terms" class="rh-recommend-chips" />
+          </hbox>
+          <hbox id="rh-recommend-removed-row" align="start" hidden="true">
+            <label
+              class="rh-recommend-label"
+              data-l10n-id="research-helper-search-recommend-removed-label"
+            />
+            <html:div id="rh-recommend-removed" class="rh-recommend-chips" />
+          </hbox>
+          <hbox align="center">
+            <html:input
+              id="rh-recommend-term-input"
+              type="text"
+              data-l10n-id="research-helper-search-recommend-term-input"
+            />
+            <button
+              id="rh-recommend-term-add"
+              data-l10n-id="research-helper-search-recommend-term-add"
+            />
+          </hbox>
+          <hbox id="rh-recommend-authors-row" align="start">
+            <label
+              class="rh-recommend-label"
+              data-l10n-id="research-helper-search-recommend-authors-label"
+            />
+            <description id="rh-recommend-authors" flex="1" />
+          </hbox>
+          <hbox id="rh-recommend-venues-row" align="start">
+            <label
+              class="rh-recommend-label"
+              data-l10n-id="research-helper-search-recommend-venues-label"
+            />
+            <description id="rh-recommend-venues" flex="1" />
+          </hbox>
+          <description
+            id="rh-recommend-heuristic"
+            class="rh-hint"
+            hidden="true"
+          />
+          <vbox id="rh-recommend-egress" />
           <label
-            class="rh-recommend-label"
-            data-l10n-id="research-helper-search-recommend-focus-label"
+            data-l10n-id="research-helper-search-recommend-queries-label"
           />
-          <description id="rh-recommend-focus" flex="1" />
-        </hbox>
-        <hbox align="start">
-          <label
-            class="rh-recommend-label"
-            data-l10n-id="research-helper-search-recommend-terms-label"
+          <vbox id="rh-recommend-queries" />
+          <description
+            id="rh-recommend-queries-none"
+            class="rh-hint"
+            hidden="true"
+            data-l10n-id="research-helper-search-recommend-queries-none"
           />
-          <html:div id="rh-recommend-terms" class="rh-recommend-chips" />
-        </hbox>
-        <hbox id="rh-recommend-removed-row" align="start" hidden="true">
-          <label
-            class="rh-recommend-label"
-            data-l10n-id="research-helper-search-recommend-removed-label"
+        </vbox>
+        <hbox
+          id="rh-recommend-key-notice"
+          align="center"
+          class="rh-wrap"
+          hidden="true"
+        >
+          <description
+            class="rh-hint"
+            data-l10n-id="research-helper-search-recommend-key-notice"
           />
-          <html:div id="rh-recommend-removed" class="rh-recommend-chips" />
-        </hbox>
-        <hbox align="center">
-          <html:input
-            id="rh-recommend-term-input"
-            type="text"
-            data-l10n-id="research-helper-search-recommend-term-input"
-          />
-          <button
-            id="rh-recommend-term-add"
-            data-l10n-id="research-helper-search-recommend-term-add"
+          <html:a
+            id="rh-recommend-key-request"
+            data-l10n-id="research-helper-search-s2-no-key-request"
           />
         </hbox>
-        <hbox id="rh-recommend-authors-row" align="start">
-          <label
-            class="rh-recommend-label"
-            data-l10n-id="research-helper-search-recommend-authors-label"
-          />
-          <description id="rh-recommend-authors" flex="1" />
-        </hbox>
-        <hbox id="rh-recommend-venues-row" align="start">
-          <label
-            class="rh-recommend-label"
-            data-l10n-id="research-helper-search-recommend-venues-label"
-          />
-          <description id="rh-recommend-venues" flex="1" />
-        </hbox>
+        <hbox id="rh-recommend-status" class="rh-wrap" hidden="true" />
         <description
-          id="rh-recommend-heuristic"
+          id="rh-recommend-dismissed-hint"
+          class="rh-hint"
+          hidden="true"
+          data-l10n-id="research-helper-search-recommend-dismissed-hint"
+        />
+        <description
+          id="rh-recommend-list-note"
           class="rh-hint"
           hidden="true"
         />
-        <vbox id="rh-recommend-egress" />
-        <label data-l10n-id="research-helper-search-recommend-queries-label" />
-        <vbox id="rh-recommend-queries" />
-        <description
-          id="rh-recommend-queries-none"
-          class="rh-hint"
-          hidden="true"
-          data-l10n-id="research-helper-search-recommend-queries-none"
-        />
+        <separator class="groove" />
       </vbox>
-      <hbox
-        id="rh-recommend-key-notice"
-        align="center"
-        class="rh-wrap"
-        hidden="true"
-      >
-        <description
-          class="rh-hint"
-          data-l10n-id="research-helper-search-recommend-key-notice"
-        />
-        <html:a
-          id="rh-recommend-key-request"
-          data-l10n-id="research-helper-search-s2-no-key-request"
-        />
-      </hbox>
-      <hbox id="rh-recommend-status" class="rh-wrap" hidden="true" />
-      <description
-        id="rh-recommend-dismissed-hint"
-        class="rh-hint"
-        hidden="true"
-        data-l10n-id="research-helper-search-recommend-dismissed-hint"
-      />
-      <description id="rh-recommend-list-note" class="rh-hint" hidden="true" />
-      <separator class="groove" />
     </vbox>
 
     <hbox id="rh-search-scope-row" align="center">

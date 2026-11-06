@@ -2395,7 +2395,10 @@ export function createSearchImportViewModel(
    * `${NEW_COLLECTION_VALUE}:<name>`.
    *
    * `undefined` means the picker is still on bare "New collection…" with no
-   * name. The document gates the Import button on the same condition.
+   * name. The document asks for a name on Import before it calls here
+   * (`RHSearchWindow.ensureTargetNamed`; `plan/00` §6 item 358(b), corrected
+   * 2026-11-06: this said the document gated the button on it, which it never
+   * did).
    */
   function resolveTarget(
     query: SearchWindowQuery,
@@ -2961,9 +2964,9 @@ export function createSearchImportViewModel(
       retained = undefined;
       const target = resolveTarget(request);
       if (target === undefined) {
-        // The document's Import gate already refuses this; a host driven
-        // directly must refuse it too rather than write into a collection
-        // nobody named. See `resolveTarget`.
+        // The document asks for a name before it calls (item 358(b)); a host
+        // driven directly must refuse it too rather than write into a
+        // collection nobody named. See `resolveTarget`.
         deps.logger.warn(
           "import refused: the target picker names no collection. The " +
             '"New collection…" path needs a name, and the document prompts ' +

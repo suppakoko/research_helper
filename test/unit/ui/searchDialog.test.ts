@@ -514,6 +514,8 @@ interface Controller {
   cancel: () => void;
   disconnectHost: () => void;
   import: () => void;
+  // Item 358(b): the modal's seam, replaced in tests so no modal opens.
+  promptForCollectionName: () => string;
   [key: string]: unknown;
 }
 
@@ -1118,6 +1120,10 @@ describe("init() wires the real document", () => {
     });
     h.controller.init();
     h.controller.state.selectedCount = 2;
+    // Item 358(b), 2026-11-06: on bare "New collection…" Import now asks for a
+    // name first, so this test names the target and keeps to its own claim.
+    const target = h.byId("rh-search-target");
+    if (target) target.value = "new:Target";
     let prevented = false;
     h.doc.dispatch("dialogaccept", {
       preventDefault: () => {
@@ -1126,6 +1132,73 @@ describe("init() wires the real document", () => {
     });
     expect(prevented).toBe(true);
     expect(imports).toHaveLength(1);
+  });
+
+  describe("Import on bare “New collection…” (items 348(e), 358(b))", () => {
+    function pressing(answer: string) {
+      const imports: unknown[] = [];
+      const h = harness({
+        host: {
+          runImport: (request: unknown) => {
+            imports.push(request);
+          },
+        },
+      });
+      h.controller.init();
+      h.controller.state.selectedCount = 2;
+      let prompts = 0;
+      h.controller.promptForCollectionName = () => {
+        prompts += 1;
+        return answer;
+      };
+      return { h, imports, prompts: () => prompts };
+    }
+    const target = (h: Harness) => h.byId("rh-search-target");
+
+    it("opens on bare “New collection…” with Import on, as docs/08 §4.2 says", () => {
+      const { h } = pressing("");
+      expect(target(h)?.value).toBe("new");
+      expect(h.controller.refreshImportGate()).toBe(true);
+    });
+
+    it("asks for the name, and imports nothing when the prompt is dismissed", () => {
+      const { h, imports, prompts } = pressing("");
+      h.doc.dispatch("dialogaccept", { preventDefault: () => undefined });
+      expect(prompts()).toBe(1);
+      expect(imports).toStrictEqual([]);
+      expect(target(h)?.value).toBe("new");
+    });
+
+    it("imports into the collection the prompt named, and lists it", () => {
+      const { h, imports, prompts } = pressing("My set");
+      h.controller.import();
+      expect(prompts()).toBe(1);
+      expect(target(h)?.value).toBe("new:My set");
+      expect(
+        (imports[0] as { collectionID: unknown } | undefined)?.collectionID,
+      ).toBe("new:My set");
+      const labels = (h.byId("rh-search-target-popup")?.children ?? []).map(
+        (item) => item.getAttribute("label"),
+      );
+      expect(labels).toContain("My set");
+    });
+
+    it("asks nothing when the picker already names a collection", () => {
+      const { h, imports, prompts } = pressing("Never asked");
+      const list = target(h);
+      if (list) list.value = "new:Chosen";
+      h.controller.import();
+      expect(prompts()).toBe(0);
+      expect(imports).toHaveLength(1);
+    });
+
+    it("asks nothing with no row ticked, because the gate refuses first", () => {
+      const { h, imports, prompts } = pressing("Never asked");
+      h.controller.state.selectedCount = 0;
+      h.controller.import();
+      expect(prompts()).toBe(0);
+      expect(imports).toStrictEqual([]);
+    });
   });
 
   it("is idempotent, so the onload attribute and the load listener agree", () => {
@@ -1376,10 +1449,15 @@ describe("searchDialog.css sizes the window the only way that works", () => {
     );
     expect(block("#rh-results-container {")).toContain("min-height: 0");
     expect(block("#rh-recommend-header {")).toContain("overflow-y: auto");
-    // A floor for the table only where a tall header competes for its room: on the
-    // keyword window, whose rows are all short, it pushed the last row under OK.
+    // Changed 2026-11-06 (plan/00 §6 item 359(c)): no floor for the table. While a
+    // table shows, a mode's header keeps its controls and holds the rest at no
+    // height, so it gives the table the room itself. The geometry is asserted in
+    // the real window (relatedWindow.spec.ts, recommendWindow.spec.ts); this only
+    // keeps the floor, which put the related window's note under OK, from coming
+    // back, and the keyword window free of both rules.
+    expect(CSS_CODE).not.toContain("45vh");
     expect(CSS_CODE).toMatch(
-      /#rh-recommend-header:not\(\[hidden\]\)\s*~ #rh-results-area:has\(> #rh-results-container:not\(\[hidden\]\)\) \{\s*min-height: 45vh/,
+      /> #rh-related-header\s*> #rh-related-header-more,[\s\S]*> #rh-recommend-header\s*> #rh-recommend-header-more \{\s*max-height: 0;/,
     );
     expect(CSS_CODE).not.toMatch(/\n#rh-results-area:has/);
   });
@@ -4732,6 +4810,24 @@ describe("P5-T16 — related results in the window", () => {
       expect(asked).toHaveLength(1);
     });
 
+    it("asks for a name on bare “New collection…”, and sends nothing when dismissed (item 358(b))", () => {
+      const { h, asked } = importing();
+      target(h, "new");
+      let prompts = 0;
+      h.controller.promptForCollectionName = () => {
+        prompts += 1;
+        return prompts === 1 ? "" : "Named here";
+      };
+      h.controller.import();
+      expect(prompts).toBe(1);
+      expect(asked).toStrictEqual([]);
+      h.controller.import();
+      expect(prompts).toBe(2);
+      expect(
+        (asked[0] as { collectionID: unknown } | undefined)?.collectionID,
+      ).toBe("new:Named here");
+    });
+
     it("reaches no import with no related host", () => {
       const { h, publish } = open({});
       publish(stateOf({ records: [record(1)] }));
@@ -6607,9 +6703,12 @@ describe('P5-T26: the window opened with mode: "recommend-from-collection"', () 
       ]);
     });
 
-    it("imports no row filtered out of view, and calls nothing with no tick", () => {
+    it("imports no row filtered out of view, and calls nothing with no tick", async () => {
       const { h, calls, publish } = open();
       publish(listState([row(1), row(2)], { dismissedKeys: ["key-2"] }));
+      // Item 358(b), 2026-11-06: the dated default must land before Import, or
+      // the picker is still on bare "New collection…" and Import asks first.
+      await flush();
       h.doc.dispatch("dialogaccept", { preventDefault: () => undefined });
       const request = calls.find(([name]) => name === "importRows")?.[1] as {
         keys: string[];

@@ -1074,7 +1074,7 @@ The Search & Import window is large and stateful, so it gets its own XHTML docum
 | Select all / none | checkbox in header | all selected on new results | |
 | Filters | text input + "Hide items already in my library" checkbox | filter empty, hide-existing **on** | Client-side filter over fetched results |
 | Target collection | collection picker + "New collection…" | current collection if one is selected, else "New collection…" | |
-| Import | button | disabled until ≥1 selected | |
+| Import | button | disabled until ≥1 selected | *Noted 2026-11-06 (`plan/00` §6 items 348(e), 358(b)):* the gate is unchanged and reads only the ticked count. Pressed while the picker is on bare "New collection…", Import asks for the name first (`ensureTargetNamed` in `addon/content/searchDialog.js`, §4.4's first step); a dismissed prompt imports nothing and leaves the picker on "New collection…". |
 | Status bar | text + progress + Cancel | — | |
 
 > **As built 2026-10-24 (`P3-T27`): the Relevance threshold row.** "Enabled for the run" is a checkbox beside the control, "Screen results for relevance with the AI model", **unticked on every open** and shown only while the active LLM provider has a key, because screening spends money during a search; the number input and its count line show while it is ticked. The number opens at `screening.threshold`, read when the window opens, and a change applies to that run only and is never written back (`07-architecture-and-data-model.md` §8.5's row). After a screened search, a row scoring below the number is hidden — and so not imported — until "Show excluded" is ticked, and the line beside the control reads "Importing 47 of 210 results · 163 below the threshold". `0` hides nothing. Rows the model could not score are never hidden, and a notice says how many there were. `12-prompt-library.md` §3's note of this date has the rest.
@@ -1211,7 +1211,8 @@ Whichever you use, **always set `getRowString`** (accessible row name + type-to-
 ```
 click Import
   → collect picked records
-  → resolve target collection (create if "New collection…")
+  → resolve target collection (create if "New collection…";
+      on bare "New collection…" ask for the name first, noted 2026-11-06)
   → dedup pass: for each record, findByDOI / findByPMID  (01-doc §5.5)
       ├─ existing → per user preference: skip | add existing item to collection | import anyway
       └─ new      → queue
@@ -1545,7 +1546,8 @@ Note the **year filter is off by default here** (FR-18). The 3-year restriction 
 > (1) **The default target is a new collection named after the seed**: `research-helper-search-related-target-default`,
 > `Related to “<title>”`, with the title cut as the mode chip cuts it (60 characters). It goes into the picker as any other named
 > new collection, and importing twice reuses it, as FR-6 says. The user can pick another. With no readable seed the picker
-> stays on bare "New collection…".
+> stays on bare "New collection…". *(Noted 2026-11-06, `plan/00` §6 items 348(e), 358(b): Import then asks for the name, as in
+> every mode — §4.2's Import row.)*
 > (2) **The items go into the seed's library**, whatever the picker lists, because Zotero refuses a relation across
 > libraries and the "in library" marks were read from that library. The picker lists the user library's collections, so a
 > seed in a group library resolves a picked collection's name in that group library, creating it there if absent. Nothing
@@ -1687,6 +1689,28 @@ Note the **year filter is off by default here** (FR-18). The 3-year restriction 
 > same data). The profile is read by scrolling the header once a list is showing. The keyword window has no such floor, because
 > at `45vh` its last row fell under OK. This is a judgement the owner may wish to look at: the alternative is a larger opening
 > size, which was not tried.
+>
+> **Superseded in part 2026-11-06 (coordinator, `plan/00` §6 item 359(c)): no floor, and the header is exactly as tall as its
+> controls once a table shows.** Measured in Zotero 10.0.3 in both languages (a measuring spec run for this round, outside the repository,
+> with 24 rows; the checks named at the end now hold it), before the change: in the related window's table state the header was held at its `4em`
+> minimum, 52 px (43 to 95), while its controls ran to 115, so its edge cut the Include row (`rh-related-include`, 88 to 115):
+> the "Include" label and the tops of its four checked boxes, which were the "blue fragments"; nine elements were cut. The
+> `45vh` floor held the results area at 270 px, and with the related window's two extra rows (Years and scope, 99 to 135; the
+> seed link, 531 to 550) the column passed 600, so the import note (`rh-search-duplicates-group`) ran under OK and Cancel (559 to
+> 586) at 557 to 580, at 557 to 597 in Korean at 887 x 600, with the status bar under them. The recommend table had the same
+> cause: its header's edge (80 px, or 63 in Korean at 887) cut 5 to 10 elements of the chips. **The change**
+> (`addon/content/style/searchDialog.css`, `addon/content/searchDialog.xhtml`): the floor is gone; everything below the
+> header's controls sits in a box of its own, `#rh-related-header-more` (the key notice and the status rows) and
+> `#rh-recommend-header-more` (the profile, the key notice, the status, the dismissed hint and the list note), and while a
+> table shows that box has `max-height: 0` and the header `flex-shrink: 0`, so the header is as tall as its controls and the
+> rest is still read by scrolling the header (its scroll height kept: 168 and 189 px in English, 189 and 206 in Korean). **After,
+> at 1019 x 600 and 887 x 600, both languages:** nothing is drawn under OK and Cancel; the header's edge cuts nothing. Related:
+> header 72 px (43 to 115), table box 164 px (147 in Korean at 887), seed link 489 to 509, import note 516 to 538 (499 to 538 in
+> Korean at 887), status bar 545 to 550. Recommend: header 58 px (43 to 102, the actions and the controls), table box 248 px (230
+> in Korean at 887). The related table shows fewer rows than the 226 px it had, because the header no longer gives way below its
+> controls. The keyword window, the openings and the recommend profile state read the same before and after, to the pixel.
+> `relatedWindow.spec.ts` and `recommendWindow.spec.ts` check this by drawn boxes, through `drawnUnderButtons` and
+> `cutAtEdge` in `test/integration/support/drawnGeometry.ts`.
 
 > **Measured and changed 2026-11-06 (`plan/00` §6 item 354(f), under item 313): the profile has the room until a table shows.**
 > Measured at a content size of 1019 x 600 in Zotero 10.0.3 on `recommendWindow.spec.ts`'s collection with 20 terms, before the
@@ -1773,10 +1797,19 @@ Note the **year filter is off by default here** (FR-18). The 3-year restriction 
 > gives way to the table at 80 px, the table's box is 226 px, and the profile and its notice are read by scrolling the header. The
 > related window's table is the same box as in English; its header's key notice takes two lines (43 px) where English takes one, inside
 > the header's own scroll. No element with text, in either window, was wider than its box or past its parent or the window, and no
-> button, checkbox or label was cropped. **Recorded, not fixed (it is the same in English):** in the related window's table state at
+> button, checkbox or label was cropped. ~~**Recorded, not fixed (it is the same in English):** in the related window's table state at
 > 1019 x 600, and at its own opening size, the import row's note (`rh-search-duplicates-group`, 557 to 580) runs under OK and Cancel
 > (559 to 586); the Korean note is longer and passes under both buttons. A fix would move the English boxes too. Korean breaks lines
-> between syllables, inside words, as the platform does by default; that is the owner's judgement, not a measured fault.
+> between syllables, inside words, as the platform does by default; that is the owner's judgement, not a measured fault.~~
+>
+> **Fixed 2026-11-06 (coordinator, `plan/00` §6 item 359(c)).** The import note: §5.4's note of the same day. **Korean line
+> breaking:** the dialog now has `word-break: keep-all` for Korean, with `overflow-wrap: anywhere` so a DOI, URL or other string
+> with no break in it still wraps inside its box (`#rh-search-dialog:lang(ko)` in `addon/content/style/searchDialog.css`). Measured:
+> the dialog's root carries `lang="ko-KR"` under the Korean locale and `en-US` under English, so `:lang(ko)` matches only in Korean,
+> and English keeps `word-break: normal`. Words broken over two lines, by drawn line boxes (`wordsBrokenOverLines`): the recommend
+> profile and results states 2 before (등장하는, 설정되어), 0 after; the related table at 887 x 600 2 before, 0 after. A 400-character
+> unbroken seed title wraps on more than one line and stays inside its box and the window. At 1019 x 600 in Korean the profile
+> state's two notice paragraphs, the query, Find papers, OK and Cancel stay in view, with the same boxes before and after.
 
 ## 6. Collection Report flow
 
@@ -2612,6 +2645,18 @@ The authoritative requirements are `09-security-privacy-and-api-keys.md` §1.9; 
 | Unrecoverable/unexpected error | Inline banner + `Zotero.logError(e)`; never a modal alert |
 
 **No modal `alert()` or `Services.prompt` for anything the user did not just click.** Modals over a library window are hostile and can appear behind the main window.
+
+> **Noted 2026-11-06 (`plan/00` §6 items 348(e), 358(b)): a second name prompt, on Import.** Besides the picker's own
+> "New collection…" entry, pressing Import with the picker on bare "New collection…" opens the same prompt
+> (`promptForCollectionName` in `addon/content/searchDialog.js`, reached from `ensureTargetNamed`), with the entry's words
+> (`research-helper-search-target-new`) and the window's title, so no string was added. The rule above holds: the user has
+> just pressed Import. Dismissed, it imports nothing, creates no collection, leaves the notices as they were and the picker on
+> "New collection…"; the earlier target is not brought back. Named, the name is adopted as the picker's entry
+> (`adoptNewCollection`) and the import runs into it. **Measured in Zotero 10.0.3** (`searchDialog-flow.spec.ts`, the item
+> 358(b) test): the prompt is a top-level window of its own, `chrome://global/content/commonDialog.xhtml`; it raises the
+> `common-dialog-loaded` notice with that window as the subject, and holds `commonDialog` (the dialog), `infoBody` (the
+> question, drawn with a box) and `loginTextbox`. The test answers it from that notice and cancels any prompt still open after
+> 10 s, so a changed prompt fails the test rather than hanging the suite.
 
 > **Measured and corrected 2026-11-06, Zotero 10.0.3: the completion toast was not on screen.** Every view model disposes a job
 > straight after `done()`, and `ZoteroProgressWindowSink.dispose` closed the popup, so a toast went down 3 ms after it was raised,

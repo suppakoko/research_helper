@@ -69,7 +69,8 @@ import { getIndexedPageCounts } from "./fulltext";
 import {
   AUTOMATIC_TAG_TYPE,
   RESEARCH_HELPER_TAG,
-  fromZoteroItem,
+  canonicalWorkFromSnapshot,
+  snapshotZoteroItem,
 } from "./itemMapper";
 import { readRetraction } from "./zoteroApi";
 
@@ -977,11 +978,29 @@ export interface SummaryRunItemSnapshot {
   readonly itemType: string;
   /** `docs/07` §6.6: `fromZoteroItem(item).workKey`. */
   readonly workKey: string;
+  /**
+   * `title` read base-mapped, as `snapshotZoteroItem` reads it, so a case's
+   * `caseName`, an email's `subject` and a statute's `nameOfAct` are found
+   * (`docs/07` §6.6's notes of 2026-11-05; `plan/00` §6 item 358(b), 2026-11-06).
+   */
   readonly title: string;
   /** `Last, First`, or the single-field name; in item order. */
   readonly creators: readonly string[];
   readonly firstAuthorFamily: string | undefined;
+  /**
+   * The date as `getField("date", false, true)` answers it: the text half of the
+   * snapshot's base-mapped multipart date, so a patent's `issueDate`, a case's
+   * `dateDecided` and a statute's `dateEnacted` give their year (`docs/07` §6.6;
+   * item 358(b), 2026-11-06). See {@link dateTextOf}.
+   */
   readonly date: string;
+  /**
+   * The venue: `publicationTitle` read base-mapped, as `snapshotZoteroItem`
+   * reads it, so a conference paper's `proceedingsTitle`, a book section's
+   * `bookTitle` and a webpage's `websiteTitle` are found (`docs/07` §6.6's
+   * notes of 2026-11-05; `plan/00` §6 items 345(d) and 358(b)). A preprint's
+   * `repository` is not read here, so a preprint still reads `""`.
+   */
   readonly publicationTitle: string;
   readonly doi: string;
   readonly extra: string;
@@ -1162,6 +1181,23 @@ export async function readItemsForSummary(
   return { name: "", editable: isLibraryEditable(libraryID), items };
 }
 
+/**
+ * The text half of Zotero's multipart date, `YYYY-MM-DD <as written>`: what
+ * `getField("date")` answers without its second argument. Written as Zotero
+ * 10.0.3's `Zotero.Date.multipartToStr` reads it (`xpcom/utilities/date.js`,
+ * read 2026-11-06): a value that is not multipart, or is a SQL date-time, is
+ * returned whole. Kept here so the summary's date comes from the one
+ * base-mapped read in `snapshotZoteroItem` (item 358(b)).
+ */
+export function dateTextOf(multipart: string): string {
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/.test(multipart)) {
+    return multipart;
+  }
+  return /^\d{4}-(0\d|1[0-2])-(0\d|[12]\d|3[01]) /.test(multipart)
+    ? multipart.slice(11)
+    : multipart;
+}
+
 /** One regular item as {@link SummaryRunItemSnapshot}'s plain values. */
 async function snapshotForSummary(
   item: Zotero.Item,
@@ -1180,18 +1216,22 @@ async function snapshotForSummary(
   const first = item.getCreatorsJSON()[0] as
     { lastName?: string; name?: string } | undefined;
   const retraction = await readRetraction(item);
+  // One read for the work key, the title, the date and the venue, so all four
+  // follow the base-field mapping `snapshotZoteroItem` owns rather than a second
+  // list of names here (items 345(d) and 358(b)).
+  const mapped = snapshotZoteroItem(item);
   return {
     item,
     itemID: item.id,
     key: item.key,
     libraryID: item.libraryID,
     itemType: item.itemType,
-    workKey: fromZoteroItem(item).workKey,
-    title: fieldOf(item, "title"),
+    workKey: canonicalWorkFromSnapshot(mapped).workKey,
+    title: mapped.fields.title ?? "",
     creators,
     firstAuthorFamily: first?.lastName ?? first?.name,
-    date: fieldOf(item, "date"),
-    publicationTitle: fieldOf(item, "publicationTitle"),
+    date: dateTextOf(mapped.dateMultipart),
+    publicationTitle: mapped.fields.publicationTitle ?? "",
     doi: fieldOf(item, "DOI"),
     extra: fieldOf(item, "extra"),
     abstractLength: fieldOf(item, "abstractNote").length,

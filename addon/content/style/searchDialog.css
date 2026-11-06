@@ -59,6 +59,22 @@
   display: none !important;
 }
 
+/*
+ * Korean breaks a line between words, not inside one. The platform's default
+ * breaks Korean between any two syllables, so a word was split over two lines
+ * (등장 / 하는, 설 / 정되어; measured 2026-11-06 in Zotero 10.0.3, plan/00 §6 item
+ * 359(c)). `:lang(ko)` matches because the window's root element carries
+ * `lang="ko-KR"` in a Korean window and `lang="en-US"` in an English one (read
+ * the same day), so an English window's boxes do not move. `overflow-wrap: anywhere` keeps a
+ * string with no break in it, a DOI or an address, wrapping inside its box
+ * rather than running out of it, and keeps a box as narrow as it could be
+ * before, so a word is split only when it cannot fit on a line of its own.
+ */
+#rh-search-dialog:lang(ko) {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
 /* ------------------------------------------------------------------ rows */
 
 #rh-search-dialog > hbox,
@@ -153,21 +169,52 @@
   min-height: 4em;
 }
 
-/* A table gets a floor of its own, and a tall header scrolls inside itself
-   rather than taking the table's room. Only while a table is showing: the profile
-   and its disclosure are what the window is for until then. DECIDED 2026-11-06
-   (docs/08 §5.4). */
-#rh-related-header:not([hidden])
-  ~ #rh-results-area:has(> #rh-results-container:not([hidden])),
-#rh-recommend-header:not([hidden])
-  ~ #rh-results-area:has(> #rh-results-container:not([hidden])) {
-  min-height: 45vh;
-}
-
 #rh-related-header,
 #rh-recommend-header {
   min-height: 4em;
   overflow-y: auto;
+}
+
+/*
+ * While a table shows, a mode's header is as tall as its controls, and what
+ * follows them takes no room and is read by scrolling the header: the related
+ * window's key notice and status rows, the recommend window's profile, notices
+ * and notes. Before a table shows they take their room, because the profile and
+ * its disclosure are what the window is for until then (docs/08 §5.4).
+ *
+ * Changed 2026-11-06 (docs/08 §5.4's note of that date; plan/00 §6 item 359(c)).
+ * Until then the table had a floor of 45vh and the header kept what the floor
+ * left, at least 4em. Measured in Zotero 10.0.3 at 1019 x 600 and 887 x 600, in
+ * both languages, that edge fell through a line: the related header showed the
+ * top two pixels of its four Include checkboxes, and the recommend header its
+ * chips cut in half. And the related window has two rows the recommend window
+ * has not (Years and the link box), so the floor, the 4em and the rows asked for
+ * more than the window holds, and the import note ran under OK and Cancel. A
+ * box held at no height keeps its content laid out and scrollable; the header
+ * does not shrink, so its controls are whole; the table takes what remains.
+ */
+#rh-search-dialog:has(
+    > #rh-results-area:not([hidden]) > #rh-results-container:not([hidden])
+  )
+  > #rh-related-header,
+#rh-search-dialog:has(
+    > #rh-results-area:not([hidden]) > #rh-results-container:not([hidden])
+  )
+  > #rh-recommend-header {
+  flex-shrink: 0;
+}
+
+#rh-search-dialog:has(
+    > #rh-results-area:not([hidden]) > #rh-results-container:not([hidden])
+  )
+  > #rh-related-header
+  > #rh-related-header-more,
+#rh-search-dialog:has(
+    > #rh-results-area:not([hidden]) > #rh-results-container:not([hidden])
+  )
+  > #rh-recommend-header
+  > #rh-recommend-header-more {
+  max-height: 0;
 }
 
 /* The rule above a row goes when the row does, which only the recommend mode's

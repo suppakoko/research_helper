@@ -27,7 +27,12 @@ import { COST_DIALOG_URL } from "../../../src/ui/dialogs/costConfirmDialog";
 import { createJobStore } from "../../../src/zotero/db";
 import { qualifiedPrefName } from "../../../src/zotero/prefStore";
 import { chatResponse, mockModel } from "../../helpers/mockLLM";
-import { drawnBox, hiddenButDrawn } from "../support/drawnGeometry";
+import {
+  cutAtEdge,
+  drawnBox,
+  drawnUnderButtons,
+  hiddenButDrawn,
+} from "../support/drawnGeometry";
 import {
   doubleTheTransport,
   pageTitle,
@@ -821,6 +826,18 @@ describe("P5-T26, P5-T27: a real recommend window's controls, layout and import"
         `${when}: the table scrolls in its box`,
       );
       assert.isAbove(seen.rowsSeen, 2, `${when}: more than two rows show`);
+      // plan/00 §6 item 359(c), 2026-11-06: the header ends under its controls, not
+      // through its chips, and no row of the window is drawn under the buttons.
+      assert.deepEqual(
+        cutAtEdge(control("rh-recommend-header")),
+        [],
+        `${when}: the header's edge cuts no line`,
+      );
+      assert.deepEqual(
+        drawnUnderButtons(control("rh-search-dialog")),
+        [],
+        `${when}: nothing is drawn under OK and Cancel`,
+      );
     };
     check("at its opening size");
     // The content's 1019 by 600: `resizeTo` sizes the window with its frame.
@@ -840,6 +857,11 @@ describe("P5-T26, P5-T27: a real recommend window's controls, layout and import"
       control("rh-recommend-find").getBoundingClientRect().bottom,
       header.getBoundingClientRect().bottom,
       "Find papers shows without scrolling the header",
+    );
+    assert.isAtMost(
+      control("rh-recommend-controls").getBoundingClientRect().bottom,
+      header.getBoundingClientRect().top + header.clientHeight + 0.5,
+      "the slider and its two boxes show without scrolling the header",
     );
   });
 

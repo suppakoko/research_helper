@@ -28,12 +28,14 @@ import { createScope } from "../../../src/bootstrap/container";
 import {
   createZoteroRecommendLibrary,
   createZoteroRelatedLibrary,
+  createZoteroSummarizeLibrary,
   libraryItemFieldsOf,
 } from "../../../src/bootstrap/registerPipelines";
 import { createCancellationTokenSource } from "../../../src/core/jobQueue/cancellation";
 import type { ExternalIds } from "../../../src/model/ids";
 import type { SourceRecord } from "../../../src/model/sourceRecord";
 import type { RelatedFailed } from "../../../src/pipeline/related/types";
+import { metadataVariables } from "../../../src/pipeline/summarize/summarizeItem";
 import {
   buildLibraryIndex,
   matchAgainstLibrary,
@@ -42,6 +44,7 @@ import {
   readLibraryWorks,
   relatedSeedOfItemID,
 } from "../../../src/zotero/itemMapper";
+import { readItemsForSummary } from "../../../src/zotero/notes";
 import { notifierRegistration } from "../../../src/zotero/registrations";
 
 interface MochaContext {
@@ -354,6 +357,141 @@ describe("related pipeline reads (P5-T14)", () => {
       case: { container: undefined, year: 2020 },
       statute: { container: undefined, year: 2020 },
       thesis: { container: undefined, year: 2020 },
+    });
+  });
+
+  it("gives the summarize library a type's own container as its venue (item 358(b))", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    // `plan/00` §6 items 345(d) and 358(b): the summarize port read
+    // `publicationTitle` by its own name, so these three had no venue. The venue
+    // reaches no window; what it changes is the `{{VENUE}}` line a summary
+    // request carries, so that line is what is asserted, on real items.
+    const fixtures = [
+      ["conferencePaper", { proceedingsTitle: "P5-T14 summary proceedings" }],
+      ["bookSection", { bookTitle: "P5-T14 summary book" }],
+      ["webpage", { websiteTitle: "P5-T14 summary site" }],
+      ["journalArticle", { publicationTitle: "P5-T14 summary journal" }],
+      ["preprint", { repository: "bioRxiv" }],
+      ["thesis", { university: "P5-T14 summary university" }],
+    ] as const;
+    const keys: string[] = [];
+    for (const [type, fields] of fixtures) {
+      const item = await saved(type, {
+        title: `P5-T14 summary venue ${type}`,
+        ...fields,
+      });
+      keys.push(item.key);
+    }
+    const loaded = await createZoteroSummarizeLibrary().loadItems(
+      Zotero.Libraries.userLibraryID,
+      keys,
+    );
+    const rows: Record<string, { venue: string; screened: string }> = {};
+    for (const item of loaded.items) {
+      rows[item.metadata.itemType ?? ""] = {
+        venue: metadataVariables(item.metadata, item.itemKey)["VENUE"] ?? "",
+        screened: item.screen.containerTitle ?? "",
+      };
+    }
+    logged(`summary venues: ${JSON.stringify(rows)}`);
+    assert.deepEqual(rows, {
+      conferencePaper: {
+        venue: "P5-T14 summary proceedings",
+        screened: "P5-T14 summary proceedings",
+      },
+      bookSection: {
+        venue: "P5-T14 summary book",
+        screened: "P5-T14 summary book",
+      },
+      webpage: {
+        venue: "P5-T14 summary site",
+        screened: "P5-T14 summary site",
+      },
+      journalArticle: {
+        venue: "P5-T14 summary journal",
+        screened: "P5-T14 summary journal",
+      },
+      // Unchanged: a preprint's `repository` is base-mapped onto `publisher`.
+      preprint: { venue: "unknown", screened: "" },
+      thesis: { venue: "unknown", screened: "" },
+    });
+  });
+
+  it("gives the summarize library a type's own title and date (item 358(b))", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    // `plan/00` §6 item 358(b), extended by the coordinator on 2026-11-06: the same
+    // reader read `title` and `date` by their own names, so a case, an email and a
+    // statute had no title, and a patent, a case and a statute no year (`docs/07`
+    // §6.6's measurement of 2026-11-05). Both now come from `snapshotZoteroItem`'s
+    // base-mapped read. What changes is the `{{TITLE}}` and `{{YEAR}}` a summary
+    // request carries and the title and year screening compares, so those are
+    // asserted, with the summary's date text against Zotero's own base-mapped read.
+    const fixtures = [
+      ["case", { dateDecided: "March 3, 2019" }],
+      ["email", { date: "2018" }],
+      ["statute", { dateEnacted: "2017" }],
+      ["patent", { issueDate: "2016-05-04" }],
+      ["journalArticle", { date: "Spring 2015" }],
+    ] as const;
+    const keys: string[] = [];
+    const zoteroReads: Record<string, { title: string; date: string }> = {};
+    for (const [type, fields] of fixtures) {
+      const item = await saved(type, {
+        title: `P5-T14 summary title ${type}`,
+        ...fields,
+      });
+      keys.push(item.key);
+      zoteroReads[type] = {
+        title: item.getField("title", false, true),
+        date: item.getField("date", false, true),
+      };
+    }
+    const library = Zotero.Libraries.userLibraryID;
+    const snapshots = await readItemsForSummary(library, keys);
+    const read: Record<string, { title: string; date: string }> = {};
+    for (const item of snapshots.items) {
+      read[item.itemType] = { title: item.title, date: item.date };
+    }
+    logged(
+      `summary titles and dates: ${JSON.stringify(read)}; Zotero's own: ${JSON.stringify(zoteroReads)}`,
+    );
+    assert.deepEqual(read, zoteroReads, "the text Zotero reads base-mapped");
+    const loaded = await createZoteroSummarizeLibrary().loadItems(
+      library,
+      keys,
+    );
+    const rows: Record<
+      string,
+      {
+        title: string;
+        year: string;
+        screenedTitle: string;
+        screenedYear: number | undefined;
+      }
+    > = {};
+    for (const item of loaded.items) {
+      const vars = metadataVariables(item.metadata, item.itemKey);
+      rows[item.metadata.itemType ?? ""] = {
+        title: vars["TITLE"] ?? "",
+        year: vars["YEAR"] ?? "",
+        screenedTitle: item.screen.title,
+        screenedYear: item.screen.year,
+      };
+    }
+    logged(`summary title and year variables: ${JSON.stringify(rows)}`);
+    const row = (type: string, year: number) => ({
+      title: `P5-T14 summary title ${type}`,
+      year: String(year),
+      screenedTitle: `P5-T14 summary title ${type}`,
+      screenedYear: year,
+    });
+    assert.deepEqual(rows, {
+      case: row("case", 2019),
+      email: row("email", 2018),
+      statute: row("statute", 2017),
+      patent: row("patent", 2016),
+      // Unchanged: a journal article's own fields were always read.
+      journalArticle: row("journalArticle", 2015),
     });
   });
 
