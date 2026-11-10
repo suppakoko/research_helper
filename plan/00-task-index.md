@@ -3174,6 +3174,11 @@ the caller of what the card builds; if it does not, the caller is added with a d
     - (c) Measured (`npm run dedup:report`, sample mode): precision 0.9565, 95 % Wilson interval [0.7901, 0.9923] over 23 merged pairs, undecided; recall 0.6667, [0.4961, 0.8025] over 33, **not met** against 0.90. One false merge: the arXiv record and the Semantic Scholar record of arXiv 2609.04658, which the owner labelled "linked version" twice. Eleven missed merges: nine are reviewer reports, recommendations or an author response about one paper, with different DOIs, which the owner labelled "same paper" and the engine links; two are F1000Research versions 1 and 2, likewise.
     - (d) **Phase 2 cannot close on these figures:** item 288(c) allows an undecided precision only with no false merge in the sample, and recall is below its target. Whether to change the engine, the labels or the finishing condition is the owner's call, asked the same day.
 
+362. **Owner decisions on item 361's measurement, 2026-11-10.**
+    **DECIDED 2026-11-10 by the owner:**
+    - (a) Pair 40 (the arXiv and Semantic Scholar records of arXiv 2609.04658) is relabelled "same paper"; the engine is unchanged there. Re-measured: precision 1.0000, [0.8569, 1.0000] over 23 merged pairs, undecided, **no false merge**; recall 0.6765, [0.5084, 0.8087] over 34, not met. Final labels: same paper 34, different 16, linked version 10.
+    - (b) The engine is changed so that the eleven missed merges merge: reviewer reports, recommendations and an author response about one paper (pairs 5, 8, 17, 24, 25, 28, 31, 37, 41) and F1000Research versions 1 and 2 of one article (pairs 10, 20). Zotero then receives one item where it received several. Taken over the two alternatives offered: relabelling them "linked version", or leaving the reviewer documents out of the measurement. This is card `P2-T38` under rule 9 (it blocks Phase 2's recall condition); design first, then code, then the report re-run and every engine outcome that moves across all 534 pairs listed, so that a new false merge outside the sample can be seen.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4

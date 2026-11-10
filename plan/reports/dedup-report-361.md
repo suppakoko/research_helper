@@ -1,6 +1,6 @@
 # Dedup accuracy on the owner's 60-pair sample, 2026-11-10
 
-The owner labelled the 60 pairs of `test/fixtures/dedup/label-sample.json` in chat on 2026-11-09 and 2026-11-10 (plan/00 §6 item 361). Below is `npm run dedup:report` on the committed corpus, verbatim.
+The owner labelled the 60 pairs of `test/fixtures/dedup/label-sample.json` in chat on 2026-11-09 and 2026-11-10 (plan/00 §6 item 361), and relabelled pair 40 after the first measurement (item 362(a)). Below is `npm run dedup:report` on the committed corpus after that relabel, verbatim. The first measurement (one false merge, recall 0.6667) is in item 361(c).
 
 ```text
 Dedup accuracy on D:\KIST\projects\research_helper\test\fixtures\dedup\pairs.jsonl
@@ -16,22 +16,17 @@ Labelled pairs measured: 60
 
 Confusion matrix (rows: human label; columns: engine outcome)
                       merged    linked   flagged  distinct     total
-  duplicate               22        10         1         0        33
+  duplicate               23        10         1         0        34
   not-duplicate            0         0         2        14        16
-  linked-version           1         5         2         3        11
+  linked-version           0         5         2         3        10
 
-True positives 22, false positives 1, false negatives 11
-Precision 0.9565   95 % Wilson interval [0.7901, 0.9923] over 23 merged pairs   target ≥ 0.99   UNDECIDED: the interval is too wide to decide the target — even with no error the low end reaches 0.99 only from 381 merged pairs
-Recall    0.6667   95 % Wilson interval [0.4961, 0.8025] over 33 true duplicates   target ≥ 0.9   NOT met (the whole interval is below the target)
-F1        0.7857
-Linked versions recognised as links: 5 of 11 (not counted in precision; docs/02 §11.4)
+True positives 23, false positives 0, false negatives 11
+Precision 1.0000   95 % Wilson interval [0.8569, 1.0000] over 23 merged pairs   target ≥ 0.99   UNDECIDED: the interval is too wide to decide the target — even with no error the low end reaches 0.99 only from 381 merged pairs
+Recall    0.6765   95 % Wilson interval [0.5084, 0.8087] over 34 true duplicates   target ≥ 0.9   NOT met (the whole interval is below the target)
+F1        0.8070
+Linked versions recognised as links: 5 of 10 (not counted in precision; docs/02 §11.4)
 
-False positives (1):
-  p-1acc5e9fcbcc  labelled linked-version, engine merged
-    direct decision: match, tier arxiv, score 0.990
-    A arxiv:2609.04658v1: VizIt: A multi-view framework for exploring single-cell, spatial, and genetic data online
-    B semanticscholar:bbb932b6b54a773300fc4333d0bd61581a97c35e: VizIt: A multi-view framework for exploring single-cell, spatial, and genetic data online
-    reason given: owner, chat 2026-11-10
+False positives (0):
 
 False negatives (11):
   p-136a40c667ec  labelled duplicate, engine linked
