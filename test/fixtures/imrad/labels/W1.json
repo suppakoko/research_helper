@@ -1,0 +1,48 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "W1",
+  "textFile": "text/W1.txt",
+  "textSha256": "e2f7abcad60a7961043f5a981b7ab881054832b091eb3365e2b13cb5126fa2a7",
+  "textChars": 30247,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 1600,
+      "heading": "Introduction",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 9964,
+      "heading": "Results and Discussion",
+      "labels": [
+        "results",
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 25224,
+      "heading": "Conclusions",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 26206,
+      "heading": "Experimental Section",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

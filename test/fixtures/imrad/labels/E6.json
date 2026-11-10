@@ -1,0 +1,48 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "E6",
+  "textFile": "text/E6.txt",
+  "textSha256": "140e60b2c78087d19f2fb71b61b92bbdb0505996d356b2c5513844747b1dbc6c",
+  "textChars": 43516,
+  "hasImradStructure": false,
+  "sections": [
+    {
+      "start": 7910,
+      "heading": "Results and discussion",
+      "labels": [
+        "results",
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 32554,
+      "heading": "Conclusion",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 35353,
+      "heading": "Experimental procedures",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 42266,
+      "heading": "Data availability",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

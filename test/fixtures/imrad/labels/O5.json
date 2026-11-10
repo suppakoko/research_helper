@@ -1,0 +1,63 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "O5",
+  "textFile": "text/O5.txt",
+  "textSha256": "4882702b005349a16a915b8dcd1de57148028b25d9a3b702b83fc4c8c5b49a36",
+  "textChars": 58013,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 2703,
+      "heading": "Significance Statement",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 4140,
+      "heading": "Background",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 8028,
+      "heading": "Results",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 28452,
+      "heading": "Discussion",
+      "labels": [
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 35847,
+      "heading": "Methods",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 57552,
+      "heading": "Acknowledgments",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

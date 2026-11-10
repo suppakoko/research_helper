@@ -1,0 +1,71 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "O3",
+  "textFile": "text/O3.txt",
+  "textSha256": "57a52687c1c3b5705cbd5a400f7a9209ee8c9ac094c531c2a685afb40dd76bb0",
+  "textChars": 95388,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 3789,
+      "heading": "Introduction",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 9786,
+      "heading": "Material and Methods",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 40556,
+      "heading": "Results",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 74312,
+      "heading": "Discussion",
+      "labels": [
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 94637,
+      "heading": "Funding",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 94914,
+      "heading": "Data Availability",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 95310,
+      "heading": "Competing Interests",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

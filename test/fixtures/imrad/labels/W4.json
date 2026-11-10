@@ -1,0 +1,95 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "W4",
+  "textFile": "text/W4.txt",
+  "textSha256": "60547cb3259b81fc92ac3543222fa31a17c0ebbca7e31b9127e7b7507d061a86",
+  "textChars": 31938,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 2295,
+      "heading": "1 INTRODUCTION",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 7744,
+      "heading": "2 MATERIALS AND METHODS",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 16487,
+      "heading": "3 RESULTS",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 19171,
+      "heading": "4 DISCUSSION",
+      "labels": [
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 30026,
+      "heading": "5 CONCLUSIONS",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 30419,
+      "heading": "AUTHOR CONTRIBUTIONS",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 31124,
+      "heading": "ACKNOWLEDGMENTS",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 31351,
+      "heading": "CONFLICT OF INTEREST STATEMENT",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 31428,
+      "heading": "FUNDING INFORMATION",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 31572,
+      "heading": "DATA AVAILABILITY STATEMENT",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

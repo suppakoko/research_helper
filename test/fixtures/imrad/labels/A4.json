@@ -1,0 +1,71 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "A4",
+  "textFile": "text/A4.txt",
+  "textSha256": "0c191929713498ff4903f4516a9b742e6915f1b546d454d3016861cb00223b29",
+  "textChars": 41423,
+  "hasImradStructure": false,
+  "sections": [
+    {
+      "start": 1576,
+      "heading": "I. INTRODUCTION",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 8879,
+      "heading": "II. THEORY",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 19930,
+      "heading": "III. NUMERICAL SIMULATIONS",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 34048,
+      "heading": "IV. CONCLUSIONS",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 35949,
+      "heading": "Appendix A: The Dirac–Frenkel variational principle",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 37158,
+      "heading": "Appendix B: Moments of the nuclear density",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 38990,
+      "heading": "Appendix C: Computing",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

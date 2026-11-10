@@ -1,0 +1,80 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "XR2",
+  "textFile": "text/XR2.txt",
+  "textSha256": "67c495dd09121e43e5576c7f832986b33f7270eb2444580dfcc34ab5db3b4d3a",
+  "textChars": 18765,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 4250,
+      "heading": "INTRODUCTION",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 6848,
+      "heading": "SYMBOLS",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 7494,
+      "heading": "TEST FACILITY",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 8088,
+      "heading": "MODELS AND TEST PROCEDURE",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 10491,
+      "heading": "INSTRUMENTATION AND ACCURACY",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 12307,
+      "heading": "DATA REDUCTION",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 12850,
+      "heading": "RESULTS AND DISCUSSION",
+      "labels": [
+        "results",
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 16966,
+      "heading": "CONCLUDING REMARKS",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

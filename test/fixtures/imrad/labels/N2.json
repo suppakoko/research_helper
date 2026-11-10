@@ -1,0 +1,55 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "N2",
+  "textFile": "text/N2.txt",
+  "textSha256": "d79009b8b865c5fb5df521d1d9e88084bfa2fa9fceaa28f2e3671ba39534bd45",
+  "textChars": 24251,
+  "hasImradStructure": false,
+  "sections": [
+    {
+      "start": 1070,
+      "heading": "Quantum computing has taken great strides in the past decades with multiple platforms demonstrating control over tens of qubits1–4. However, scaling these systems to a regime beyond the capabilities of classical computers remains very challenging, both in terms of increasing the size of the quantum computational Hilbert space, and in terms of increasing the depth of the computational circuits. A significant potential for tempering these daunting scaling demands, however, lies in plain sight when appreciating that the quantum systems we use are multi-level, not two-level systems. A natural way to extend the computational Hilbert space and reduce circuit complexity, without increasing the complexity of quantum devices is thus to use the full multi-level or qudit structure of existing quantum information carriers such as trapped ions, see Fig. 1. Qudit control has already been demonstrated in a number of architectures5–16, including trapped ions17–20. Qudit approaches not only enable reduced circuit complexity21 and simplifications of virtually any quantum circuit22, but also benefit from more powerful quantum error correction23–26, and enable the implementation of optimal quantum measurements27 as well as native quantum simulation of a range of physical systems such as lattice gauge models28,29,",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "owner-added"
+    },
+    {
+      "start": 5023,
+      "heading": "Results",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 20072,
+      "heading": "Discussion",
+      "labels": [
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 24040,
+      "heading": "Data availability",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 24158,
+      "heading": "Code availability",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

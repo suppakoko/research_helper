@@ -1,0 +1,71 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "A6",
+  "textFile": "text/A6.txt",
+  "textSha256": "f334aa894ed427ecae17498572dfaebbf53ada0b96bdb6f0365bc4566b4488a4",
+  "textChars": 29427,
+  "hasImradStructure": false,
+  "sections": [
+    {
+      "start": 973,
+      "heading": "1 Introduction",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 8147,
+      "heading": "2 Related works",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 10067,
+      "heading": "Problem Definition",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 11120,
+      "heading": "GAIT",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 18476,
+      "heading": "5.1 Evaluation Method",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 23333,
+      "heading": "5.2 Results",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 27553,
+      "heading": "Conclusion",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

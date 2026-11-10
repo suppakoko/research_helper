@@ -31,7 +31,7 @@
       "columnCountBasis": "observed in the structured document text: 14 of 15 pages with body text are two-column",
       "textFile": "text/S1.txt",
       "labelsFile": "labels/S1.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "S2",
@@ -59,7 +59,7 @@
       "columnCountBasis": "observed in the structured document text: 12 of 13 pages with body text are two-column",
       "textFile": "text/S2.txt",
       "labelsFile": "labels/S2.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "S4",
@@ -88,7 +88,7 @@
       "columnCountBasis": "observed in the structured document text: 0 of 15 pages with body text are two-column",
       "textFile": "text/S4.txt",
       "labelsFile": "labels/S4.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "S5",
@@ -118,7 +118,7 @@
       "columnCountBasis": "observed in the structured document text: 8 of 9 pages with body text are two-column",
       "textFile": "text/S5.txt",
       "labelsFile": "labels/S5.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "N1",
@@ -147,7 +147,7 @@
       "columnCountBasis": "observed in the structured document text: 13 of 14 pages with body text are two-column",
       "textFile": "text/N1.txt",
       "labelsFile": "labels/N1.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "N2",
@@ -175,7 +175,7 @@
       "columnCountBasis": "observed in the structured document text: 6 of 6 pages with body text are two-column",
       "textFile": "text/N2.txt",
       "labelsFile": "labels/N2.json",
-      "hasImradStructure": null
+      "hasImradStructure": false
     },
     {
       "id": "N3",
@@ -204,7 +204,7 @@
       "columnCountBasis": "observed in the structured document text: 10 of 11 pages with body text are two-column",
       "textFile": "text/N3.txt",
       "labelsFile": "labels/N3.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "N6",
@@ -232,7 +232,7 @@
       "columnCountBasis": "observed in the structured document text: 0 of 12 pages with body text are two-column",
       "textFile": "text/N6.txt",
       "labelsFile": "labels/N6.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "E1",
@@ -262,7 +262,7 @@
       "columnCountBasis": "observed in the structured document text: 0 of 14 pages with body text are two-column",
       "textFile": "text/E1.txt",
       "labelsFile": "labels/E1.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "E2",
@@ -291,7 +291,7 @@
       "columnCountBasis": "observed in the structured document text: 3 of 16 pages with body text are two-column",
       "textFile": "text/E2.txt",
       "labelsFile": "labels/E2.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "E4",
@@ -320,7 +320,7 @@
       "columnCountBasis": "observed in the structured document text: 8 of 8 pages with body text are two-column",
       "textFile": "text/E4.txt",
       "labelsFile": "labels/E4.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "E5",
@@ -349,7 +349,7 @@
       "columnCountBasis": "observed in the structured document text: 10 of 11 pages with body text are two-column",
       "textFile": "text/E5.txt",
       "labelsFile": "labels/E5.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "E6",
@@ -380,7 +380,7 @@
       "columnCountBasis": "observed in the structured document text: 10 of 10 pages with body text are two-column",
       "textFile": "text/E6.txt",
       "labelsFile": "labels/E6.json",
-      "hasImradStructure": null
+      "hasImradStructure": false
     },
     {
       "id": "W1",
@@ -409,7 +409,7 @@
       "columnCountBasis": "observed in the structured document text: 9 of 9 pages with body text are two-column",
       "textFile": "text/W1.txt",
       "labelsFile": "labels/W1.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "W2",
@@ -439,7 +439,7 @@
       "columnCountBasis": "observed in the structured document text: 6 of 6 pages with body text are two-column",
       "textFile": "text/W2.txt",
       "labelsFile": "labels/W2.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "W3",
@@ -467,7 +467,7 @@
       "columnCountBasis": "observed in the structured document text: 11 of 11 pages with body text are two-column",
       "textFile": "text/W3.txt",
       "labelsFile": "labels/W3.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "W4",
@@ -495,7 +495,7 @@
       "columnCountBasis": "observed in the structured document text: 8 of 9 pages with body text are two-column",
       "textFile": "text/W4.txt",
       "labelsFile": "labels/W4.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "W5",
@@ -524,7 +524,7 @@
       "columnCountBasis": "observed in the structured document text: 12 of 14 pages with body text are two-column",
       "textFile": "text/W5.txt",
       "labelsFile": "labels/W5.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "P1",
@@ -553,7 +553,7 @@
       "columnCountBasis": "observed in the structured document text: 0 of 22 pages with body text are two-column",
       "textFile": "text/P1.txt",
       "labelsFile": "labels/P1.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "P3",
@@ -582,7 +582,7 @@
       "columnCountBasis": "observed in the structured document text: 0 of 19 pages with body text are two-column",
       "textFile": "text/P3.txt",
       "labelsFile": "labels/P3.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "P5",
@@ -611,7 +611,7 @@
       "columnCountBasis": "observed in the structured document text: 1 of 10 pages with body text are two-column",
       "textFile": "text/P5.txt",
       "labelsFile": "labels/P5.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "P6",
@@ -640,7 +640,7 @@
       "columnCountBasis": "observed in the structured document text: 1 of 16 pages with body text are two-column",
       "textFile": "text/P6.txt",
       "labelsFile": "labels/P6.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "O2",
@@ -669,7 +669,7 @@
       "columnCountBasis": "observed in the structured document text: 11 of 12 pages with body text are two-column",
       "textFile": "text/O2.txt",
       "labelsFile": "labels/O2.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "O3",
@@ -697,7 +697,7 @@
       "columnCountBasis": "observed in the structured document text: 17 of 18 pages with body text are two-column",
       "textFile": "text/O3.txt",
       "labelsFile": "labels/O3.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "O4",
@@ -726,7 +726,7 @@
       "columnCountBasis": "observed in the structured document text: 10 of 10 pages with body text are two-column",
       "textFile": "text/O4.txt",
       "labelsFile": "labels/O4.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "O5",
@@ -756,7 +756,7 @@
       "columnCountBasis": "observed in the structured document text: 10 of 11 pages with body text are two-column",
       "textFile": "text/O5.txt",
       "labelsFile": "labels/O5.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "I1",
@@ -785,7 +785,7 @@
       "columnCountBasis": "observed in the structured document text: 6 of 7 pages with body text are two-column",
       "textFile": "text/I1.txt",
       "labelsFile": "labels/I1.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "I3",
@@ -813,7 +813,7 @@
       "columnCountBasis": "observed in the structured document text: 10 of 11 pages with body text are two-column",
       "textFile": "text/I3.txt",
       "labelsFile": "labels/I3.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "I4",
@@ -841,7 +841,7 @@
       "columnCountBasis": "observed in the structured document text: 8 of 9 pages with body text are two-column",
       "textFile": "text/I4.txt",
       "labelsFile": "labels/I4.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "I5",
@@ -870,7 +870,7 @@
       "columnCountBasis": "observed in the structured document text: 7 of 7 pages with body text are two-column",
       "textFile": "text/I5.txt",
       "labelsFile": "labels/I5.json",
-      "hasImradStructure": null
+      "hasImradStructure": false
     },
     {
       "id": "A1",
@@ -899,7 +899,7 @@
       "columnCountBasis": "observed in the structured document text: 5 of 5 pages with body text are two-column",
       "textFile": "text/A1.txt",
       "labelsFile": "labels/A1.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "A4",
@@ -928,7 +928,7 @@
       "columnCountBasis": "observed in the structured document text: 11 of 11 pages with body text are two-column",
       "textFile": "text/A4.txt",
       "labelsFile": "labels/A4.json",
-      "hasImradStructure": null
+      "hasImradStructure": false
     },
     {
       "id": "A5",
@@ -958,7 +958,7 @@
       "columnCountBasis": "observed in the structured document text: 12 of 12 pages with body text are two-column",
       "textFile": "text/A5.txt",
       "labelsFile": "labels/A5.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "A6",
@@ -987,7 +987,7 @@
       "columnCountBasis": "observed in the structured document text: 0 of 11 pages with body text are two-column",
       "textFile": "text/A6.txt",
       "labelsFile": "labels/A6.json",
-      "hasImradStructure": null
+      "hasImradStructure": false
     },
     {
       "id": "B1",
@@ -1016,7 +1016,7 @@
       "columnCountBasis": "observed in the structured document text: 0 of 24 pages with body text are two-column",
       "textFile": "text/B1.txt",
       "labelsFile": "labels/B1.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "B2",
@@ -1045,7 +1045,7 @@
       "columnCountBasis": "observed in the structured document text: 2 of 13 pages with body text are two-column",
       "textFile": "text/B2.txt",
       "labelsFile": "labels/B2.json",
-      "hasImradStructure": null
+      "hasImradStructure": false
     },
     {
       "id": "B4",
@@ -1073,7 +1073,7 @@
       "columnCountBasis": "observed in the structured document text: 0 of 21 pages with body text are two-column",
       "textFile": "text/B4.txt",
       "labelsFile": "labels/B4.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "X1",
@@ -1103,7 +1103,7 @@
       "columnCountBasis": "observed in the structured document text: 11 of 11 pages with body text are two-column",
       "textFile": "text/X1.txt",
       "labelsFile": "labels/X1.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "X2",
@@ -1133,7 +1133,7 @@
       "columnCountBasis": "observed in the structured document text: 12 of 15 pages with body text are two-column",
       "textFile": "text/X2.txt",
       "labelsFile": "labels/X2.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     },
     {
       "id": "XR2",
@@ -1161,7 +1161,7 @@
       "columnCountBasis": "observed in the structured document text: 3 of 17 pages with body text are two-column",
       "textFile": "text/XR2.txt",
       "labelsFile": "labels/XR2.json",
-      "hasImradStructure": null
+      "hasImradStructure": true
     }
   ]
 }

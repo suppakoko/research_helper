@@ -1,0 +1,48 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "O4",
+  "textFile": "text/O4.txt",
+  "textSha256": "b3e88fa505b5a048e5120e376807c947c725df113bc47d7f09dcf91bae2817c2",
+  "textChars": 37226,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 2319,
+      "heading": "1 Introduction",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 8107,
+      "heading": "2 Materials and methods 2.1 The SCARAP pan module",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 20137,
+      "heading": "3 Results and discussion",
+      "labels": [
+        "results",
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 36662,
+      "heading": "4 Conclusions",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

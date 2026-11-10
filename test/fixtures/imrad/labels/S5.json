@@ -1,0 +1,48 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "S5",
+  "textFile": "text/S5.txt",
+  "textSha256": "7d69a63a66b3dc4d403d422e72a898f49cce6a59d22c2a4a2d0f54b73d2d0966",
+  "textChars": 27130,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 3675,
+      "heading": "1 Introduction",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 9633,
+      "heading": "2 Experimental method 2.1 Materials",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 12881,
+      "heading": "3 Results and discussion",
+      "labels": [
+        "results",
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 25847,
+      "heading": "4 Conclusion",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

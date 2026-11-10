@@ -1,0 +1,71 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "B2",
+  "textFile": "text/B2.txt",
+  "textSha256": "182526594d59667ff95bc9a0a317fe8d5722fd04036d52e68e0928e019b8f1e2",
+  "textChars": 38855,
+  "hasImradStructure": false,
+  "sections": [
+    {
+      "start": 2372,
+      "heading": "Introduction",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 6903,
+      "heading": "Results",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 32600,
+      "heading": "Discussion",
+      "labels": [
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 37455,
+      "heading": "Acknowledgments",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 38097,
+      "heading": "Competing Interests:",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 38286,
+      "heading": "Author Contributions",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 38658,
+      "heading": "Data availability and materials",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

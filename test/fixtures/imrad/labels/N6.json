@@ -1,0 +1,63 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "N6",
+  "textFile": "text/N6.txt",
+  "textSha256": "b18ddc748543e2d78a8854a64e8c269e16282b4606b67f5445324f14b72afbcd",
+  "textChars": 46015,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 2182,
+      "heading": "Soybean (Glycine max L.) is an important oil crop in China, providing abundant lipid and protein resources for",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 6355,
+      "heading": "Materials and methods",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 16132,
+      "heading": "Results Effects of R. intraradices and soybean continuous cropping on soybean growth/yield. The 100-seed weight, seed-yield per plant, yield per 0.04 hectare, pods per plant, seed number per plant, seed number per pod, node number, branch number, plant height, and fresh weight of root and shoot were decreased by soybean continuous cropping (Table 2). In addition, the 100-seed weight, seed-yield per plant, yield per 0.04",
+      "labels": [
+        "results"
+      ],
+      "origin": "owner-added"
+    },
+    {
+      "start": 36836,
+      "heading": "Discussion",
+      "labels": [
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 43780,
+      "heading": "Conclusions",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 45413,
+      "heading": "Data availability",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

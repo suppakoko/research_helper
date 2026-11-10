@@ -1,0 +1,79 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "P1",
+  "textFile": "text/P1.txt",
+  "textSha256": "2ecb5d4c534a96a88e86cd4acaa583e57a972d9475204b5593079307b69897b2",
+  "textChars": 56129,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 2678,
+      "heading": "Introduction",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 4771,
+      "heading": "Literature review",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 12096,
+      "heading": "Materials & methods",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 27456,
+      "heading": "Results",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 49820,
+      "heading": "Discussion",
+      "labels": [
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 52927,
+      "heading": "Conclusions",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 55504,
+      "heading": "Acknowledgments",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 55813,
+      "heading": "Author contributions",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

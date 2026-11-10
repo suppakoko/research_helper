@@ -1,0 +1,71 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "I4",
+  "textFile": "text/I4.txt",
+  "textSha256": "1cf8bcd7e45f9f1beea250d32129abab3e3d6acad7923396e72a738419ef7286",
+  "textChars": 37434,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 3029,
+      "heading": "NOMENCLATURE",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 3497,
+      "heading": "I. INTRODUCTION",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 9718,
+      "heading": "II. MATERIALS AND METHODS A. GRASPER DESIGN",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 22151,
+      "heading": "III. RESULTS",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 28798,
+      "heading": "IV. DISCUSSION",
+      "labels": [
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 36780,
+      "heading": "V. CONCLUSION",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 37337,
+      "heading": "ACKNOWLEDGMENT",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

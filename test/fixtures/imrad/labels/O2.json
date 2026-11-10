@@ -1,0 +1,55 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "O2",
+  "textFile": "text/O2.txt",
+  "textSha256": "6d9e99335bd775dc6ebcd2ee8972f65ace89dec78cf5c68a88e8d317941b8470",
+  "textChars": 55514,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 2472,
+      "heading": "Introduction",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 9109,
+      "heading": "Materials and methods",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 22042,
+      "heading": "Results",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 50085,
+      "heading": "Discussion",
+      "labels": [
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 55296,
+      "heading": "Data availability",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

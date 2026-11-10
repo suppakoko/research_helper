@@ -1,0 +1,63 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "A1",
+  "textFile": "text/A1.txt",
+  "textSha256": "55c0e6e2b6361dc08fbd2139c262c966fa438c8a321268cfe764c24ed021282d",
+  "textChars": 24751,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 1504,
+      "heading": "I. INTRODUCTION",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 5866,
+      "heading": "II. RELATED WORK ON UGV MOTION DISTORTION FEATURES",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 16061,
+      "heading": "III. MOTION DISTORTION METRIC",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 18895,
+      "heading": "IV. CASE STUDY",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 21322,
+      "heading": "V. LESSONS LEARNED",
+      "labels": [
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 23958,
+      "heading": "VI. CONCLUSION",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

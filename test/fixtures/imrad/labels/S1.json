@@ -1,0 +1,72 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "S1",
+  "textFile": "text/S1.txt",
+  "textSha256": "5090cd2a74dcde5d2653025db645894a9d82079a8474f63f17ece00a9ff8d238",
+  "textChars": 62510,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 2226,
+      "heading": "Background",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 7722,
+      "heading": "Implementation",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 19205,
+      "heading": "Results and Discussion Comparison to related tools",
+      "labels": [
+        "results",
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 45163,
+      "heading": "Conclusions",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 46706,
+      "heading": "Availability and requirements • Project name: RSEM",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 47082,
+      "heading": "Methods",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 61430,
+      "heading": "Acknowledgements and Funding",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

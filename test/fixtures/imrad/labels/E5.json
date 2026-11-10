@@ -1,0 +1,79 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "E5",
+  "textFile": "text/E5.txt",
+  "textSha256": "cca5395c891abc9d1eb80fb95dcce2432d804de21aae57dd5475ae96eb2663a2",
+  "textChars": 48061,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 4776,
+      "heading": "Introduction",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 7716,
+      "heading": "Methods Study population",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 7845,
+      "heading": "Research in context",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 9329,
+      "heading": "undergoing immunological screening, as well as their siblings and parents, between 01-03-2016 and 01-01-2019 in our cross-sectional study. Family members were only included if they did not suffer from rRTIs, consented to collection of both serum and a nasopharyngeal (NP) swab and were sampled only during periods when they were not experiencing an acute RTI. rRTIs were defined according to the guideline of the Dutch Section of Pediatric Infectious Diseases & Immunology,24 based on definitions by Gruber et al.,25 as: ≥11 upper RTIs per year for children up to two years, ≥8 upper RTIs per year for children aged between two and five years, ≥6 upper RTIs per year for children aged between five and eight years, or ≥2 pneumonia episodes diagnosed in one year or ≥3 pneumonia episodes diagnosed during the lifetime of the child. The choice for immunological screening was based on the physician’s professional opinion after clinical consultation and physical examination. Furthermore, children with an already known IgA deficiency (<−2SD for age-appropriate reference values, see Supplementary Methods) diagnosed within the year before inclusion, were also included. Exclusion criteria for the study were: known primary immunodeficiencies requiring immunoglobulin substitution, secondary immunodeficiencies, major congenital anomalies, antibiotic use four weeks prior to inclusion and/or azithromycin prophylaxis three months prior to sampling, as this could influence M.pneumoniae carriage.",
+      "labels": [
+        "methods"
+      ],
+      "origin": "owner-added"
+    },
+    {
+      "start": 18744,
+      "heading": "Results",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 32273,
+      "heading": "Discussion",
+      "labels": [
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 46657,
+      "heading": "Data sharing statement",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 46994,
+      "heading": "Acknowledgements",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

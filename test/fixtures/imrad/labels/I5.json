@@ -1,0 +1,47 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "I5",
+  "textFile": "text/I5.txt",
+  "textSha256": "6332da308ddbc2ada663e5c56ae9c55c62e5bd0be5828dc2ea48b107f3dfc1dd",
+  "textChars": 25991,
+  "hasImradStructure": false,
+  "sections": [
+    {
+      "start": 2511,
+      "heading": "I. INTRODUCTION",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 9911,
+      "heading": "II. METHODOLOGY",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 20731,
+      "heading": "III. RESULTS",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 24762,
+      "heading": "IV. CONCLUSION",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

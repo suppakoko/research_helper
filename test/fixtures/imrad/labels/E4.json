@@ -1,0 +1,64 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "E4",
+  "textFile": "text/E4.txt",
+  "textSha256": "d79b12d6bc21ab1fa102a473ba1c29dd6e392352e7ed2c2ef791b1ea480a41e7",
+  "textChars": 34097,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 1705,
+      "heading": "1. Introduction",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 7448,
+      "heading": "2. Theoretical model",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 14471,
+      "heading": "3. Results and discussion",
+      "labels": [
+        "results",
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 31840,
+      "heading": "4. Conclusions",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 33766,
+      "heading": "Declaration of competing interest",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 33971,
+      "heading": "Acknowledgements",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

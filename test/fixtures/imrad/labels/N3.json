@@ -1,0 +1,48 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "N3",
+  "textFile": "text/N3.txt",
+  "textSha256": "84c297cf8ce20b97581451f27b2b45f2114f3a194bdb5a8a902b97df0491fa87",
+  "textChars": 49562,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 1690,
+      "heading": "The ever-growing energy demand and reliance on fossil fuels have resulted in a vicious cycle of increasing CO2 emissions, which poses a grave threat to the global environment and climate. To break this cycle and achieve a circular economy, electrochemical reduction of CO2 (CO2RR) offers a promising solution that can utilize renewable electricity to convert CO2 into valuable chemicals and fuels. Among the diversified products of CO2RR, carbon monoxide (CO) stands out as a particularly attractive product because it offers a very high economic return per mole of electrons consumed1 and can serve as a versatile building block for synthesizing various organic compounds and liquid",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "owner-added"
+    },
+    {
+      "start": 7020,
+      "heading": "Results and discussion",
+      "labels": [
+        "results",
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 35686,
+      "heading": "Methods Chemicals",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 49360,
+      "heading": "Data availability",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

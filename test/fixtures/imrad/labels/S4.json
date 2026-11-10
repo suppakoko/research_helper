@@ -1,0 +1,87 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "S4",
+  "textFile": "text/S4.txt",
+  "textSha256": "9744c7e495df034a5ca4baa2a5a3a937761f5f83ae4e125810bf6f904e019037",
+  "textChars": 43575,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 2230,
+      "heading": "1 Introduction",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 7687,
+      "heading": "2 Results",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 25515,
+      "heading": "3 Discussion",
+      "labels": [
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 32178,
+      "heading": "4 Methods",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 41572,
+      "heading": "Acknowledgements",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 42216,
+      "heading": "Author contributions",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 42577,
+      "heading": "Funding",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 42650,
+      "heading": "Data availability",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 42933,
+      "heading": "Competing interests",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

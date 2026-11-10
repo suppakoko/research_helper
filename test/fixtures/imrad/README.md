@@ -5,7 +5,7 @@ against which the section detector (`src/pipeline/summarize/imrad.ts`, `P3-T21`)
 `P3-T22` (risk `R-19b`, the ≥ 85 % bar). **What is committed is extracted text, never a PDF.** The
 ground-truth labels are the owner's, set on a private labelling page (`plan/00` §6 item 280(b));
 until the owner has labelled a paper it has no file under `labels/` and its `hasImradStructure` in
-`manifest.json` is `null`. **As of 2026-10-24 no paper is labelled.**
+`manifest.json` is `null`. **As of 2026-11-10 all 40 papers are labelled** (owner, in chat; `plan/00` §6 item 364, `plan/reports/imrad-labels-2026-11-10.md`): 34 have IMRaD structure and 6 do not.
 
 | File | What it is |
 |---|---|

@@ -1,0 +1,56 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "P3",
+  "textFile": "text/P3.txt",
+  "textSha256": "f225d46d39f8a3ef351bbcf657660857e2d94128c0b6737b59d6506d6b97f7c3",
+  "textChars": 52282,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 4799,
+      "heading": "Introduction",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 10583,
+      "heading": "Methodology",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 19361,
+      "heading": "Results and discussion",
+      "labels": [
+        "results",
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 48460,
+      "heading": "Conclusion",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 51150,
+      "heading": "Author contributions",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

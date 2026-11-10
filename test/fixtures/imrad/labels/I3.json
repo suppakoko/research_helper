@@ -1,0 +1,63 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "I3",
+  "textFile": "text/I3.txt",
+  "textSha256": "ee89a2b564bc07d1dbc6522c174136424974f9314dda7ca7660e7d3c2153bc46",
+  "textChars": 45783,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 4189,
+      "heading": "I. INTRODUCTION",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 8624,
+      "heading": "II. MATERIALS AND METHODS",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 26643,
+      "heading": "III. RESULTS",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 35478,
+      "heading": "IV. DISCUSSION",
+      "labels": [
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 42352,
+      "heading": "V. CONCLUSION",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 43062,
+      "heading": "APPENDIX",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "E1",
+  "textFile": "text/E1.txt",
+  "textSha256": "f2f8e2de94baa4547936e8dc864a4e883ad5aef3f5d08dfb24dfee820e59e918",
+  "textChars": 44132,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 2213,
+      "heading": "1. Introduction",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 11958,
+      "heading": "2. Materials and methods",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 18478,
+      "heading": "3. Results and discussion",
+      "labels": [
+        "results",
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 39754,
+      "heading": "4. Conclusions",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 42558,
+      "heading": "Data Availability statement",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 43252,
+      "heading": "Declaration of competing interest",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 43421,
+      "heading": "Acknowledgement",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

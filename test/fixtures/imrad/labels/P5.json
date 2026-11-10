@@ -1,0 +1,55 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "P5",
+  "textFile": "text/P5.txt",
+  "textSha256": "f59f6f8d02d5f03170f200405b7d2cc052d38236c65d7b64c88dc94d5ec03463",
+  "textChars": 35597,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 4029,
+      "heading": "Author summary",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 5034,
+      "heading": "1 Introduction",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 9561,
+      "heading": "2 Methods",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 19335,
+      "heading": "3 Results",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 26409,
+      "heading": "Discussion",
+      "labels": [
+        "discussion"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

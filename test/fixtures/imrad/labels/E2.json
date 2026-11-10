@@ -1,0 +1,55 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "E2",
+  "textFile": "text/E2.txt",
+  "textSha256": "cbd30171356b4ce301235ad35e660658f9ab1c1df1cf653acfd119887bf717fb",
+  "textChars": 50781,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 235,
+      "heading": "Highlights Nociceptive stimulation of DRG neurons with capsaicin induces oleic acid release",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 2207,
+      "heading": "INTRODUCTION",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 6950,
+      "heading": "RESULTS Oleic acid is released from sensory neurons upon nociceptive stimulation",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 16670,
+      "heading": "DISCUSSION",
+      "labels": [
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 28798,
+      "heading": "STAR+METHODS",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

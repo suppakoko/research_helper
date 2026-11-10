@@ -1,0 +1,63 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "P6",
+  "textFile": "text/P6.txt",
+  "textSha256": "c0bb3d18d8069f7c581071018022a1018b1b2f32c67189c55fbecd00d731996a",
+  "textChars": 53599,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 3948,
+      "heading": "Author summary",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 5289,
+      "heading": "Introduction",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 10135,
+      "heading": "Result",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 27980,
+      "heading": "Discussion",
+      "labels": [
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 41917,
+      "heading": "Conclusion",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 42386,
+      "heading": "Materials and methods",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

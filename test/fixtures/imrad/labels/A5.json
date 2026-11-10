@@ -1,0 +1,79 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "A5",
+  "textFile": "text/A5.txt",
+  "textSha256": "075cc87ad0862aa93e3a796d7a7af842c8119f8d6cee942c9fa811d2c94cc47d",
+  "textChars": 48069,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 2651,
+      "heading": "1 Introduction",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 8888,
+      "heading": "2 Related Works",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 14411,
+      "heading": "3 From Node Repulsion to Dimension Regularization",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 27350,
+      "heading": "4 Algorithm Augmentation to Replace SGNS",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 32025,
+      "heading": "5.1 Methodology",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 36211,
+      "heading": "5.2 Results",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 42687,
+      "heading": "6 Discussion",
+      "labels": [
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 46634,
+      "heading": "7 Conclusion",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "W5",
+  "textFile": "text/W5.txt",
+  "textSha256": "3ff7f2f1299972b501d4003ef4cde2f053fd9b6afc322505a0bd2cd1b91e1bab",
+  "textChars": 37398,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 3212,
+      "heading": "1 | INTRODUCTION",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 8293,
+      "heading": "2 | MATERIALS AND METHODS",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 12810,
+      "heading": "3 | RESULTS AND DISCUSSION",
+      "labels": [
+        "results",
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 33712,
+      "heading": "4 | CONCLUSION",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 36437,
+      "heading": "AUTHOR CONTRIBUTIONS",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 36893,
+      "heading": "ACKNOWLEDGMENTS",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 37203,
+      "heading": "CONFLICT OF INTEREST",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 37239,
+      "heading": "DATA AVAILABILITY STATEMENT",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 37312,
+      "heading": "ETHICS STATEMENT",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}

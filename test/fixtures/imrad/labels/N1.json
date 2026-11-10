@@ -1,0 +1,63 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "N1",
+  "textFile": "text/N1.txt",
+  "textSha256": "23f7cfe3082aac7521db23d0e610e0270db8c3a1fe390a194a400cf072fbf7b2",
+  "textChars": 79054,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 1539,
+      "heading": "Crop production systems and their interactions with the environment, known as agroecosystems, cover about one-third of the Earth’s land surface. As soil constitutes the largest single carbon reservoir on land, agroecosystems play a key role in the global terrestrial carbon cycle through crop interactions with soils and atmosphere1,2. Globally, agriculture is a significant source of greenhouse gasses (GHGs); yet, carbon",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "owner-added"
+    },
+    {
+      "start": 9843,
+      "heading": "Results",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 27390,
+      "heading": "Discussion",
+      "labels": [
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 43525,
+      "heading": "Methods",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 77469,
+      "heading": "Data availability",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 78644,
+      "heading": "Code availability",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-10"
+  }
+}
