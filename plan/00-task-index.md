@@ -3212,6 +3212,13 @@ the caller of what the card builds; if it does not, the caller is added with a d
     - (c) Checks passed; three integration runs 355 passed, 0 failed each. The coordinator re-ran typecheck and the measurement before the commit.
     - (d) **For the owner (`G-22`):** keep whole-document chunking without section labels (today's behaviour), or revert `summary.fullTextMode`'s default to abstracts; and whether a detector-improvement card is wanted, which would be measured against these labels and so needs a held-out set or the owner's acceptance of that.
 
+366. **Owner decisions on item 363(d), 2026-11-10.**
+    **DECIDED by the owner:**
+    - (a) **Recall:** ten more pairs are drawn at random from the unlabelled label-set pairs, by the same stratified method with a new recorded seed, and labelled by the owner in chat four at a time with no engine outcome shown. Taken over counting 34 duplicates with no error as a pass, which would change the finishing condition. The draw follows (b) so that pairs (b) adds can be drawn.
+    - (b) **A comparison pass by DOI family** is added, so that documents of one paper whose titles fall in different blocking groups are compared (`plan/reports/P2-T38.md` §9 item 1). It adds pairs to the corpus; every outcome it moves is listed and any pair needing a label is asked. Card `P2-T39` under rule 9 (it blocks the recall condition through (a)).
+    - (c) **When F1000Research versions merge, the newest version wins** the DOI and the date; the other versions' DOIs stay in `ids`. This replaces the coordinator's version-1 outcome recorded in `docs/07` §5.1 on item 363's day. Built in `P2-T39`.
+    - (d) **No further DOI forms for now** (Wiley decision letters and author responses, F1000 sibling journals, an F1000 report joined to its article): none is in the corpus, so none can be measured. Added when one is seen.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4
