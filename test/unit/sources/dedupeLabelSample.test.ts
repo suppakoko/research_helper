@@ -11,9 +11,10 @@
  * 2. **The interval maths** (`scripts/dedup-report.ts`): the Wilson score
  *    interval against published values, the met / not met / undecided rule,
  *    and the smallest error-free denominator that can confirm a target.
- * 3. **The report in sample mode**, on the committed corpus (refuses: it is
- *    unlabelled) and on a temporary copy carrying synthetic labels that exist
- *    only inside this test — no label is ever written to the repository.
+ * 3. **The report in sample mode**, on the committed corpus (it measures the
+ *    owner's 60 labels, given in chat on 2026-11-09 and 2026-11-10) and on a
+ *    temporary copy carrying synthetic labels that exist only inside this
+ *    test — no label is ever written to the repository by code.
  */
 
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -420,17 +421,18 @@ describe("judgeTarget and minCleanDenominator", () => {
 // ---------------------------------------------------------------------------
 
 describe("npm run dedup:report in sample mode (the default)", () => {
-  it("refuses the committed corpus, whose 60 sampled pairs carry no label", async () => {
-    const err = vi
-      .spyOn(process.stderr, "write")
+  it("measures the committed corpus, whose 60 sampled pairs carry the owner's labels (2026-11-10)", async () => {
+    const out = vi
+      .spyOn(process.stdout, "write")
       .mockImplementation(() => true);
     try {
-      expect(await reportMain([])).toBe(1);
-      expect(String(err.mock.calls[0]?.[0])).toMatch(
-        /is unlabelled on the owner's sample: 60 of 60 sampled pairs have no label/u,
-      );
+      expect(await reportMain([])).toBe(0);
+      const said = out.mock.calls.map((c) => String(c[0])).join("");
+      expect(said).toContain("Labelled pairs measured: 60");
+      expect(said).toMatch(/Precision \d/u);
+      expect(said).toMatch(/Recall {4}\d/u);
     } finally {
-      err.mockRestore();
+      out.mockRestore();
     }
   });
 

@@ -791,7 +791,7 @@ describe("the labelling sheet", () => {
 });
 
 describe("scripts/dedup-report.ts", () => {
-  it("refuses the committed unlabelled corpus and exits non-zero (--full; the sample mode is dedupeLabelSample.test.ts)", async () => {
+  it("refuses the committed corpus, labelled only on the owner's 60-pair sample, and exits non-zero (--full; the sample mode is dedupeLabelSample.test.ts)", async () => {
     const err = vi
       .spyOn(process.stderr, "write")
       .mockImplementation(() => true);
@@ -802,7 +802,9 @@ describe("scripts/dedup-report.ts", () => {
       ]);
       expect(code).toBe(1);
       const said = String(err.mock.calls[0]?.[0]);
-      expect(said).toMatch(/is unlabelled: 267 of 267 label-set pairs/u);
+      expect(said).toMatch(
+        /is not fully labelled: 207 of 267 label-set pairs have no label/u,
+      );
       expect(said).toContain(
         "Sampled out of the label set (owner, 2026-10-16): 267 of 534 pairs, " +
           "not measured (scotland-reports 211, short-title-crossref 56)",
