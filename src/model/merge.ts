@@ -52,6 +52,7 @@ import type {
 } from "./canonicalWork";
 import {
   buildWorkKey,
+  isReviewDocumentDoi,
   SOURCE_IDS,
   type ExternalIds,
   type SourceId,
@@ -251,14 +252,29 @@ export interface MergeResult {
 // ---------------------------------------------------------------------------
 
 /**
- * Sort records into the canonical merge order: {@link DEFAULT_PRECEDENCE} rank
- * first, then `SourceRecord.id`, so two records from one source (a source
- * that returned the same work twice) still land in a fixed order. This is
- * what makes every later "first defined value wins" deterministic, and it is
- * the order `provenance.recordIds` reports.
+ * Is this record a review document — a reviewer report, an assessment, an
+ * author response or a recommendation about a paper, by its DOI
+ * (`isReviewDocumentDoi`)? `docs/07` §5.1's merge note of 2026-11-10 (owner,
+ * `plan/00` §6 item 362(b)): inside one work such a record yields to the
+ * paper's own records.
+ */
+export function isReviewDocument(record: SourceRecord): boolean {
+  return isReviewDocumentDoi(record.work.ids.doi);
+}
+
+/**
+ * Sort records into the canonical merge order: the paper's own records before
+ * its review documents ({@link isReviewDocument}; a group without review
+ * documents is unaffected), then {@link DEFAULT_PRECEDENCE} rank, then
+ * `SourceRecord.id`, so two records from one source (a source that returned
+ * the same work twice) still land in a fixed order. This is what makes every
+ * later "first defined value wins" deterministic, and it is the order
+ * `provenance.recordIds` reports.
  */
 function canonicalOrder(records: readonly SourceRecord[]): SourceRecord[] {
   return [...records].sort((a, b) => {
+    const byRole = Number(isReviewDocument(a)) - Number(isReviewDocument(b));
+    if (byRole !== 0) return byRole;
     const byRank =
       precedenceRank(DEFAULT_PRECEDENCE, a.sourceId) -
       precedenceRank(DEFAULT_PRECEDENCE, b.sourceId);
@@ -579,6 +595,15 @@ function unionIds(ordered: readonly SourceRecord[]): {
  * a whole, `subjects`) have no single winner and are not listed; each kept
  * identifier is, under `ids.<key>`.
  *
+ * **A review document yields to its paper** (`docs/07` §5.1's note of
+ * 2026-11-10, owner, `plan/00` §6 item 362(b)). When the group holds a paper's
+ * records and review documents ({@link isReviewDocument}) together, every
+ * field except `ids` and `relatedVersionIds` is combined from the paper's
+ * records only, and the review documents sort last, so `ids` keeps the
+ * paper's DOI and lists each review's as an {@link IdConflict}.
+ * `provenance.recordIds` and `seenIn` still name every record. A group of
+ * review documents only, or with none, is combined over all its records.
+ *
  * @param records - one dedup group, in any order; at least one
  * @param normalizedAtEpochMs - the caller's clock reading for the rebuild
  * @returns the merged work and every identifier conflict found on the way
@@ -597,7 +622,11 @@ export function merge(
       throw new TypeError("merge: every element must be a SourceRecord");
     }
   }
-  const ordered = canonicalOrder(records);
+  const all = canonicalOrder(records);
+  // `docs/07` §5.1, 2026-11-10: a group holding the paper and its review
+  // documents takes every field but the two unions from the paper's records.
+  const papers = all.filter((record) => !isReviewDocument(record));
+  const ordered = papers.length > 0 ? papers : all;
   const fieldOrigin: Record<string, SourceId> = {};
   /** Record a winner when the field was contested (two or more suppliers). */
   const won = (
@@ -611,7 +640,7 @@ export function merge(
   const count = <T>(read: (w: SourceRecord["work"]) => T | undefined): number =>
     suppliers(ordered, read).length;
 
-  const { ids, conflicts, origin, supplierCount } = unionIds(ordered);
+  const { ids, conflicts, origin, supplierCount } = unionIds(all);
   for (const key of ID_KEYS) {
     const from = origin.get(key);
     if (from !== undefined && (supplierCount.get(key) ?? 0) >= 2) {
@@ -662,7 +691,7 @@ export function merge(
   );
   const openAccess = pickOpenAccess(ordered);
   const url = pickFirst(ordered, DEFAULT_PRECEDENCE, (w) => nonEmpty(w.url));
-  const relatedVersionIds = unionRelatedVersionIds(ordered, ids);
+  const relatedVersionIds = unionRelatedVersionIds(all, ids);
 
   won("type", type, count(classifiedType));
   won(
@@ -770,9 +799,9 @@ export function merge(
   const titleValue = title?.value ?? "";
   const authorsValue = authors?.value ?? [];
   const provenance: WorkProvenance = {
-    recordIds: ordered.map((r) => r.id),
+    recordIds: all.map((r) => r.id),
     fieldOrigin,
-    seenIn: distinct(ordered.map((r) => r.sourceId)),
+    seenIn: distinct(all.map((r) => r.sourceId)),
   };
 
   // Keys in one fixed order, optional members present only when defined

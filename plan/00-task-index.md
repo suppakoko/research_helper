@@ -3,7 +3,7 @@
 > **Generated from the task cards in `01`–`04`, `07` and `08`** (Phase 4's file, read since 2026-10-26, and
 > Phase 5's, read since 2026-11-01). If a row here disagrees with a card, the card wins — then regenerate
 > this file.
-> **Last updated:** 2026-11-06 · **214 tasks: 112 `DONE`, 102 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 37**, Phase 3 **0 of 39**, Phase 4 **0 of 25**, Phase 5 **0 of 32**. **The plan has grown from the 153 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25, plus the 30 Phase 5 was drafted and reviewed with on 2026-11-01; its 31st card, `P5-T31`, added when the owner's decisions were applied, counts as growth) to 214, so 61 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-11-10 · **215 tasks: 112 `DONE`, 103 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 38**, Phase 3 **0 of 39**, Phase 4 **0 of 25**, Phase 5 **0 of 32**. **The plan has grown from the 153 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25, plus the 30 Phase 5 was drafted and reviewed with on 2026-11-01; its 31st card, `P5-T31`, added when the owner's decisions were applied, counts as growth) to 215, so 62 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -23,12 +23,23 @@ Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0
 |---|---|---|---|---|
 | 0 — Toolchain spike | 35 | 17.75 d | 17.75–25 d | 6–9 d (+97%) |
 | 1 — PubMed slice | 46 | 29.25 d | 29.25–41 d | 9–12 d (+144%) |
-| 2 — Multi-source + dedup | 37 | 33.25 d | 33.25–47 d | 12–16 d (+108%) |
+| 2 — Multi-source + dedup | 38 | 34.00 d | 34–48 d | 12–16 d (+113%) |
 | 3 — LLM + summaries | 39 | 29.50 d | 29.5–41 d | 12–15 d (+97%) |
-| **Phases 0–3** | **157** | **109.75 d** | **109.75–154 d** | 39–52 d (+111% over the top of the band) |
+| **Phases 0–3** | **158** | **110.50 d** | **110.50–155 d** | 39–52 d (+113% over the top of the band) |
 | 4 — Trend report | 25 | 25.75 d | 25.75–36 d | 8–11 d (+134%) |
 | 5 — Related + recommendations | 32 | 36.25 d | 36.25–51 d | 10–14 d (+159%) |
 | 6–7 | not decomposed | — | 36–50 d ⚠ **scaled, not measured** | 17–24 d |
+
+**2026-11-10: `P2-T38` added, 0.75 d** (§6 item 362(b)). The owner's decision that the reviews, recommendations,
+author responses and F1000Research versions of one paper merge into one item; the estimate is the coordinator's and
+unmeasured. Phase 2 is **38 cards and 34.00 d**, re-read from the cards' `Estimate` rows by script; 34.00 × 1.4 = 47.6 →
+48, so the band is 34–48 d (was 33.25–47). The last column is 34 ÷ 16 = 2.125 → +113% (it read +108%), and the Phases 0–3
+row is 110.50 ÷ 52 = 2.125 → +113% (it read +111%). The project total is 110.50 + 25.75 + 36.25 + 36 = **208.50 d** low
+and 155 + 36 + 51 + 50 = **292 d** high (was 207.75–291), still ≈ 10–14 months at 21 working days (208.50 ÷ 21 ≈ 9.9; 292
+÷ 21 ≈ 13.9). Phase 2 lies on the critical path P0 → P1 → P2 → P4 → P6 → P7, which becomes 17.75 + 29.25 + 34.00 + 25.75 +
+15 + 21 = **142.75** low and 25 + 41 + 48 + 36 + 21 + 29 = **200** high (was 142.00–199). It lies on Phase 5's route too,
+P0 → P1 → P2 → P5 → P7 = **138.25–194** (was 137.50–193), so **Phase 5's float stays 4.5–6 d**. The Phase 3 route stays
+138.25–193, so Phase 2's lead over it grows from 3.75 d / 6 d to **4.5 d / 7 d**. `docs/11` §1–§2 carry the rest.
 
 **2026-11-05: `P5-T32` added, 0.5 d** (§6 item 344(b)). A Crossref lookup by DOI for what Europe PMC does not answer, and
 the base-mapped venue and year (item 344(c)), by the coordinator's estimate and unmeasured. Phase 5 is **32 cards and
@@ -325,12 +336,12 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P2-T10` | Field-merge policy, source precedence, record provenance | `P2-T09` | 1.5 d |  |
 | ✅ `P2-T11` | Preprint ↔ published-version linking | `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07`, `P2-T09`, `P2-T34` | 1.0 d | 🔒 |
 | ✅ `P2-T12` | Batched abstract-backfill pass | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T10`, `P2-T29`, `P2-T30` | 0.75 d |  |
-| `P2-T13` | Dedup corpus and measured precision/recall report | `P2-T09`, `P2-T10`, `P2-T11`, `P2-T36` | 2.0 d | 🔒 |
+| `P2-T13` | Dedup corpus and measured precision/recall report | `P2-T09`, `P2-T10`, `P2-T11`, `P2-T36`, `P2-T38` | 2.0 d | 🔒 |
 | ✅ `P2-T14` | Search & Import window: chips, badges, per-source status | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T29`, `P2-T30`, `P2-T31`, `P2-T34` | 1.5 d |  |
 | ✅ `P2-T17` | Re-run a search from its provenance record | `P1-T13`, `P1-T17`, `P1-T19`, `P2-T01`, `P2-T14`, `P2-T22` | 1.5 d |  |
 | ✅ `P2-T18` | Translator import path behind `useTranslators` | `P1-T14`, `P2-T08`, `P2-T12` | 1.25 d |  |
 | ✅ `P2-T15` | Record and enforce the settled OpenAlex decision: out of v1 | — | 0.25 d |  |
-| `P2-T16` | Phase 2 end-to-end run against the definition of done | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18`, `P2-T29`, `P2-T30`, `P2-T31`, `P2-T34`, `P2-T35`, `P2-T36`, `P2-T37` | 1.0 d |  |
+| `P2-T16` | Phase 2 end-to-end run against the definition of done | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18`, `P2-T29`, `P2-T30`, `P2-T31`, `P2-T34`, `P2-T35`, `P2-T36`, `P2-T37`, `P2-T38` | 1.0 d |  |
 | ✅ `P2-T19` | Work-key detection for records with no DOI and no PMID, and… | `P1-T13`, `P2-T09` | 0.75 d |  |
 | ✅ `P2-T20` | Render `languages`, `openAccessOnly` and `raw` across the… | `P1-T08` | 0.5 d |  |
 | ✅ `P2-T21` | Make the concurrency cap resizable, so a tightened header… | `P1-T27`, `P1-T26` | 0.5 d |  |
@@ -350,6 +361,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P2-T35` | Let a 4xx response body reach the adapter for hosts whose… | `P2-T06` | 0.25 d |  |
 | ✅ `P2-T36` | The four behaviour changes the owner approved on 2026-10-15 | `P2-T05`, `P2-T30` | 0.75 d |  |
 | `P2-T37` | A re-run finds a record that has no DOI and no PMID | `P2-T36` | 0.5 d |  |
+| `P2-T38` | Merge a paper's reviews and versions (the DOI family) | `P2-T09`, `P2-T10` | 0.75 d |  |
 
 ### Phase 3
 
@@ -3178,6 +3190,12 @@ the caller of what the card builds; if it does not, the caller is added with a d
     **DECIDED 2026-11-10 by the owner:**
     - (a) Pair 40 (the arXiv and Semantic Scholar records of arXiv 2609.04658) is relabelled "same paper"; the engine is unchanged there. Re-measured: precision 1.0000, [0.8569, 1.0000] over 23 merged pairs, undecided, **no false merge**; recall 0.6765, [0.5084, 0.8087] over 34, not met. Final labels: same paper 34, different 16, linked version 10.
     - (b) The engine is changed so that the eleven missed merges merge: reviewer reports, recommendations and an author response about one paper (pairs 5, 8, 17, 24, 25, 28, 31, 37, 41) and F1000Research versions 1 and 2 of one article (pairs 10, 20). Zotero then receives one item where it received several. Taken over the two alternatives offered: relabelling them "linked version", or leaving the reviewer documents out of the measurement. This is card `P2-T38` under rule 9 (it blocks Phase 2's recall condition); design first, then code, then the report re-run and every engine outcome that moves across all 534 pairs listed, so that a new false merge outside the sample can be seen.
+
+363. **`P2-T38` built, 2026-11-10** (`plan/reports/P2-T38.md`). Two DOIs that reduce to one family stem, in one of five forms listed in `docs/02` §11.3's note of that day (eLife sub-articles, transparent peer review reports, Faculty Opinions recommendations, F1000Research peer review reports and F1000Research article versions), now merge at Tier 0; inside the merged work the article wins every field (`docs/07` §5.1).
+    - (a) Across the 534 corpus pairs 38 outcomes move, all to merged; 11 are the owner's labelled "same paper" pairs and 27 are unlabelled, each a document of the same paper as its partner. No pair labelled "different" or "linked version" moved. The 940 record groups whose members did not change give byte-identical merged works.
+    - (b) Re-measured (`npm run dedup:report`, sample mode): precision 1.0000, [0.8985, 1.0000] over 34 merged pairs, undecided, no false merge; recall 1.0000, [0.8985, 1.0000] over 34 true duplicates, **undecided** — with no error the low end reaches 0.90 only from 35 true duplicates, one more than the sample holds.
+    - (c) Checks passed; three integration runs 355 passed, 0 failed, 5 pending each. The coordinator re-ran typecheck, the source and model unit tests (1,605 passed) and the report before the commit.
+    - (d) Left for the owner, asked with the next batch: how recall is to be decided at 34 true duplicates; whether the DOI-family rule extends to the forms the report names as not covered; whether to add a comparison pass by DOI family (it adds pairs to the corpus); which F1000Research version wins (version 1's DOI and date today).
 
 ## 7. Regenerating this file
 

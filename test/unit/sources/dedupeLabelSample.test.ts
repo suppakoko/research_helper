@@ -293,18 +293,45 @@ describe("test/fixtures/dedup/label-sample.json", () => {
     );
   });
 
-  // Draw-day pin: the strata are the engine's outcomes as of 2026-10-25. When
-  // `P2-T13` step 6 moves a threshold this expectation fails by design; the
-  // sample is then NOT redrawn (docs/02 §11.3) — replace this check with the
-  // moved-pair count the report prints.
-  it("was stratified by the engine's own outcome on the draw day", async () => {
+  // Draw-day pin, replaced as it said it would be (`P2-T38`, 2026-11-10): the
+  // strata are the engine's outcomes as of 2026-10-25, and the DOI-family
+  // rule (docs/02 §11.3's note of 2026-11-10, plan/00 §6 item 362(b)) moved
+  // eleven sampled pairs to merged. The sample is NOT redrawn (docs/02 §11.3);
+  // this pins which pairs moved, and how, instead — the count the report
+  // prints as "Sampled pairs whose engine outcome has changed since the draw".
+  it("was stratified by the engine's own outcome on the draw day; since then exactly the P2-T38 eleven moved, all to merged", async () => {
     const corpus = await loadCorpusRecords();
     const pool = corpus.records.map((c) => c.record);
     const byId = new Map(pool.map((r) => [r.id, r]));
-    const today = buildLabelSample(
-      stratifyLabelSet(committedRows, byId, dedupeRecords(pool)),
+    const today = new Map(
+      stratifyLabelSet(committedRows, byId, dedupeRecords(pool)).map((s) => [
+        s.pairId,
+        s.stratum,
+      ]),
     );
-    expect(serializeLabelSample(today)).toBe(committedSampleText);
+    const moved = committedSample.sample
+      .filter((s) => today.get(s.pairId) !== s.stratum)
+      .map((s) => `${s.pairId} ${s.stratum} -> ${String(today.get(s.pairId))}`)
+      .sort();
+    expect(moved).toEqual(
+      [
+        "p-136a40c667ec linked -> merged",
+        "p-1588230667d8 linked -> merged",
+        "p-1714f98efd0e linked -> merged",
+        "p-3a7cc467c9f3 linked -> merged",
+        "p-5671166c13d8 linked -> merged",
+        "p-6caef4b71a46 linked -> merged",
+        "p-770263a3b79f linked -> merged",
+        "p-940c511c1fe1 linked -> merged",
+        "p-95df2d7ba01d linked -> merged",
+        "p-f446658730ea linked -> merged",
+        "p-f581335f8a55 flagged -> merged",
+      ].sort(),
+    );
+    // The committed file itself still re-derives from its own population.
+    expect(
+      serializeLabelSample(buildLabelSample(committedSample.population)),
+    ).toBe(committedSampleText);
   }, 120_000);
 
   it("refuses a sample file with a defect", () => {
@@ -472,15 +499,26 @@ describe("npm run dedup:report in sample mode (the default)", () => {
 
   it("states each target with its Wilson interval and says plainly when the interval cannot decide", async () => {
     // Synthetic labels, in a temporary copy only: each sampled pair is given
-    // the label that agrees with its stratum, so precision and recall are
-    // both 23 of 23. Nothing here is a human label or reaches the repository.
+    // the label that agrees with the engine's outcome today, so precision and
+    // recall are both 34 of 34 — the 23 merged at the draw and the eleven
+    // `P2-T38` moved to merged. Nothing here is a human label or reaches the
+    // repository.
     const dir = await mkdtemp(join(tmpdir(), "dedup-sample-"));
     const out = vi
       .spyOn(process.stdout, "write")
       .mockImplementation(() => true);
     try {
+      const corpus = await loadCorpusRecords();
+      const pool = corpus.records.map((c) => c.record);
+      const byId = new Map(pool.map((r) => [r.id, r]));
+      const todayOf = new Map(
+        stratifyLabelSet(committedRows, byId, dedupeRecords(pool)).map((s) => [
+          s.pairId,
+          s.stratum,
+        ]),
+      );
       const stratumOf = new Map(
-        committedSample.sample.map((s) => [s.pairId, s.stratum]),
+        committedSample.sample.map((s) => [s.pairId, todayOf.get(s.pairId)]),
       );
       const outside = committedRows.find(
         (r) => inLabelSet(r) && !stratumOf.has(r.pairId),
@@ -512,18 +550,18 @@ describe("npm run dedup:report in sample mode (the default)", () => {
       expect(text).toMatch(/ merged +103 +23 +23\n/u);
       expect(text).toMatch(/ flagged +22 +5 +5\n/u);
       expect(text).toContain(
-        "Sampled pairs whose engine outcome has changed since the draw: 0",
+        "Sampled pairs whose engine outcome has changed since the draw: 11",
       );
       expect(text).toContain(
         "Labelled label-set pairs outside the sample, not measured in this mode: 1",
       );
       expect(text).toContain(
-        "Precision 1.0000   95 % Wilson interval [0.8569, 1.0000] over 23 merged pairs   " +
+        "Precision 1.0000   95 % Wilson interval [0.8985, 1.0000] over 34 merged pairs   " +
           "target ≥ 0.99   UNDECIDED: the interval is too wide to decide the target — " +
           "even with no error the low end reaches 0.99 only from 381 merged pairs",
       );
       expect(text).toContain(
-        "Recall    1.0000   95 % Wilson interval [0.8569, 1.0000] over 23 true duplicates   " +
+        "Recall    1.0000   95 % Wilson interval [0.8985, 1.0000] over 34 true duplicates   " +
           "target ≥ 0.9   UNDECIDED",
       );
       expect(text).toContain("Labelled pairs measured: 60");

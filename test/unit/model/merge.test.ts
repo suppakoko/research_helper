@@ -826,3 +826,110 @@ const _typeCheck: CanonicalWork = merge(
   AT,
 ).work;
 void _typeCheck;
+
+// ---------------------------------------------------------------------------
+// P2-T38 — a review document yields to its paper (docs/07 §5.1's merge note
+// of 2026-11-10, owner, plan/00 §6 item 362(b))
+// ---------------------------------------------------------------------------
+
+describe("a review document yields to its paper (P2-T38)", () => {
+  const LEISH =
+    "Gene editing and scalable functional genomic screening in Leishmania species using the CRISPR/Cas9 cytosine base editor toolbox LeishBASEedit";
+  const article = (): SourceRecord =>
+    record({
+      source: "crossref",
+      nativeId: "10.7554/elife.85605",
+      title: LEISH,
+      type: "journal-article",
+      abstract: "The article's abstract.",
+      authors: [
+        { family: "Engstler", given: "M" },
+        { family: "Beneke", given: "T" },
+      ],
+      date: { year: 2023, month: 5, day: 2 },
+      container: "eLife",
+      ids: { doi: doi("10.7554/elife.85605") },
+    });
+  const response = (): SourceRecord =>
+    record({
+      source: "crossref",
+      nativeId: "10.7554/elife.85605.sa2",
+      title: `Author response: ${LEISH}`,
+      type: "other",
+      abstract: "A much longer author response text than the article abstract.",
+      authors: [
+        { family: "Engstler", given: "M" },
+        { family: "Beneke", given: "T" },
+        { family: "Third", given: "X" },
+      ],
+      date: { year: 2023, month: 1, day: 10 },
+      ids: { doi: doi("10.7554/elife.85605.sa2") },
+    });
+
+  it("keeps the article's title, type, DOI, authors, date and abstract, in every input order", () => {
+    for (const order of permutations([article(), response()])) {
+      const { work, conflicts } = merge(order, AT);
+      expect(work.title).toBe(LEISH);
+      expect(work.type).toBe("journal-article");
+      expect(work.ids.doi).toBe("10.7554/elife.85605");
+      expect(work.workKey).toBe("doi:10.7554/elife.85605");
+      expect(work.abstract).toBe("The article's abstract.");
+      expect(work.authors.map((a) => a.family)).toEqual(["Engstler", "Beneke"]);
+      expect(work.publishedDate?.iso).toBe("2023-05-02");
+      expect(work.containerTitle).toBe("eLife");
+      // Every record is still named, the review last; its DOI is a conflict.
+      expect(work.provenance.recordIds).toEqual([
+        "crossref:10.7554/elife.85605",
+        "crossref:10.7554/elife.85605.sa2",
+      ]);
+      expect(conflicts).toEqual([
+        {
+          field: "ids.doi",
+          kept: "10.7554/elife.85605",
+          keptFrom: "crossref",
+          rejected: [
+            { value: "10.7554/elife.85605.sa2", sourceId: "crossref" },
+          ],
+        },
+      ]);
+      // Only one record supplied each field the review lost, so none was contested.
+      expect(work.provenance.fieldOrigin["title"]).toBeUndefined();
+    }
+  });
+
+  it("combines a group of review documents only exactly as before: longest title, first DOI in canonical order", () => {
+    const one = record({
+      source: "crossref",
+      nativeId: "10.7554/elife.98867.1.sa2",
+      title:
+        "eLife Assessment: NK cell exhaustion in Wilson's disease predicts cholecystitis",
+      type: "other",
+      ids: { doi: doi("10.7554/elife.98867.1.sa2") },
+    });
+    const two = record({
+      source: "crossref",
+      nativeId: "10.7554/elife.98867.1.sa1",
+      title:
+        "Reviewer #1 (Public Review): NK cell exhaustion in Wilson's disease predicts cholecystitis",
+      type: "other",
+      ids: { doi: doi("10.7554/elife.98867.1.sa1") },
+    });
+    const { work } = merge([one, two], AT);
+    expect(work.title).toBe(two.work.title);
+    expect(work.ids.doi).toBe("10.7554/elife.98867.1.sa1");
+    expect(work.provenance.recordIds).toEqual([two.id, one.id]);
+  });
+
+  it("dedupeAndMerge represents the group by the article even when the review was fetched first", () => {
+    const a = article();
+    const r = response();
+    const result = dedupeAndMerge([r, a], AT);
+    expect(result.works).toHaveLength(1);
+    expect(result.records).toEqual([a]);
+    expect(result.works[0]?.title).toBe(LEISH);
+    expect(result.merged[0]?.records).toEqual([r, a]);
+    expect(result.merged[0]?.decisions[0]?.evidence["rule"]).toBe("doi-family");
+    expect(result.recordsDeduplicatedAway).toBe(1);
+    expect(result.deduplicatedAwayBySource).toEqual({ crossref: 1 });
+  });
+});

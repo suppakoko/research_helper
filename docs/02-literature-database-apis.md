@@ -2566,6 +2566,61 @@ Tier 7  Known preprint↔published link               → LINK, not merge (§11.
 > other as its other version, and which do not match each other, is split again, tier by tier, so
 > the two versions stay two works joined by a link. The rule is in §11.5 under rule 1.
 
+> **Decided 2026-11-10 (owner, `plan/00` §6 item 362(b)): the documents of one paper are one work.**
+> The owner labelled "same paper" nine pairs of reviewer reports, recommendations and an author
+> response about one paper, and two pairs of F1000Research versions 1 and 2 of one article, all with
+> different DOIs, which the cascade linked or flagged (`plan/reports/dedup-report-361.md`). The owner
+> chose to change the engine rather than the labels. Two rules make them merge
+> (`src/sources/shared/dedupe.ts`; the DOI forms are `doiFamilyStem`, `sameDoiFamily`,
+> `isReviewDocumentDoi` and `isPerVersionReviewDoi` in `src/model/ids.ts`):
+>
+> 1. **Tier 0 gains a second secondary key, the DOI family** (evidence `rule: "doi-family"`,
+>    confidence 0.97, `TIER_CONFIDENCE.doiFamily` — below the bioRxiv accession's 0.99 because it
+>    joins different documents, not two spellings of one DOI). Some publishers mint the DOIs of a
+>    paper's other documents by extending the article's DOI. Each DOI of a form below reduces to its
+>    family stem; a DOI of no listed form is its own stem. Two different DOIs with the same stem, at
+>    least one of them of a listed form, are a **match**.
+>
+>    | Form | Example | Stem | Review document |
+>    |---|---|---|---|
+>    | eLife sub-article (public review, assessment, decision letter, author response), any version | `10.7554/elife.98867.1.sa1` | `10.7554/elife.98867` | yes |
+>    | Transparent peer review report (`<article DOI>/v<n>/review<m>`; Wiley, Royal Society in the corpus) | `10.1111/2041-210x.14397/v1/review2` | `10.1111/2041-210x.14397` | yes |
+>    | Faculty Opinions recommendation | `10.3410/f.740477161.793587507` | `10.3410/f.740477161` | yes |
+>    | F1000Research peer review report | `10.5256/f1000research.143730.r200814` | `10.5256/f1000research.143730` (the version reviewed) | yes |
+>    | F1000Research article version | `10.12688/f1000research.130932.2` | `10.12688/f1000research.130932` | no |
+>
+>    So a review joins its article when the article's DOI is the stem (`10.7554/elife.85605` and its
+>    author response `10.7554/elife.85605.sa2`), the reviews of one paper join each other, and the
+>    versions of one F1000Research article join, also when a source types one of them `preprint`
+>    (Europe PMC's `PPR` record of a version, which the owner labelled the same paper). An eLife
+>    **version** DOI without `.sa` (`10.7554/elife.98867.3`) is not a listed form, so an eLife
+>    reviewed preprint and its version of record keep §11.4's handling. The sibling journals of the
+>    F1000 platform (`10.12688/wellcomeopenres.…`) mint the same forms and are not listed, and
+>    neither is any other publisher's form: none is in the corpus, and adding one is a decision.
+> 2. **F1000Research reports on two versions of one article are compared on the article's title.**
+>    A report's DOI names the version it reviews, not the article (`143730` for version 1 and
+>    `163630` for version 2 of one article), so two reports of one paper can have different stems.
+>    When both records carry F1000Research report DOIs with different stems, their DOIs are **not**
+>    a §11.5 rule 1 conflict, and the comparison reads their titles with F1000's trailing note
+>    `[version N; peer review: …]` removed; Tiers 5–6 and every §11.3.3 guard then decide as for
+>    any pair, and the decision's evidence carries `peerReviewReportsAcrossVersions: true`. Only the
+>    comparison reads the shortened title; blocking keeps the full one.
+>
+> **Neither rule adds a comparison.** A family pair merges only when the passes of §11.3.3 and §11.4
+> already compare it (a shared identifier, a version naming, or one title block), so the candidate
+> pairs of `scripts/build-dedup-corpus.ts`, from which the owner's sample was drawn, are unchanged.
+> A family pair whose titles fall in two different blocks is still not compared — a missed merge,
+> the lesser failure (`docs/11` R-18). **Which record's fields win** in such a group is `docs/07`
+> §5.1's merge rule of the same day: a review document yields to its article.
+>
+> *Measured the same day (`P2-T38`, `plan/reports/P2-T38.md`):* on the owner's sample all eleven
+> pairs merge and no pair labelled "different" or "linked version" does — precision 1.0000,
+> [0.8985, 1.0000] over 34 merged pairs, and recall 1.0000, [0.8985, 1.0000] over 34 true
+> duplicates, both **undecided**: the sample holds 34 true duplicates, one short of the 35 an
+> error-free recall needs to confirm 0.90. Over all 534 corpus pairs 38 outcomes change, every one
+> of them to *merged* (32 from linked, 6 from flagged): the 11 labelled pairs and 27 unlabelled
+> pairs among the same papers' reviews, recommendations and versions.
+
 #### 11.3.1 ID normalization
 
 ```ts
@@ -2780,6 +2835,15 @@ and add `Preprint DOI: <doi>` / `Published DOI: <doi>` to `extra` when only one 
 >   indexes the named ids as well as each record's own — and Tier 7 returns `"link"`. The 0.75 row
 >   stays a **flag**.
 > - **Zotero side:** `docs/07` §6.2's `relatedVersionIds.doi` rows.
+
+> **Added 2026-11-10 (owner, `plan/00` §6 item 362(b)).** The versions of one F1000Research article
+> (`10.12688/f1000research.<article>.<version>`) are **not** different works for this section: they
+> share a DOI family (§11.3's note of the same day) and are **merged** at Tier 0, also when Europe PMC
+> types one of them `preprint`. Gate `G-16` and this section are unchanged for every other pair: a
+> preprint server's record and its journal version, and an eLife reviewed preprint and its version
+> of record, keep the handling above and are never merged by the DOI family. Which version's DOI and
+> date the merged item carries is `docs/07` §5.1's (its note "DECIDED 2026-11-10 (coordinator, under
+> item 313)"): the existing merge policy, which on the measured corpus picks version 1.
 
 ### 11.5 Merge precedence and conflict handling
 

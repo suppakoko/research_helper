@@ -184,6 +184,119 @@ export function normalizeDoi(raw: string | null | undefined): Doi | null {
   return DOI_SHAPE.test(d) ? (d as Doi) : null;
 }
 
+// ---------------------------------------------------------------------------
+// 2a. DOI families — docs/02 §11.3's note of 2026-11-10 (owner, plan/00 §6
+//     item 362(b)); read by the dedup cascade's Tier 0 and by the merge
+// ---------------------------------------------------------------------------
+
+/**
+ * One listed DOI form: the pattern (on a normalized, lowercase {@link Doi}),
+ * whose first group is the family stem, and whether a DOI of the form is a
+ * review document rather than the paper itself.
+ */
+interface DoiFamilyForm {
+  readonly pattern: RegExp;
+  readonly reviewDocument: boolean;
+  /** The stem names the version reviewed, not the article (F1000 reports). */
+  readonly stemIsVersion: boolean;
+}
+
+/**
+ * `docs/02` §11.3's table of DOI forms, row for row. Only the forms measured
+ * in `P2-T13`'s corpus are listed; adding one is a decision (that note).
+ */
+const DOI_FAMILY_FORMS: readonly DoiFamilyForm[] = [
+  // eLife sub-article of any version: 10.7554/elife.98867.1.sa1. A version
+  // DOI without `.sa` (10.7554/elife.98867.3) is deliberately not a form.
+  {
+    pattern: /^(10\.7554\/elife\.\d+)(?:\.\d+)?\.sa\d+$/,
+    reviewDocument: true,
+    stemIsVersion: false,
+  },
+  // Transparent peer review report: <article DOI>/v1/review2.
+  {
+    pattern: /^(10\.\d{4,9}\/\S+?)\/v\d+\/review\d+$/,
+    reviewDocument: true,
+    stemIsVersion: false,
+  },
+  // Faculty Opinions recommendation: 10.3410/f.740477161.793587507.
+  {
+    pattern: /^(10\.3410\/f\.\d+)\.\d+$/,
+    reviewDocument: true,
+    stemIsVersion: false,
+  },
+  // F1000Research peer review report: 10.5256/f1000research.143730.r200814,
+  // whose stem is the version reviewed.
+  {
+    pattern: /^(10\.5256\/f1000research\.\d+)\.r\d+$/,
+    reviewDocument: true,
+    stemIsVersion: true,
+  },
+  // F1000Research article version: 10.12688/f1000research.130932.2.
+  {
+    pattern: /^(10\.12688\/f1000research\.\d+)\.\d+$/,
+    reviewDocument: false,
+    stemIsVersion: false,
+  },
+];
+
+/** The listed form `doi` takes and its stem, or `undefined` for none. */
+function doiFamilyForm(
+  doi: Doi | undefined,
+): { readonly form: DoiFamilyForm; readonly stem: string } | undefined {
+  if (doi === undefined) return undefined;
+  for (const form of DOI_FAMILY_FORMS) {
+    const stem = form.pattern.exec(doi)?.[1];
+    if (stem !== undefined) return { form, stem };
+  }
+  return undefined;
+}
+
+/**
+ * The family stem of a DOI of one of `docs/02` §11.3's listed forms, or
+ * `undefined` when the DOI is of none (it is then its own stem).
+ * `10.7554/elife.98867.1.sa1` → `10.7554/elife.98867`;
+ * `10.12688/f1000research.130932.2` → `10.12688/f1000research.130932`.
+ */
+export function doiFamilyStem(doi: Doi | undefined): string | undefined {
+  return doiFamilyForm(doi)?.stem;
+}
+
+/**
+ * Are two different DOIs one paper's by `docs/02` §11.3's DOI family — the
+ * same stem, at least one of them of a listed form? A DOI of no listed form
+ * is its own stem, so a review joins the article its DOI extends
+ * (`10.7554/elife.85605` and `10.7554/elife.85605.sa2`). Equal DOIs are not a
+ * family: Tier 0 has matched them already.
+ */
+export function sameDoiFamily(a: Doi | undefined, b: Doi | undefined): boolean {
+  if (a === undefined || b === undefined || a === b) return false;
+  const sa = doiFamilyStem(a);
+  const sb = doiFamilyStem(b);
+  if (sa === undefined && sb === undefined) return false;
+  return (sa ?? a) === (sb ?? b);
+}
+
+/**
+ * Is this DOI a review document's — an eLife sub-article, a transparent peer
+ * review report, a Faculty Opinions recommendation or an F1000Research peer
+ * review report? `docs/07` §5.1's merge note: such a record yields to its
+ * article inside one merged work.
+ */
+export function isReviewDocumentDoi(doi: Doi | undefined): boolean {
+  return doiFamilyForm(doi)?.form.reviewDocument === true;
+}
+
+/**
+ * Is this DOI a review document whose stem names the version it reviews
+ * rather than the article (an F1000Research peer review report)? Two such
+ * reports with different stems may still review one article, and are then
+ * compared on title (`docs/02` §11.3's note, rule 2).
+ */
+export function isPerVersionReviewDoi(doi: Doi | undefined): boolean {
+  return doiFamilyForm(doi)?.form.stemIsVersion === true;
+}
+
 /**
  * Normalize a PubMed ID to the bare-digits form `docs/07` §5.1 brands
  * ("digits only").

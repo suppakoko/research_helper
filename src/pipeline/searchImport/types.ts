@@ -475,7 +475,10 @@ export interface SearchImportOutput {
    * **One row per work, not per record** (`P2-T29`): for each distinct work
    * the run found, the first record of its dedup group in fetch order — the
    * group's *representative* — so a paper two sources both returned appears
-   * once (FR-50). Rows are in fetch order of their representatives. A run that
+   * once (FR-50). A group that holds a paper and its review documents is
+   * represented by its first record that is not one (`docs/07` §5.1's merge
+   * note of 2026-11-10). Rows are in fetch order of their groups' first
+   * records. A run that
    * ended before `Merging` carries the fetch output instead, every record,
    * after the client recency filter.
    *

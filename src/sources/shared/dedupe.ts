@@ -44,10 +44,13 @@ import { createSystemClock } from "../../core/clock";
 import type { CancellationToken } from "../../core/jobQueue/cancellation";
 import type { WorkType } from "../../model/canonicalWork";
 import {
+  doiFamilyStem,
+  isPerVersionReviewDoi,
   normalizeArxivId,
   normalizeDoi,
   normalizePmcid,
   normalizePmid,
+  sameDoiFamily,
   type ArxivId,
   type Doi,
   type Pmcid,
@@ -98,12 +101,15 @@ export const SIGNATURE_TOKEN_COUNT = 3;
 /**
  * Confidence of each decision kind, from the §11.3 tier table (Tiers 0–5 and
  * 7), §11.3.3's `0.80–0.94` band for the three Tier 6 duplicate rows, §11.2
- * for the bioRxiv accession secondary key, and §11.4's `0.75 → flag` row for a
- * title match between a preprint and a non-preprint.
+ * for the bioRxiv accession secondary key, §11.3's note of 2026-11-10 for the
+ * DOI-family secondary key (below the accession: it joins different documents
+ * of one paper, not two spellings of one DOI), and §11.4's `0.75 → flag` row
+ * for a title match between a preprint and a non-preprint.
  */
 export const TIER_CONFIDENCE = Object.freeze({
   doi: 1,
   biorxivAccession: 0.99,
+  doiFamily: 0.97,
   pmid: 1,
   pmcid: 1,
   arxiv: 0.99,
@@ -494,6 +500,13 @@ export interface DedupDecision {
 interface TierContext {
   /** Id kinds present on both sides with different values (§11.5 rule 1). */
   readonly conflicts: (keyof NormalizedIds)[];
+  /**
+   * Two F1000Research reports on different versions (`docs/02` §11.3's note
+   * of 2026-11-10, rule 2): their DOIs are not a conflict, and the title
+   * tiers read titles without the version note
+   * ({@link arePeerReviewReportsAcrossVersions}).
+   */
+  readonly reportsAcrossVersions: boolean;
 }
 
 export interface DedupTier {
@@ -760,7 +773,13 @@ function identifierTier(
   };
 }
 
-/** Tier 0: exact normalized DOI, with §11.2's accession suffix as secondary key. */
+/**
+ * Tier 0: exact normalized DOI, with two secondary keys — §11.2's accession
+ * suffix, and §11.3's DOI family (owner, 2026-11-10, `plan/00` §6 item
+ * 362(b)): two DOIs that reduce to one stem ({@link sameDoiFamily}) are the
+ * documents or versions of one paper and match. Two F1000Research reports on
+ * different versions record no conflict, so the title tiers decide.
+ */
 const DOI_TIER: DedupTier = {
   id: "doi",
   docTier: 0,
@@ -775,6 +794,13 @@ const DOI_TIER: DedupTier = {
         accession: a.accession,
       });
     }
+    if (sameDoiFamily(x, y)) {
+      return decide("match", "doi", TIER_CONFIDENCE.doiFamily, {
+        rule: "doi-family",
+        family: doiFamilyStem(x) ?? x,
+      });
+    }
+    if (ctx.reportsAcrossVersions) return null;
     ctx.conflicts.push("doi");
     return null;
   },
@@ -883,15 +909,67 @@ export const DEDUP_TIERS: readonly DedupTier[] = Object.freeze([
   VERSION_LINK_TIER,
 ]);
 
-/** Compare two candidates through the cascade. Pure and symmetric in verdict. */
+/**
+ * F1000's note at the end of a peer review report's title, after
+ * {@link normalizeTitle}: `"[version 1; peer review: 1 approved]"` reads
+ * `" version 1 peer review 1 approved"`.
+ */
+export const F1000_VERSION_NOTE =
+  / version \d+ peer review(?: [\p{L}\p{N}]+)*$/u;
+
+/**
+ * `docs/02` §11.3's note of 2026-11-10, rule 2: are these two F1000Research
+ * peer review reports on different versions ({@link isPerVersionReviewDoi},
+ * different stems)? Their DOIs name the version reviewed, so they may review
+ * one article; the cascade then compares their titles without the version
+ * note and records no DOI conflict.
+ */
+export function arePeerReviewReportsAcrossVersions(
+  a: DedupCandidate,
+  b: DedupCandidate,
+): boolean {
+  const x = a.ids.doi;
+  const y = b.ids.doi;
+  return (
+    isPerVersionReviewDoi(x) &&
+    isPerVersionReviewDoi(y) &&
+    doiFamilyStem(x) !== doiFamilyStem(y)
+  );
+}
+
+/** `c` with {@link F1000_VERSION_NOTE} cut from its title, for one comparison. */
+function withoutVersionNote(c: DedupCandidate): DedupCandidate {
+  const title = c.title.replace(F1000_VERSION_NOTE, "").trim();
+  if (title === c.title) return c;
+  const tokens = titleTokens(title);
+  return { ...c, title, tokens, signature: blockingSignature(tokens) };
+}
+
+/**
+ * Compare two candidates through the cascade. Pure and symmetric in verdict.
+ *
+ * Two F1000Research reports on different versions
+ * ({@link arePeerReviewReportsAcrossVersions}) are compared without the
+ * version note on their titles and with no DOI conflict, and the decision's
+ * evidence says so (`peerReviewReportsAcrossVersions`). Blocking, which runs
+ * before this, keeps the full titles.
+ */
 export function compareCandidates(
   a: DedupCandidate,
   b: DedupCandidate,
 ): DedupDecision {
-  const ctx: TierContext = { conflicts: [] };
+  const across = arePeerReviewReportsAcrossVersions(a, b);
+  const ctx: TierContext = { conflicts: [], reportsAcrossVersions: across };
+  const x = across ? withoutVersionNote(a) : a;
+  const y = across ? withoutVersionNote(b) : b;
   for (const tier of DEDUP_TIERS) {
-    const decision = tier.run(a, b, ctx);
-    if (decision !== null) return decision;
+    const decision = tier.run(x, y, ctx);
+    if (decision === null) continue;
+    if (!across) return decision;
+    return {
+      ...decision,
+      evidence: { ...decision.evidence, peerReviewReportsAcrossVersions: true },
+    };
   }
   return decide(
     "distinct",

@@ -2473,6 +2473,34 @@ export interface SourceRecord {
 
 Precedence is a single exported constant so it can be tuned in one place and unit-tested against fixtures.
 
+> **Added 2026-11-10 (owner, `plan/00` §6 item 362(b); `plan/03` `P2-T38`): a review document yields
+> to its article.** Since `02-literature-database-apis.md` §11.3's DOI-family rule of the same day, one
+> group can hold a paper and its review documents — a record whose DOI `isReviewDocumentDoi`
+> (`src/model/ids.ts`) recognises: an eLife sub-article, a transparent peer review report, a Faculty
+> Opinions recommendation, an F1000Research peer review report. When a group holds at least one
+> record that is **not** a review document, the review documents sort after every other record in
+> the canonical merge order, and every field of the table above **except `ids`** — and
+> `relatedVersionIds`, also a union — is combined from the other records only. So the article's
+> title, type, authors, dates, venue and abstract win, `ids` keeps the article's DOI and lists each
+> review's DOI as a conflict, and `provenance.recordIds` still names every record. A group of review
+> documents only, or with none, is combined exactly as before. No type and no preference changes.
+> The search pipeline's representative record of such a group (the row the preview draws,
+> `mergeGroups` in `src/pipeline/searchImport/stages.ts`) is likewise its first record in fetch order
+> that is not a review document.
+>
+> **DECIDED 2026-11-10 (coordinator, under item 313): which record wins when no article is in the
+> group.** The existing policy above applies unchanged, because nothing in the owner's decision asks
+> for more and every other choice would need a new rule. (a) **Two reviewer reports**, or any group of
+> review documents only: the longest title that is not truncated, the DOI of the first record in the
+> canonical order (source precedence, then record id ascending), the earliest complete date and the
+> most complete author list; the other reports' DOIs are kept as conflicts in `ids`. (b) **Two
+> versions of one F1000Research article**: the same policy, so on the 2026-11-10 corpus the item takes
+> version 1's DOI (its Crossref record sorts first by record id) and version 1's date (the earliest),
+> the longest title (version 2's, as PubMed prints it), and PubMed's PMID; version 2's DOI is kept as
+> a conflict. Groups of ordinary journal articles are unaffected: over the 534-pair corpus all 940
+> groups whose members did not change give byte-identical merged works before and after `P2-T38`.
+> Whether the newest version should win instead is the owner's to decide (`plan/reports/P2-T38.md`).
+
 ### 5.2 Analysis artifacts
 
 **Who owns what.** The *content* of a summary — every extracted field, its JSON Schema and its

@@ -21,7 +21,7 @@ them; it adds adapters and the merge layer above them.
 
 ## Effort estimate
 
-`docs/11` §1 Phase 2 is now **33.25–46.55 d, published as 33.25–47 d** (37 cards; `P2-T37` added 2026-10-20) — a band *derived from* the
+`docs/11` §1 Phase 2 is now **34.00–47.6 d, published as 34–48 d** (38 cards; `P2-T38` added 2026-11-10) — a band *derived from* the
 task sum in this file (low = the sum, high = the sum × 1.4, rounded to whole days), not an
 independent guess. The figure it superseded on 2026-09-09 was **12–16 developer-days** ("six
 adapters at ~1.5 days each plus 4–6 days for dedup and its evaluation corpus"). The reconciliation
@@ -42,7 +42,8 @@ is at the end of this file.
 > published as 26.75–37 d**" (the 2026-10-06 figure) while the roll-up had reached **32.75 d over 36
 > cards** and `docs/11` §1 published **32.75–46**: twelve cards (`P2-T25`–`P2-T36`, 6.0 d) were propagated
 > to the roll-up and to `docs/11` but not to this sentence. It now reads the roll-up's 33.25 d, after
-> `P2-T37` (0.5 d), and 33.25 × 1.4 = 46.55 → 47.
+> `P2-T37` (0.5 d), and 33.25 × 1.4 = 46.55 → 47. *Updated 2026-11-10 (`plan/00` §6 item 362(b)): `P2-T38` (0.75 d)
+> takes the roll-up to 34.00 d over 38 cards, and 34.00 × 1.4 = 47.6 → 48.*
 
 ## Risks retired
 
@@ -1380,7 +1381,7 @@ Three files outside Files, each mechanical: `dedupe.ts` (the one-declaration mov
 | **ID** | `P2-T09` |
 | **State** | `DONE` — approved 2026-10-14; the engine is built and proven, the stage hookup is `P2-T10`'s. Report at `plan/reports/P2-T09.md`. |
 | **Depends on** | `P1-T01`, `P1-T13` |
-| **Blocks** | `P2-T10`, `P2-T11`, `P2-T13`, `P2-T14`, `P2-T16`, `P2-T19` |
+| **Blocks** | `P2-T10`, `P2-T11`, `P2-T13`, `P2-T14`, `P2-T16`, `P2-T19`, `P2-T38` |
 | **Retires** | `R-18` (with `P2-T10`, `P2-T11`, `P2-T13`) |
 | **Implements** | `FR-50`, `FR-51` |
 | **Estimate** | 2.0 d |
@@ -1531,7 +1532,7 @@ flag; one-sided preprint is a 0.75 flag; short titles come out `distinct`). Foll
 | **ID** | `P2-T10` |
 | **State** | `DONE` — approved 2026-10-14; the merge policy and `dedupeAndMerge` are built and proven, their wiring is `P2-T29`. Report at `plan/reports/P2-T10.md`. |
 | **Depends on** | `P2-T09` |
-| **Blocks** | `P2-T12`, `P2-T13`, `P2-T14`, `P2-T16`, `P2-T29` |
+| **Blocks** | `P2-T12`, `P2-T13`, `P2-T14`, `P2-T16`, `P2-T29`, `P2-T38` |
 | **Retires** | part of `R-18`, part of `R-17` |
 | **Implements** | `FR-50`, `FR-8` |
 | **Estimate** | 1.5 d |
@@ -1927,7 +1928,7 @@ abstracts. **15 mutants, all killed.** Nothing outside Files. Open: items 193–
 |---|---|
 | **ID** | `P2-T13` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T09`, `P2-T10`, `P2-T11`, `P2-T36` |
+| **Depends on** | `P2-T09`, `P2-T10`, `P2-T11`, `P2-T36`, `P2-T38` |
 | **Blocks** | `P2-T16` |
 | **Retires** | `R-18` (this is the card that proves it) |
 | **Implements** | `FR-50` |
@@ -2945,7 +2946,7 @@ decision record's section 5 today; whether the run-time half is worth a card is 
 |---|---|
 | **ID** | `P2-T16` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18`, `P2-T29`, `P2-T30`, `P2-T31`, `P2-T34`, `P2-T35`, `P2-T36`, `P2-T37` |
+| **Depends on** | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18`, `P2-T29`, `P2-T30`, `P2-T31`, `P2-T34`, `P2-T35`, `P2-T36`, `P2-T37`, `P2-T38` |
 | **Blocks** | none |
 | **Retires** | `R-2`, `R-18` (closes them), `R-3` (fallback proven) |
 | **Implements** | `FR-9`, `FR-50`, `FR-51`, `NFR-2`, `NFR-6` |
@@ -5354,6 +5355,99 @@ green, the coordinator removes `continue-on-error` from the CI integration job a
 
 ---
 
+### P2-T38 — Merge a paper's reviews and versions (the DOI family)
+
+| Field | Value |
+|---|---|
+| **ID** | `P2-T38` |
+| **State** | `TODO` — built 2026-11-10, awaiting the coordinator's review; the report goes to `plan/reports/P2-T38.md`. |
+| **Depends on** | `P2-T09`, `P2-T10` |
+| **Blocks** | `P2-T13`, `P2-T16` |
+| **Retires** | `plan/00` §6 item 362(b) |
+| **Implements** | `FR-50` |
+| **Estimate** | 0.75 d |
+| **Human gate** | none |
+
+**Goal.** The eleven pairs the owner labelled "same paper" that the engine linked or flagged — nine
+reviewer reports, recommendations and an author response about one paper, and two pairs of
+F1000Research versions 1 and 2 — are merged, and Zotero receives the paper's own metadata.
+
+**Why this is a card.** Rule 9: Phase 2's recall condition is not met on the owner's sample (recall
+0.6765 over 34, `plan/reports/dedup-report-361.md`), and the owner chose on 2026-11-10 to change the
+engine rather than the labels or the condition (`plan/00` §6 item 362(b)).
+
+**Read first.**
+- `plan/00` §6 items 361 and 362; `plan/reports/dedup-report-361.md` (the eleven false negatives,
+  with both records).
+- `DOI_TIER`, `compareCandidates`, `guardTitleVerdict` and `TIER_CONFIDENCE` in
+  `src/sources/shared/dedupe.ts`; `docs/02` §11.3 and §11.4.
+- `canonicalOrder` and `merge` in `src/model/merge.ts`; `docs/07` §5.1 "Merge rules".
+- `mergeGroups` in `src/pipeline/searchImport/stages.ts` (the representative record of a group).
+- `candidatePairs` in `scripts/build-dedup-corpus.ts`: the corpus is the pairs the passes compare,
+  so a new comparison pass would change the fixture the owner labelled.
+
+**Files.** (rule 10 — callers named; everything changed is a pure function or a constant, so
+nothing is constructed)
+- modify `docs/02-literature-database-apis.md` §11.3 and §11.4, `docs/07-architecture-and-data-model.md`
+  §5.1 (first)
+- modify `src/model/ids.ts` (the DOI forms: `doiFamilyStem`, `sameDoiFamily`, `isReviewDocumentDoi`,
+  `isPerVersionReviewDoi`)
+- modify `src/sources/shared/dedupe.ts` (Tier 0's family key; F1000 reports across versions). Callers:
+  `dedupeAndMerge` and `dedupeAndMergeAsync` in `stages.ts` (called by `run` in
+  `searchImportPipeline.ts`), the seed step in `src/pipeline/related/seed.ts`, and `matchAgainstLibrary`'s
+  callers in `src/pipeline/recommend/score.ts` and `src/pipeline/related/relatedPipeline.ts` — all
+  unchanged, read only
+- modify `src/model/merge.ts` (a review document yields to its paper). Callers: `mergeGroups` in
+  `stages.ts` and `seed.ts`; `registerUI.ts` merges single records only
+- modify `src/pipeline/searchImport/stages.ts` (`mergeGroups`: the representative is the first record
+  that is not a review document) and the comment on `records` in `src/pipeline/searchImport/types.ts`
+- modify `test/unit/sources/dedupe.test.ts`, `test/unit/model/merge.test.ts`,
+  `test/unit/sources/dedupeLabelSample.test.ts` (its draw-day pin fails by design when the engine moves;
+  its own comment says to replace it with the moved-pair count)
+- read `scripts/dedup-report.ts`, `scripts/build-dedup-corpus.ts`, `test/fixtures/dedup/` — never write
+  a label, a reason or the sample
+
+**Do.**
+1. Document both rules in `docs/02` §11.3 (dated note), §11.4 (F1000 versions merge) and the merge
+   rule in `docs/07` §5.1, before the code.
+2. Tier 0: two different DOIs that reduce to one family stem match (`rule: "doi-family"`, 0.97).
+   Forms: eLife sub-articles, transparent peer review reports, Faculty Opinions recommendations,
+   F1000Research reports, F1000Research versions — only the forms in the corpus.
+3. Two F1000Research reports with different stems: no DOI conflict, titles compared without F1000's
+   `[version N; peer review: …]` note, every guard kept. Blocking unchanged.
+4. Merge: when a group holds the paper and review documents, every field but the two unions comes
+   from the paper's records, and the representative is the paper's record.
+5. Tests, including negatives: reviews of two papers under one journal prefix, F1000Research articles
+   with different base numbers, eLife version DOIs.
+6. Run both reports and list every engine outcome that changes across all 534 pairs.
+
+**Do NOT.**
+- Change any label, reason, the sample or `pairs.jsonl`; add a comparison pass (step 3's limit).
+- Merge an eLife reviewed preprint with its version of record, or any preprint-server record with its
+  journal version (gate `G-16`).
+- Tune anything by labels beyond the eleven pairs and the precision check.
+
+**Done when.**
+- [ ] All eleven pairs are *merged*; no pair labelled `not-duplicate` or `linked-version` is.
+- [ ] Every outcome that changes across the 534 pairs is listed, with each unlabelled newly merged pair's
+      titles and DOIs, for the owner.
+- [ ] Every group that holds no review document merges to a byte-identical work before and after.
+- [ ] `npm run typecheck`, `npm run lint:check`, `npx eslint .`, `npm run test`, `npm run build` exit 0;
+      three clean integration runs.
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npx eslint . && npm run test && npm run build
+npm run dedup:report && npx tsx scripts/dedup-report.ts --full --allow-partial
+npm run test:integration -- --exit-on-finish
+```
+
+**Notes.** Owner decision 2026-11-10 (`plan/00` §6 item 362(b)). A family pair whose titles fall in two
+different title blocks is not compared and so not merged; closing that needs a family pass in the
+engine and the same origin in `candidatePairs`, which changes the labelled fixture — the owner's call.
+
+---
+
 ## Estimate roll-up
 
 | Task | Title | Estimate (d) |
@@ -5395,7 +5489,8 @@ green, the coordinator removes `continue-on-error` from the CI integration job a
 | `P2-T35` | A 4xx body reaches the adapter for feed-bodied hosts | 0.25 |
 | `P2-T36` | Four owner-approved behaviour changes (CJK titles, PubMed filters, two-letter codes, window fixtures) | 0.75 |
 | `P2-T37` | A re-run finds a record that has no DOI and no PMID | 0.50 |
-| **Total** | **37 tasks** | **33.25 d** |
+| `P2-T38` | Merge a paper's reviews and versions (the DOI family) | 0.75 |
+| **Total** | **38 tasks** | **34.00 d** |
 
 **Reconciliation with `docs/11`, revised 2026-09-09 (second pass).** The relationship has been
 inverted since the first pass: `docs/11` §1's Phase 2 band is now *derived from* this sum rather

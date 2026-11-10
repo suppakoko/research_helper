@@ -6,7 +6,11 @@ import { OperationCancelledError } from "../../../src/core/errors";
 import { createCancellationTokenSource } from "../../../src/core/jobQueue/cancellation";
 import type { WorkType } from "../../../src/model/canonicalWork";
 import {
+  doiFamilyStem,
+  isPerVersionReviewDoi,
+  isReviewDocumentDoi,
   normalizeArxivId,
+  sameDoiFamily,
   type ArxivId,
   type Doi,
   type ExternalIds,
@@ -338,6 +342,379 @@ describe("Tier 0 — exact normalized DOI", () => {
     expect(d.verdict).toBe("distinct");
     expect(d.tier).toBeNull();
     expect(d.evidence["conflictingIds"]).toBe("doi");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P2-T38 — the documents of one paper are one work (owner, 2026-11-10,
+// plan/00 §6 item 362(b); docs/02 §11.3's note of that date). The DOIs and
+// titles are the corpus records of the eleven pairs the owner labelled.
+// ---------------------------------------------------------------------------
+
+const NK_TITLE =
+  "NK Cell Exhaustion in Wilson’s Disease Revealed by Single-cell RNA Sequencing Predicts the Prognosis of Cholecystitis";
+const ATLAS_TITLE =
+  "Spatial transcriptomics and single-nucleus RNA sequencing reveal a transcriptomic atlas of adult human spinal cord";
+const LEISH_TITLE =
+  "Gene editing and scalable functional genomic screening in Leishmania species using the CRISPR/Cas9 cytosine base editor toolbox LeishBASEedit";
+const ASHWA_V1 =
+  "Effects of Ashwagandha (Withania somnifera) standardized root extract on physical endurance and VO2max in healthy adults preforming resistance training: An eight-week, prospective, randomized, double-blind, placebo-controlled study";
+const ASHWA_V2 = ASHWA_V1.replace("preforming", "performing");
+const REPORT_V1 = `Peer Review Report For: ${ASHWA_V1} [version 1; peer review: 1 approved with reservations, 1 not approved]`;
+const REPORT_V2 = `Peer Review Report For: ${ASHWA_V2} [version 2; peer review: 1 approved, 2 approved with reservations]`;
+
+/** A Crossref record carrying one DOI, as the corpus's review records do. */
+function crossref(
+  doiText: string,
+  title: string,
+  year: number,
+  type: WorkType = "other",
+): SourceRecord {
+  return record({
+    source: "crossref",
+    id: doiText,
+    title,
+    year,
+    type,
+    ids: { doi: doi(doiText) },
+  });
+}
+
+describe("P2-T38 — the DOI forms of docs/02 §11.3's table", () => {
+  it.each([
+    ["10.7554/elife.98867.1.sa1", "10.7554/elife.98867", true, false],
+    ["10.7554/elife.85605.sa2", "10.7554/elife.85605", true, false],
+    [
+      "10.1111/2041-210x.14397/v1/review2",
+      "10.1111/2041-210x.14397",
+      true,
+      false,
+    ],
+    ["10.3410/f.740477161.793587507", "10.3410/f.740477161", true, false],
+    [
+      "10.5256/f1000research.143730.r200814",
+      "10.5256/f1000research.143730",
+      true,
+      true,
+    ],
+    [
+      "10.12688/f1000research.130932.2",
+      "10.12688/f1000research.130932",
+      false,
+      false,
+    ],
+  ])("%s reduces to %s", (text, stem, review, perVersion) => {
+    expect(doiFamilyStem(doi(text))).toBe(stem);
+    expect(isReviewDocumentDoi(doi(text))).toBe(review);
+    expect(isPerVersionReviewDoi(doi(text))).toBe(perVersion);
+  });
+
+  it.each([
+    // An eLife version DOI without `.sa` is deliberately not a form (G-16).
+    "10.7554/elife.98867.3",
+    "10.7554/elife.85605",
+    // The F1000 platform's sibling journals are not listed.
+    "10.12688/wellcomeopenres.17555.2",
+    "10.5256/wellcomeopenres.19349.r50001",
+    "10.1056/nejmoa2300709",
+  ])("%s is of no listed form", (text) => {
+    expect(doiFamilyStem(doi(text))).toBeUndefined();
+    expect(isReviewDocumentDoi(doi(text))).toBe(false);
+  });
+
+  it("a DOI of no listed form is its own stem; equal or absent DOIs are no family", () => {
+    expect(
+      sameDoiFamily(doi("10.7554/elife.85605"), doi("10.7554/elife.85605.sa2")),
+    ).toBe(true);
+    expect(
+      sameDoiFamily(
+        doi("10.1111/2041-210x.14397"),
+        doi("10.1111/2041-210x.14397/v1/review1"),
+      ),
+    ).toBe(true);
+    expect(
+      sameDoiFamily(
+        doi("10.7554/elife.85605.sa2"),
+        doi("10.7554/elife.85605.sa2"),
+      ),
+    ).toBe(false);
+    expect(sameDoiFamily(doi("10.7554/elife.85605.sa2"), undefined)).toBe(
+      false,
+    );
+    expect(
+      sameDoiFamily(doi("10.1056/nejmoa2300709"), doi("10.1056/nejmoa2300710")),
+    ).toBe(false);
+  });
+});
+
+describe("P2-T38 rule 1 — Tier 0's DOI family merges the reviews and versions of one paper", () => {
+  it.each([
+    [
+      "two eLife reviewer reports of one version (p-6caef4b71a46)",
+      crossref(
+        "10.7554/elife.92046.2.sa2",
+        `Reviewer #2 (Public Review): ${ATLAS_TITLE}`,
+        2024,
+      ),
+      crossref(
+        "10.7554/elife.92046.2.sa3",
+        `Reviewer #3 (Public Review): ${ATLAS_TITLE}`,
+        2024,
+      ),
+    ],
+    [
+      "one eLife reviewer across versions 1 and 3 (p-3a7cc467c9f3)",
+      crossref(
+        "10.7554/elife.98867.1.sa0",
+        `Reviewer #2 (Public Review): ${NK_TITLE}`,
+        2024,
+      ),
+      crossref(
+        "10.7554/elife.98867.3.sa1",
+        `Reviewer #2 (Public review): ${NK_TITLE.toLowerCase()}`,
+        2024,
+      ),
+    ],
+    [
+      "an eLife article and its author response (p-136a40c667ec)",
+      crossref("10.7554/elife.85605", LEISH_TITLE, 2023, "journal-article"),
+      crossref(
+        "10.7554/elife.85605.sa2",
+        `Author response: ${LEISH_TITLE}`,
+        2023,
+      ),
+    ],
+    [
+      "two transparent peer review reports of one article (p-940c511c1fe1)",
+      crossref(
+        "10.1111/2041-210x.14397/v1/review1",
+        'Review for "Pressure to publish introduces large‐language model risks"',
+        2024,
+      ),
+      crossref(
+        "10.1111/2041-210x.14397/v1/review2",
+        'Review for "Pressure to publish introduces large‐language model risks"',
+        2024,
+      ),
+    ],
+    [
+      "two Faculty Opinions recommendations of one article (p-5671166c13d8)",
+      crossref(
+        "10.3410/f.740477161.793587507",
+        "Faculty Opinions recommendation of Highly accurate protein structure prediction with AlphaFold.",
+        2021,
+        "dataset",
+      ),
+      crossref(
+        "10.3410/f.740477161.793587604",
+        "Faculty Opinions recommendation of Highly accurate protein structure prediction with AlphaFold.",
+        2021,
+        "dataset",
+      ),
+    ],
+    [
+      "two F1000Research reports on version 1 (p-f446658730ea)",
+      crossref("10.5256/f1000research.143730.r200814", REPORT_V1, 2023),
+      crossref("10.5256/f1000research.143730.r219543", REPORT_V1, 2023),
+    ],
+    [
+      "F1000Research versions 1 and 2 (p-770263a3b79f)",
+      crossref(
+        "10.12688/f1000research.130932.1",
+        ASHWA_V1,
+        2023,
+        "journal-article",
+      ),
+      crossref(
+        "10.12688/f1000research.130932.2",
+        ASHWA_V2,
+        2024,
+        "journal-article",
+      ),
+    ],
+    [
+      "F1000Research version 1 and Europe PMC's preprint record of version 2 (p-1714f98efd0e)",
+      crossref(
+        "10.12688/f1000research.130932.1",
+        ASHWA_V1,
+        2023,
+        "journal-article",
+      ),
+      record({
+        source: "europepmc",
+        id: "PPR/PPR834057",
+        title: ASHWA_V2,
+        year: 2024,
+        type: "preprint",
+        ids: { doi: doi("10.12688/f1000research.130932.2") },
+      }),
+    ],
+  ])("%s", (_, a, b) => {
+    for (const d of [compareRecords(a, b), compareRecords(b, a)]) {
+      expect(d).toMatchObject({
+        verdict: "match",
+        tier: "doi",
+        confidence: TIER_CONFIDENCE.doiFamily,
+      });
+      expect(d.evidence["rule"]).toBe("doi-family");
+    }
+    expect(dedupeRecords([a, b]).groups).toHaveLength(1);
+  });
+
+  it("names the family stem in the evidence", () => {
+    const d = compareRecords(
+      crossref(
+        "10.7554/elife.98867.1.sa1",
+        `Reviewer #1 (Public Review): ${NK_TITLE}`,
+        2024,
+      ),
+      crossref(
+        "10.7554/elife.98867.2.sa1",
+        `Reviewer #2 (Public review): ${NK_TITLE}`,
+        2024,
+      ),
+    );
+    expect(d.evidence["family"]).toBe("10.7554/elife.98867");
+  });
+
+  it("does not merge the reviews of two different eLife papers, even under one title (negative)", () => {
+    // One journal DOI prefix, two articles: the stems differ, the DOI
+    // conflict stands (§11.5 rule 1), so an identical title is a link.
+    const a = crossref(
+      "10.7554/elife.92046.2.sa2",
+      `Reviewer #2 (Public Review): ${ATLAS_TITLE}`,
+      2024,
+    );
+    const b = crossref(
+      "10.7554/elife.98867.1.sa0",
+      `Reviewer #2 (Public Review): ${ATLAS_TITLE}`,
+      2024,
+    );
+    const d = compareRecords(a, b);
+    expect(d.verdict).toBe("link");
+    expect(d.evidence["conflictingIds"]).toBe("doi");
+    expect(dedupeRecords([a, b]).groups).toHaveLength(2);
+    const other = crossref(
+      "10.7554/elife.98867.1.sa1",
+      `Reviewer #1 (Public Review): ${NK_TITLE}`,
+      2024,
+    );
+    expect(compareRecords(a, other).verdict).not.toBe("match");
+  });
+
+  it("does not merge the reviews of two different articles of one Wiley journal (negative)", () => {
+    const a = crossref(
+      "10.1002/eng2.12854/v1/review1",
+      'Review for "Preserving node similarity adversarial learning graph representation with graph neural network"',
+      2023,
+    );
+    const b = crossref(
+      "10.1002/eng2.12999/v1/review1",
+      'Review for "Preserving node similarity adversarial learning graph representation with graph neural network"',
+      2023,
+    );
+    expect(compareRecords(a, b).verdict).toBe("link");
+    expect(dedupeRecords([a, b]).groups).toHaveLength(2);
+  });
+
+  it("does not merge F1000Research articles with different base numbers (negative)", () => {
+    const a = crossref(
+      "10.12688/f1000research.130932.1",
+      ASHWA_V1,
+      2023,
+      "journal-article",
+    );
+    const b = crossref(
+      "10.12688/f1000research.131344.2",
+      ASHWA_V1,
+      2023,
+      "journal-article",
+    );
+    const d = compareRecords(a, b);
+    expect(d.verdict).toBe("link");
+    expect(d.evidence["conflictingIds"]).toBe("doi");
+    expect(dedupeRecords([a, b]).groups).toHaveLength(2);
+  });
+
+  it("leaves two eLife version DOIs to §11.4's handling: no family without `.sa`", () => {
+    const a = crossref("10.7554/elife.98867.1", NK_TITLE, 2024, "preprint");
+    const b = crossref(
+      "10.7554/elife.98867.3",
+      NK_TITLE,
+      2024,
+      "journal-article",
+    );
+    const d = compareRecords(a, b);
+    expect(d.verdict).not.toBe("match");
+    expect(d.evidence["rule"]).not.toBe("doi-family");
+  });
+
+  it("joins an article, its reviews and its author response into one group, whatever the input order", () => {
+    const records = [
+      crossref(
+        "10.7554/elife.85605.sa2",
+        `Author response: ${LEISH_TITLE}`,
+        2023,
+      ),
+      crossref("10.7554/elife.85605", LEISH_TITLE, 2023, "journal-article"),
+      crossref(
+        "10.7554/elife.85605.sa1",
+        `Decision letter: ${LEISH_TITLE}`,
+        2023,
+      ),
+      crossref(
+        "10.7554/elife.92046.2.sa2",
+        `Reviewer #2 (Public Review): ${ATLAS_TITLE}`,
+        2024,
+      ),
+    ];
+    for (const order of [records, [...records].reverse()]) {
+      const sizes = dedupeRecords(order)
+        .groups.map((g) => g.records.length)
+        .sort();
+      expect(sizes).toEqual([1, 3]);
+    }
+  });
+});
+
+describe("P2-T38 rule 2 — F1000Research reports on two versions are compared on the article's title", () => {
+  it("merges the version 1 and version 2 reports of one article (p-f581335f8a55)", () => {
+    const a = crossref("10.5256/f1000research.143730.r200814", REPORT_V1, 2023);
+    const b = crossref("10.5256/f1000research.163630.r264045", REPORT_V2, 2024);
+    for (const d of [compareRecords(a, b), compareRecords(b, a)]) {
+      expect(d).toMatchObject({ verdict: "match", tier: "title-fuzzy" });
+      expect(d.evidence["peerReviewReportsAcrossVersions"]).toBe(true);
+      expect(d.evidence["conflictingIds"]).toBeUndefined();
+    }
+    expect(dedupeRecords([a, b]).groups).toHaveLength(1);
+  });
+
+  it("reads the full titles for any other pair: the same two titles under article DOIs stay a flag", () => {
+    // Without rule 2 the version note keeps the pair under 0.95 (the corpus
+    // measured 0.907 before P2-T38), and the DOIs conflict.
+    const a = crossref("10.1234/one", REPORT_V1, 2023);
+    const b = crossref("10.1234/two", REPORT_V2, 2024);
+    expect(compareRecords(a, b).verdict).toBe("flag");
+  });
+
+  it("does not merge reports on two different articles (negative)", () => {
+    const a = crossref("10.5256/f1000research.143730.r200814", REPORT_V1, 2023);
+    const b = crossref(
+      "10.5256/f1000research.163631.r264046",
+      `Peer Review Report For: Effect of topical Zingiber cassumunar on painful diabetic neuropathy: a double-blind randomized-controlled trial [version 2; peer review: 2 approved]`,
+      2024,
+    );
+    const d = compareRecords(a, b);
+    expect(d.verdict).toBe("distinct");
+    expect(dedupeRecords([a, b]).groups).toHaveLength(2);
+  });
+
+  it("keeps every title guard: a version-2 report of a part II is not the part I's", () => {
+    const partOne = `Peer Review Report For: Regional risk assessment of coastal flooding in three estuaries Part I [version 1; peer review: 2 approved]`;
+    const partTwo = `Peer Review Report For: Regional risk assessment of coastal flooding in three estuaries Part II [version 2; peer review: 2 approved]`;
+    const a = crossref("10.5256/f1000research.111111.r1", partOne, 2023);
+    const b = crossref("10.5256/f1000research.222222.r2", partTwo, 2023);
+    expect(compareRecords(a, b).verdict).toBe("distinct");
   });
 });
 
@@ -1063,7 +1440,9 @@ describe("§11.5 under rule 1 — a shared Tier 1–4 id across conflicting DOIs
         }),
       );
       // What Tier 0 leaves behind when the DOIs are equal: no conflict.
-      expect(run.run(a, b, { conflicts: [] })).toMatchObject({
+      expect(
+        run.run(a, b, { conflicts: [], reportsAcrossVersions: false }),
+      ).toMatchObject({
         verdict: "match",
         tier,
       });
