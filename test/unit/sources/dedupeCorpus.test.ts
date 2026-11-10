@@ -173,18 +173,41 @@ describe("the committed corpus is what the builder makes from the committed fixt
   });
 
   // Measured 2026-10-16 after `P2-T13` Part B's targeted recording (Part A:
-  // 296 / 47 / 40; Part B's first recording: 898 / 438 / 352).
-  it("pins today's measured size: 1058 records, 534 pairs, 430 of them compared by the cascade", () => {
+  // 296 / 47 / 40; Part B's first recording: 898 / 438 / 352). Updated
+  // 2026-11-10 (`P2-T39`, plan/00 §6 item 366(b)): the DOI-family pass adds
+  // 18 pairs, all compared by the cascade (534 / 430 before).
+  it("pins today's measured size: 1058 records, 552 pairs, 448 of them compared by the cascade", () => {
     expect(built.corpus.records).toHaveLength(1058);
-    expect(built.rows).toHaveLength(534);
-    expect(built.rows.filter((r) => r.engineCompares)).toHaveLength(430);
-    expect(committedRows).toHaveLength(534);
+    expect(built.rows).toHaveLength(552);
+    expect(built.rows.filter((r) => r.engineCompares)).toHaveLength(448);
+    expect(committedRows).toHaveLength(552);
+  });
+
+  // `P2-T39` (plan/00 §6 item 366(b)): 52 pairs are one paper's documents by
+  // DOI family. 34 were already in the corpus through a title block; 18 are
+  // found only by the DOI-family pass, and all 18 entered unlabelled.
+  it("pins the DOI-family pairs: 52, of which 18 only the DOI-family pass finds, all unlabelled", () => {
+    const family = committedRows.filter((r) =>
+      r.origins.includes("doi-family"),
+    );
+    expect(family).toHaveLength(52);
+    const only = family.filter((r) => r.origins.length === 1);
+    expect(only).toHaveLength(18);
+    expect(only.every((r) => r.label === "" && r.reason === "")).toBe(true);
+    expect(only.every((r) => r.engineCompares && r.labelSet)).toBe(true);
+    expect(
+      family
+        .filter((r) => r.origins.length > 1)
+        .every((r) => r.origins.join(" ") === "block doi-family"),
+    ).toBe(true);
   });
 
   // Measured 2026-10-16 after the targeted recording and the narrowed
   // short-title cluster (plan/00 §6 items 223 and 226; before: 169 of 438).
-  it("pins the label set: 267 of 534 pairs, 267 sampled out of the two clusters", () => {
-    expect(committedRows.filter((r) => r.labelSet)).toHaveLength(267);
+  // Updated 2026-11-10 (`P2-T39`): the 18 DOI-family pairs are in the label
+  // set (267 of 534 before); the sampled-out 267 are unchanged.
+  it("pins the label set: 285 of 552 pairs, 267 sampled out of the two clusters", () => {
+    expect(committedRows.filter((r) => r.labelSet)).toHaveLength(285);
     expect(committedRows.filter((r) => !r.labelSet)).toHaveLength(267);
     expect(
       committedRows.filter((r) => r.labelSet && r.a.source !== r.b.source),
@@ -733,7 +756,7 @@ describe("the label set (plan/00 §6 item 223)", () => {
         .map((r) => r.pairId)
         .sort(),
     );
-    expect(parseJsonl(built.files[PAIRS_FILE] ?? "")).toHaveLength(534);
+    expect(parseJsonl(built.files[PAIRS_FILE] ?? "")).toHaveLength(552);
   });
 
   it("the report counts a row without labelSet as in the set, and names what was sampled out", () => {
@@ -803,10 +826,10 @@ describe("scripts/dedup-report.ts", () => {
       expect(code).toBe(1);
       const said = String(err.mock.calls[0]?.[0]);
       expect(said).toMatch(
-        /is not fully labelled: 207 of 267 label-set pairs have no label/u,
+        /is not fully labelled: 225 of 285 label-set pairs have no label/u,
       );
       expect(said).toContain(
-        "Sampled out of the label set (owner, 2026-10-16): 267 of 534 pairs, " +
+        "Sampled out of the label set (owner, 2026-10-16): 267 of 552 pairs, " +
           "not measured (scotland-reports 211, short-title-crossref 56)",
       );
     } finally {

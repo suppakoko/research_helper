@@ -933,3 +933,185 @@ describe("a review document yields to its paper (P2-T38)", () => {
     expect(result.deduplicatedAwayBySource).toEqual({ crossref: 1 });
   });
 });
+
+// ---------------------------------------------------------------------------
+// P2-T39 — the newest F1000Research version wins the DOI and the date
+// (docs/07 §5.1's note of 2026-11-10, owner, plan/00 §6 item 366(c)). The
+// records are the corpus's four of F1000Research 130932.
+// ---------------------------------------------------------------------------
+
+describe("the newest F1000Research version wins the DOI and the date (P2-T39)", () => {
+  const V1 = "10.12688/f1000research.130932.1";
+  const V2 = "10.12688/f1000research.130932.2";
+  const V3 = "10.12688/f1000research.130932.3";
+  const ASHWA =
+    "Effects of Ashwagandha (Withania somnifera) standardized root extract on physical endurance and VO2max in healthy adults performing resistance training";
+  const version = (
+    source: SourceId,
+    nativeId: string,
+    doiText: string,
+    date: { year: number; month: number; day: number },
+    extra: Partial<Spec> = {},
+  ): SourceRecord =>
+    record({
+      source,
+      nativeId,
+      title: ASHWA,
+      date,
+      ids: { doi: doi(doiText), ...extra.ids },
+      ...(extra.type !== undefined && { type: extra.type }),
+      ...(extra.title !== undefined && { title: extra.title }),
+    });
+  const corpusFour = (): SourceRecord[] => [
+    version("crossref", V1, V1, { year: 2023, month: 3, day: 24 }),
+    version("crossref", V2, V2, { year: 2024, month: 4, day: 8 }),
+    version(
+      "europepmc",
+      "PPR/PPR834057",
+      V2,
+      { year: 2024, month: 4, day: 8 },
+      { type: "preprint" },
+    ),
+    version(
+      "pubmed",
+      "38988644",
+      V2,
+      { year: 2024, month: 7, day: 11 },
+      { ids: { pmid: pmid("38988644") }, title: `${ASHWA}.` },
+    ),
+  ];
+
+  it("takes version 2's DOI and date, keeps version 1's DOI as a conflict, in every input order", () => {
+    const works = new Set<string>();
+    for (const order of permutations(corpusFour())) {
+      const { work, conflicts } = merge(order, AT);
+      expect(work.ids.doi).toBe(V2);
+      expect(work.workKey).toBe(`doi:${V2}`);
+      expect(work.ids.pmid).toBe("38988644");
+      // The earliest complete date among version 2's records.
+      expect(work.publishedDate?.iso).toBe("2024-04-08");
+      expect(conflicts).toEqual([
+        {
+          field: "ids.doi",
+          kept: V2,
+          keptFrom: "crossref",
+          rejected: [{ value: V1, sourceId: "crossref" }],
+        },
+      ]);
+      works.add(JSON.stringify(work));
+    }
+    expect(works.size).toBe(1);
+  });
+
+  it("takes the highest version of three, listing the other two as conflicts", () => {
+    const three = [
+      version("crossref", V3, V3, { year: 2025, month: 1, day: 5 }),
+      version("crossref", V1, V1, { year: 2023, month: 3, day: 24 }),
+      version("crossref", V2, V2, { year: 2024, month: 4, day: 8 }),
+    ];
+    for (const order of permutations(three)) {
+      const { work, conflicts } = merge(order, AT);
+      expect(work.ids.doi).toBe(V3);
+      expect(work.publishedDate?.iso).toBe("2025-01-05");
+      expect(conflicts[0]?.rejected.map((r) => r.value).sort()).toEqual([
+        V1,
+        V2,
+      ]);
+    }
+  });
+
+  it("falls back to every record's dates when the newest version's records carry none", () => {
+    const v1 = version("crossref", V1, V1, { year: 2023, month: 3, day: 24 });
+    const v2 = record({
+      source: "crossref",
+      nativeId: V2,
+      title: ASHWA,
+      ids: { doi: doi(V2) },
+    });
+    const { work } = merge([v2, v1], AT);
+    expect(work.ids.doi).toBe(V2);
+    expect(work.publishedDate?.iso).toBe("2023-03-24");
+  });
+
+  it("leaves a group of one version alone: several records of version 2 merge as before", () => {
+    const [, two, epmc, pubmed] = corpusFour();
+    if (two === undefined || epmc === undefined || pubmed === undefined) {
+      throw new Error("fixture");
+    }
+    const { work, conflicts } = merge([pubmed, epmc, two], AT);
+    expect(work.ids.doi).toBe(V2);
+    expect(conflicts).toEqual([]);
+    expect(work.publishedDate?.iso).toBe("2024-04-08");
+    // A record with no DOI still competes for the date: one version is no
+    // set of versions, so the ordinary earliest-date rule applies.
+    const noDoi = record({
+      source: "semanticscholar",
+      nativeId: "s2-ashwa",
+      title: ASHWA,
+      date: { year: 2024, month: 1, day: 2 },
+      ids: { pmid: pmid("38988644") },
+    });
+    expect(merge([two, noDoi], AT).work.publishedDate?.iso).toBe("2024-01-02");
+  });
+
+  it("takes the online date from the newest version too", () => {
+    const online = (
+      nativeId: string,
+      doiText: string,
+      date: { year: number; month: number; day: number },
+    ): SourceRecord => {
+      const base = record({
+        source: "crossref",
+        nativeId,
+        title: ASHWA,
+        ids: { doi: doi(doiText) },
+      });
+      return {
+        ...base,
+        work: { ...base.work, onlineDate: { ...date, iso: iso(date) } },
+      };
+    };
+    for (const order of permutations([
+      online(V1, V1, { year: 2023, month: 3, day: 1 }),
+      online(V2, V2, { year: 2024, month: 4, day: 1 }),
+    ])) {
+      expect(merge(order, AT).work.onlineDate?.iso).toBe("2024-04-01");
+    }
+  });
+
+  it("does not apply to versions of two different F1000Research articles in one group (negative)", () => {
+    const a = version("crossref", V1, V1, { year: 2023, month: 3, day: 24 });
+    const b = version(
+      "crossref",
+      "10.12688/f1000research.131344.2",
+      "10.12688/f1000research.131344.2",
+      { year: 2024, month: 1, day: 1 },
+    );
+    const c = version("crossref", V2, V2, { year: 2024, month: 4, day: 8 });
+    // Two versions of 130932 and one of 131344: "newest" names no article.
+    for (const order of permutations([a, b, c])) {
+      const { work } = merge(order, AT);
+      // The ordinary policy: the first DOI in canonical order, the earliest date.
+      expect(work.ids.doi).toBe(V1);
+      expect(work.publishedDate?.iso).toBe("2023-03-24");
+    }
+  });
+
+  it("does not apply to eLife versions: the version of record and a reviewed preprint merge by the ordinary policy (negative)", () => {
+    const vor = record({
+      source: "crossref",
+      nativeId: "10.7554/elife.98867",
+      date: { year: 2025, month: 2, day: 1 },
+      ids: { doi: doi("10.7554/elife.98867") },
+    });
+    const rp = record({
+      source: "crossref",
+      nativeId: "10.7554/elife.98867.3",
+      date: { year: 2024, month: 6, day: 1 },
+      ids: { doi: doi("10.7554/elife.98867.3") },
+    });
+    const { work } = merge([vor, rp], AT);
+    expect(work.ids.doi).toBe("10.7554/elife.98867");
+    expect(work.publishedDate?.iso).toBe("2024-06-01");
+  });
+});

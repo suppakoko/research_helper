@@ -246,11 +246,27 @@ describe("test/fixtures/dedup/label-sample.json", () => {
     });
   });
 
-  it("re-derives byte for byte from its own seed and population, and its population is today's label set", () => {
+  // Updated 2026-11-10 (`P2-T39`, plan/00 §6 item 366(b)): the DOI-family
+  // pass added 18 pairs to the label set after the draw. The sample is not
+  // redrawn here (item 366(a) draws ten more pairs, by the owner's method,
+  // after this card), so its population is today's label set less exactly
+  // those 18 — each found only by the DOI-family pass, and unlabelled.
+  it("re-derives byte for byte from its own seed and population, and its population is today's label set less the 18 P2-T39 pairs", () => {
+    const population = new Set(committedSample.population.map((p) => p.pairId));
+    const added = committedRows.filter(
+      (r) => inLabelSet(r) && !population.has(r.pairId),
+    );
+    expect(added).toHaveLength(18);
+    for (const r of added) {
+      expect(r.origins, r.pairId).toEqual(["doi-family"]);
+      expect(r.label, r.pairId).toBe("");
+    }
     expect(
       checkLabelSample(
         committedSample,
-        committedRows.filter(inLabelSet).map((r) => r.pairId),
+        committedRows
+          .filter((r) => inLabelSet(r) && population.has(r.pairId))
+          .map((r) => r.pairId),
       ),
     ).toEqual([]);
     expect(serializeLabelSample(committedSample)).toBe(committedSampleText);

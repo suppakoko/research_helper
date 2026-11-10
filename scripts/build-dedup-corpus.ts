@@ -98,6 +98,7 @@ import {
   parseSearchBody,
 } from "../src/sources/semanticscholar/semanticscholarSource";
 import {
+  doiFamilyPairs,
   ID_KINDS,
   MAX_YEAR_DELTA,
   toCandidate,
@@ -645,7 +646,7 @@ function compareStrings(a: string, b: string): number {
 // ---------------------------------------------------------------------------
 
 /**
- * Why a pair is in the corpus. The first five are the pair sources of
+ * Why a pair is in the corpus. The first six are the pair sources of
  * `dedupeCascade` in `src/sources/shared/dedupe.ts` — the pairs the shipped
  * cascade compares. The last two are pairs the cascade **never** compares,
  * included so that a true duplicate blocking misses is in the corpus and
@@ -654,6 +655,9 @@ function compareStrings(a: string, b: string): number {
  * - `id:<kind>` — the two records share that identifier (identifier pass).
  * - `accession` — the two share a bioRxiv/medRxiv accession (identifier pass).
  * - `version-link` — one names the other in `relatedVersionIds` (`P2-T11`).
+ * - `doi-family` — the two DOIs are one paper's by `sameDoiFamily`
+ *   (identifier pass, `doiFamilyPairs`; owner, 2026-11-10, `plan/00` §6
+ *   item 366(b), `P2-T39`), whatever their titles and years.
  * - `block` — same title signature, years within {@link MAX_YEAR_DELTA} or
  *   unknown (blocking pass, `docs/02` §11.3.3).
  * - `block-year-gap` — same title signature, years further apart than
@@ -667,6 +671,7 @@ export type PairOrigin =
   | `id:${keyof NormalizedIds}`
   | "accession"
   | "version-link"
+  | "doi-family"
   | "block"
   | "block-year-gap"
   | "short-title-identical";
@@ -676,6 +681,7 @@ export const ENGINE_ORIGINS: ReadonlySet<PairOrigin> = new Set<PairOrigin>([
   ...ID_KINDS.map((k): PairOrigin => `id:${k}`),
   "accession",
   "version-link",
+  "doi-family",
   "block",
 ]);
 
@@ -719,6 +725,7 @@ function pushInto<K>(map: Map<K, number[]>, key: K, value: number): void {
  *
  * Built from the cascade's exported pieces — {@link toCandidate} (its
  * normalized ids, accession, title signature and year), {@link ID_KINDS},
+ * {@link doiFamilyPairs},
  * {@link yearDelta} and {@link MAX_YEAR_DELTA} — so a change to blocking moves
  * the candidate set with it.
  *
@@ -778,6 +785,9 @@ export function candidatePairs(
       for (const j of byOwnId.get(key) ?? []) add(i, j, "version-link");
     }
   });
+
+  // DOI families: every two records whose DOIs are one paper's (P2-T39).
+  for (const [i, j] of doiFamilyPairs(candidates)) add(i, j, "doi-family");
 
   // Blocking pass: one bucket per title signature, split by year tolerance.
   const bySignature = new Map<string, number[]>();
@@ -1486,7 +1496,9 @@ export function buildRows(
       return 0;
     if (r.origins.includes("version-link")) return 1;
     if (r.origins.includes("block")) return 2;
-    return 3;
+    // After `block`, so a pair the DOI-family pass also finds keeps its place.
+    if (r.origins.includes("doi-family")) return 3;
+    return 4;
   };
   return [...rows].sort(
     (x, y) =>

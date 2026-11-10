@@ -51,9 +51,11 @@ import type {
   WorkType,
 } from "./canonicalWork";
 import {
+  articleVersionOf,
   buildWorkKey,
   isReviewDocumentDoi,
   SOURCE_IDS,
+  type Doi,
   type ExternalIds,
   type SourceId,
 } from "./ids";
@@ -281,6 +283,35 @@ function canonicalOrder(records: readonly SourceRecord[]): SourceRecord[] {
     if (byRank !== 0) return byRank;
     return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
   });
+}
+
+/**
+ * The newest F1000Research version's DOI when `ordered` holds two or more
+ * versions of one article (`articleVersionOf`), else `undefined`.
+ * `docs/07` §5.1's note of 2026-11-10 (owner, `plan/00` §6 item 366(c)):
+ * the newest version — the highest version number in the DOI — wins the DOI
+ * and the date, and the other versions' DOIs stay in `ids` as conflicts.
+ * Versions of two different articles in one group are left to the ordinary
+ * policy, since "newest" then names no single article.
+ */
+export function newestArticleVersionDoi(
+  ordered: readonly SourceRecord[],
+): Doi | undefined {
+  let stem: string | undefined;
+  let newest: { readonly doi: Doi; readonly version: number } | undefined;
+  const seen = new Set<Doi>();
+  for (const record of ordered) {
+    const doi = record.work.ids.doi;
+    const version = articleVersionOf(doi);
+    if (doi === undefined || version === undefined) continue;
+    if (stem === undefined) stem = version.stem;
+    else if (stem !== version.stem) return undefined;
+    seen.add(doi);
+    if (newest === undefined || version.version > newest.version) {
+      newest = { doi, version: version.version };
+    }
+  }
+  return seen.size >= 2 ? newest?.doi : undefined;
 }
 
 /** Who supplied a value: the record and the value, for the pickers. */
@@ -520,9 +551,16 @@ function unionSubjects(ordered: readonly SourceRecord[]): readonly Subject[] {
  * becomes an {@link IdConflict} and **nothing is overwritten**. `url` is a
  * locator, not an identifier: first wins, differences are not conflicts.
  *
+ * With `preferredDoi` ({@link newestArticleVersionDoi}), the records carrying
+ * that DOI are read first for `doi` only, so it is the DOI kept and every
+ * other version's DOI is a conflict; every other identifier is unchanged.
+ *
  * @returns the union, the conflicts, and which source supplied each kept id
  */
-function unionIds(ordered: readonly SourceRecord[]): {
+function unionIds(
+  ordered: readonly SourceRecord[],
+  preferredDoi?: Doi,
+): {
   readonly ids: ExternalIds;
   readonly conflicts: readonly IdConflict[];
   readonly origin: ReadonlyMap<IdKey, SourceId>;
@@ -532,8 +570,15 @@ function unionIds(ordered: readonly SourceRecord[]): {
   const rejected = new Map<IdKey, { value: string; sourceId: SourceId }[]>();
   const supplierCount = new Map<IdKey, number>();
   let url: string | undefined;
-  for (const record of ordered) {
-    for (const key of ID_KEYS) {
+  const doiFirst =
+    preferredDoi === undefined
+      ? ordered
+      : [
+          ...ordered.filter((r) => r.work.ids.doi === preferredDoi),
+          ...ordered.filter((r) => r.work.ids.doi !== preferredDoi),
+        ];
+  for (const key of ID_KEYS) {
+    for (const record of key === "doi" ? doiFirst : ordered) {
       const value = record.work.ids[key];
       if (value === undefined) continue;
       supplierCount.set(key, (supplierCount.get(key) ?? 0) + 1);
@@ -547,6 +592,8 @@ function unionIds(ordered: readonly SourceRecord[]): {
         else list.push(entry);
       }
     }
+  }
+  for (const record of ordered) {
     if (url === undefined) url = nonEmpty(record.work.ids.url);
   }
   const ids: Record<string, string> = {};
@@ -604,6 +651,15 @@ function unionIds(ordered: readonly SourceRecord[]): {
  * `provenance.recordIds` and `seenIn` still name every record. A group of
  * review documents only, or with none, is combined over all its records.
  *
+ * **The newest F1000Research version wins the DOI and the date** (`docs/07`
+ * §5.1's note of 2026-11-10, owner, `plan/00` §6 item 366(c)). When the
+ * paper's records carry two or more versions of one F1000Research article
+ * ({@link newestArticleVersionDoi}), `ids.doi` is the newest version's and
+ * the others are {@link IdConflict}s, and `publishedDate` and `onlineDate`
+ * are picked by their usual rules from the newest version's records (from all
+ * the paper's records when those supply none). Every other field keeps its
+ * rule.
+ *
  * @param records - one dedup group, in any order; at least one
  * @param normalizedAtEpochMs - the caller's clock reading for the rebuild
  * @returns the merged work and every identifier conflict found on the way
@@ -640,7 +696,13 @@ export function merge(
   const count = <T>(read: (w: SourceRecord["work"]) => T | undefined): number =>
     suppliers(ordered, read).length;
 
-  const { ids, conflicts, origin, supplierCount } = unionIds(all);
+  const newestDoi = newestArticleVersionDoi(ordered);
+  /** The records the date fields are picked from: the newest version's, if any. */
+  const datePool =
+    newestDoi === undefined
+      ? ordered
+      : ordered.filter((record) => record.work.ids.doi === newestDoi);
+  const { ids, conflicts, origin, supplierCount } = unionIds(all, newestDoi);
   for (const key of ID_KEYS) {
     const from = origin.get(key);
     if (from !== undefined && (supplierCount.get(key) ?? 0) >= 2) {
@@ -663,12 +725,11 @@ export function merge(
   const issn = pickVenue(ordered, (w) =>
     w.issn === undefined || w.issn.length === 0 ? undefined : w.issn,
   );
-  const publishedDate = pickPublishedDate(ordered);
-  const onlineDate = pickFirst(
-    ordered,
-    DEFAULT_PRECEDENCE,
-    (w) => w.onlineDate,
-  );
+  const publishedDate =
+    pickPublishedDate(datePool) ?? pickPublishedDate(ordered);
+  const onlineDate =
+    pickFirst(datePool, DEFAULT_PRECEDENCE, (w) => w.onlineDate) ??
+    pickFirst(ordered, DEFAULT_PRECEDENCE, (w) => w.onlineDate);
   const language = pickFirst(ordered, DEFAULT_PRECEDENCE, (w) =>
     nonEmpty(w.language),
   );

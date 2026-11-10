@@ -2500,6 +2500,34 @@ Precedence is a single exported constant so it can be tuned in one place and uni
 > a conflict. Groups of ordinary journal articles are unaffected: over the 534-pair corpus all 940
 > groups whose members did not change give byte-identical merged works before and after `P2-T38`.
 > Whether the newest version should win instead is the owner's to decide (`plan/reports/P2-T38.md`).
+> *(b) was replaced later the same day by the owner's decision below; (a) stands.*
+>
+> **Decided 2026-11-10 (owner, `plan/00` §6 item 366(c); `plan/03` `P2-T39`): when F1000Research
+> versions merge, the newest version wins the DOI and the date.** It replaces outcome (b) of the
+> coordinator's note above. When a group's paper records (the records that are not review documents)
+> carry two or more F1000Research article-version DOIs of one article
+> (`10.12688/f1000research.<article>.<version>`; `articleVersionOf` in `src/model/ids.ts`), the newest
+> version is the one with the highest version number in its DOI (`newestArticleVersionDoi` in
+> `src/model/merge.ts`). Then `ids.doi` is the newest version's DOI and every other version's DOI is
+> kept in `ids` as a conflict; `publishedDate` and `onlineDate` are combined by their usual rules
+> (earliest complete date; first defined value) from the records that carry the newest version's DOI,
+> and from all the paper records when those supply none. Every other field keeps the table's rule —
+> the title is still the longest, the PMID still the first holder's — and `workKey` follows the DOI.
+> Versions of two different F1000Research articles in one group, and every other DOI, are combined
+> exactly as before.
+>
+> **DECIDED 2026-11-10 (coordinator, under item 313):** "newest" is read from the DOI's version
+> number, not from the dates, because the number is the publisher's own order and is present on every
+> record that carries the DOI, while the dates differ by source; "the date" is both date fields, so
+> that the item's publication and online dates name one version; the rule applies only when every
+> F1000Research version DOI in the group is of one article, since "newest" otherwise names none.
+>
+> *Measured the same day (`P2-T39`, `plan/reports/P2-T39.md`):* on the corpus, F1000Research 130932's
+> four records (Crossref versions 1 and 2, Europe PMC's preprint record of version 2, PubMed's version 2)
+> now give DOI `10.12688/f1000research.130932.2`, date 2024-04-08 (was version 1's DOI and 2023-03-24),
+> with version 1's DOI as the one conflict; title, PMID and PMCID are unchanged. That is the only merged
+> work that changes: all 932 record groups with no member of a listed DOI form give byte-identical
+> merged works before and after.
 
 ### 5.2 Analysis artifacts
 

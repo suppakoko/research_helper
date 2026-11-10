@@ -2610,7 +2610,9 @@ Tier 7  Known preprint↔published link               → LINK, not merge (§11.
 > already compare it (a shared identifier, a version naming, or one title block), so the candidate
 > pairs of `scripts/build-dedup-corpus.ts`, from which the owner's sample was drawn, are unchanged.
 > A family pair whose titles fall in two different blocks is still not compared — a missed merge,
-> the lesser failure (`docs/11` R-18). **Which record's fields win** in such a group is `docs/07`
+> the lesser failure (`docs/11` R-18). *Superseded later on 2026-11-10 by the owner (`plan/00` §6
+> item 366(b)): a comparison pass by DOI family now compares such a pair — the next note.*
+> **Which record's fields win** in such a group is `docs/07`
 > §5.1's merge rule of the same day: a review document yields to its article.
 >
 > *Measured the same day (`P2-T38`, `plan/reports/P2-T38.md`):* on the owner's sample all eleven
@@ -2620,6 +2622,48 @@ Tier 7  Known preprint↔published link               → LINK, not merge (§11.
 > error-free recall needs to confirm 0.90. Over all 534 corpus pairs 38 outcomes change, every one
 > of them to *merged* (32 from linked, 6 from flagged): the 11 labelled pairs and 27 unlabelled
 > pairs among the same papers' reviews, recommendations and versions.
+
+> **Decided 2026-11-10 (owner, `plan/00` §6 item 366(b)): a comparison pass by DOI family.**
+> `P2-T38` measured that blocking left some documents of one paper uncompared, because their titles
+> start differently ("Editor's evaluation: …", "Reviewer #1 (Public Review): …", "eLife Assessment:
+> …") and so fall into different title blocks: eLife 85605's editor's evaluation stayed alone, eLife
+> 92046's assessment stayed outside its reviews' group, and eLife 98867's reviewer reports and
+> assessments stayed two groups (`plan/reports/P2-T38.md` §9 item 1). The owner chose to add the pass.
+>
+> - **The pass.** The identifier pass of `dedupeRecords` (the pass before §11.3.3's blocking) gains a
+>   DOI-family key after the bioRxiv accession: every two records whose DOIs are one paper's by rule 1 of the note above
+>   (`sameDoiFamily`: different DOIs with one family stem, at least one of a listed form) are
+>   compared, whatever their titles and years, as records sharing any identifier are
+>   (`doiFamilyPairs` in `src/sources/shared/dedupe.ts`, called by `dedupeRecords`). No DOI form is
+>   added (item 366(d)): the five of rule 1's table are the whole list, so an eLife version DOI without
+>   `.sa` and the DOIs of two different papers under one prefix are never paired by it.
+> - **It only proposes pairs.** The cascade decides each one (Tier 0's `doi-family` rule), the pairs
+>   already in one group are skipped as in every pass, and the group-level check of §11.5 under rule 1
+>   still splits a group that would join a preprint to the version it names. Two F1000Research reports
+>   on different versions have different stems, so this pass does not pair them; rule 2 above still
+>   compares them when blocking does.
+> - **The corpus follows the engine.** `candidatePairs` in `scripts/build-dedup-corpus.ts` gains the
+>   origin `doi-family` from the same function, so the corpus still holds every pair the engine
+>   compares. A pair the pass finds that was already in the corpus keeps its id, records, label and
+>   place and gains the origin; a new pair enters unlabelled, in the label set unless one of the two
+>   sampled clusters holds it.
+>
+> **DECIDED 2026-11-10 (coordinator, under item 313):** the pass sits in the identifier pass, after
+> the accession key and before the version links, and reads no year — a family is an identifier
+> relation, and an eLife paper's reviews of several versions can span years; it lists every two
+> records of one family (the driver skips a pair already in one group, so a family of `n` records
+> costs `n − 1` comparisons, not `n(n − 1)/2`); and in `pairs.jsonl` a row found only by this pass
+> sorts after the block rows, so no existing row moves.
+>
+> *Measured the same day (`P2-T39`, `plan/reports/P2-T39.md`):* the corpus grows from 534 to **552
+> pairs** (448 compared by the cascade, was 430; label set 285, was 267). 52 pairs carry the origin:
+> 34 were in the corpus through a title block and only gained it, 18 are new and every one is a
+> document of eLife 85605, 92046 or 98867 against another of the same paper. All 18 move from
+> *distinct* (never compared) to *merged*; no existing pair's outcome changes, so no pair labelled
+> "different" or "linked version" is merged. Outcomes over the 552: merged 159, linked 75, flagged
+> 135, distinct 183; record groups 949 → 946. The owner's sample is unchanged (none of the 18 is in
+> it): precision 1.0000, [0.8985, 1.0000] over 34 merged pairs, and recall 1.0000, [0.8985, 1.0000]
+> over 34 true duplicates, both undecided.
 
 #### 11.3.1 ID normalization
 
@@ -2844,6 +2888,9 @@ and add `Preprint DOI: <doi>` / `Published DOI: <doi>` to `extra` when only one 
 > of record, keep the handling above and are never merged by the DOI family. Which version's DOI and
 > date the merged item carries is `docs/07` §5.1's (its note "DECIDED 2026-11-10 (coordinator, under
 > item 313)"): the existing merge policy, which on the measured corpus picks version 1.
+> *Updated later on 2026-11-10 (owner, `plan/00` §6 item 366(c)): the **newest** version wins the DOI
+> and the date, and the other versions' DOIs stay in `ids` as conflicts — `docs/07` §5.1's note of
+> that day, which replaces the version-1 outcome.*
 
 ### 11.5 Merge precedence and conflict handling
 

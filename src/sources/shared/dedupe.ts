@@ -979,6 +979,51 @@ export function compareCandidates(
   );
 }
 
+/**
+ * The DOI-family pass's pairs (`docs/02` §11.3's note "a comparison pass by
+ * DOI family", owner, 2026-11-10, `plan/00` §6 item 366(b)): every two
+ * candidates whose DOIs are one paper's by {@link sameDoiFamily} — different
+ * DOIs with one family stem, at least one of a listed form — whatever their
+ * titles and years. Blocking puts a paper's reviews in different title blocks
+ * when their titles start differently ("Reviewer #1 (Public Review): …",
+ * "eLife assessment: …"), so without this pass such a pair is never compared.
+ *
+ * It only **proposes** pairs: the cascade still decides each one, and the
+ * group-level version-link check still applies. Two F1000Research reports on
+ * different versions have different stems and are not paired here (`docs/02`
+ * §11.3's rule 2 compares them on title when blocking does). Equal DOIs are
+ * not a family; the identifier pass pairs them.
+ *
+ * Shared by {@link dedupeRecords} and `scripts/build-dedup-corpus.ts`'s
+ * `candidatePairs`, so the corpus holds every pair this pass compares.
+ *
+ * @param candidates - the result set's candidates, in input order
+ * @returns the pairs as `[i, j]` with `i < j`, by `i` then `j`
+ */
+export function doiFamilyPairs(
+  candidates: readonly DedupCandidate[],
+): readonly (readonly [number, number])[] {
+  const byStem = new Map<string, number[]>();
+  candidates.forEach((c, i) => {
+    const doi = c.ids.doi;
+    if (doi !== undefined) pushInto(byStem, doiFamilyStem(doi) ?? doi, i);
+  });
+  const out: (readonly [number, number])[] = [];
+  for (const holders of byStem.values()) {
+    for (let x = 0; x < holders.length; x += 1) {
+      for (let y = x + 1; y < holders.length; y += 1) {
+        const i = holders[x];
+        const j = holders[y];
+        if (i === undefined || j === undefined) continue;
+        if (sameDoiFamily(candidates[i]?.ids.doi, candidates[j]?.ids.doi)) {
+          out.push([i, j]);
+        }
+      }
+    }
+  }
+  return out.sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+}
+
 /** {@link compareCandidates} over two records. Builds both candidates. */
 export function compareRecords(
   a: SourceRecord,
@@ -1306,6 +1351,17 @@ function* dedupeCascade(
       }
     }
   }
+  // DOI families (docs/02 §11.3, owner, 2026-11-10, plan/00 §6 item 366(b)):
+  // a paper's documents are compared whatever their title blocks and years.
+  for (const [i, j] of doiFamilyPairs(candidates)) {
+    if (consider(i, j)) {
+      sinceYield += 1;
+      if (sinceYield >= DEDUP_YIELD_EVERY_COMPARISONS) {
+        yield;
+        sinceYield = 0;
+      }
+    }
+  }
   // Version links (`P2-T11`, docs/02 §11.4): a record that names another in
   // `relatedVersionIds` is compared with it here, whatever the two titles and
   // years — a published title often differs from its preprint's, and the
@@ -1519,7 +1575,10 @@ function* dedupeCascade(
  *    first holder of that key — a cascade call that terminates at Tier 0–4.
  *    Since `P2-T11` it also compares every record with each record its
  *    `relatedVersionIds` names (§11.4), so a preprint and its published
- *    version reach Tier 7 whatever their titles and years.
+ *    version reach Tier 7 whatever their titles and years. Since `P2-T39`
+ *    it also compares every two records of one DOI family
+ *    ({@link doiFamilyPairs}), so a paper's reviews in different title
+ *    blocks reach Tier 0.
  * 2. **Blocking pass** (§11.3.3). Candidates with a comparable title are
  *    bucketed by {@link blockingSignature}; within a bucket, pairs within
  *    {@link MAX_YEAR_DELTA} of each other (or with an unknown year) are

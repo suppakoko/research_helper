@@ -21,7 +21,7 @@ them; it adds adapters and the merge layer above them.
 
 ## Effort estimate
 
-`docs/11` §1 Phase 2 is now **34.00–47.6 d, published as 34–48 d** (38 cards; `P2-T38` added 2026-11-10) — a band *derived from* the
+`docs/11` §1 Phase 2 is now **34.50–48.3 d, published as 34.50–48 d** (39 cards; `P2-T39` added 2026-11-10) — a band *derived from* the
 task sum in this file (low = the sum, high = the sum × 1.4, rounded to whole days), not an
 independent guess. The figure it superseded on 2026-09-09 was **12–16 developer-days** ("six
 adapters at ~1.5 days each plus 4–6 days for dedup and its evaluation corpus"). The reconciliation
@@ -43,7 +43,8 @@ is at the end of this file.
 > cards** and `docs/11` §1 published **32.75–46**: twelve cards (`P2-T25`–`P2-T36`, 6.0 d) were propagated
 > to the roll-up and to `docs/11` but not to this sentence. It now reads the roll-up's 33.25 d, after
 > `P2-T37` (0.5 d), and 33.25 × 1.4 = 46.55 → 47. *Updated 2026-11-10 (`plan/00` §6 item 362(b)): `P2-T38` (0.75 d)
-> takes the roll-up to 34.00 d over 38 cards, and 34.00 × 1.4 = 47.6 → 48.*
+> takes the roll-up to 34.00 d over 38 cards, and 34.00 × 1.4 = 47.6 → 48.* *Updated again 2026-11-10 (`plan/00` §6 item 366(b)): `P2-T39` (0.5 d)
+> takes the roll-up to 34.50 d over 39 cards, and 34.50 × 1.4 = 48.3 → 48.*
 
 ## Risks retired
 
@@ -1928,7 +1929,7 @@ abstracts. **15 mutants, all killed.** Nothing outside Files. Open: items 193–
 |---|---|
 | **ID** | `P2-T13` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T09`, `P2-T10`, `P2-T11`, `P2-T36`, `P2-T38` |
+| **Depends on** | `P2-T09`, `P2-T10`, `P2-T11`, `P2-T36`, `P2-T38`, `P2-T39` |
 | **Blocks** | `P2-T16` |
 | **Retires** | `R-18` (this is the card that proves it) |
 | **Implements** | `FR-50` |
@@ -2946,7 +2947,7 @@ decision record's section 5 today; whether the run-time half is worth a card is 
 |---|---|
 | **ID** | `P2-T16` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18`, `P2-T29`, `P2-T30`, `P2-T31`, `P2-T34`, `P2-T35`, `P2-T36`, `P2-T37`, `P2-T38` |
+| **Depends on** | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18`, `P2-T29`, `P2-T30`, `P2-T31`, `P2-T34`, `P2-T35`, `P2-T36`, `P2-T37`, `P2-T38`, `P2-T39` |
 | **Blocks** | none |
 | **Retires** | `R-2`, `R-18` (closes them), `R-3` (fallback proven) |
 | **Implements** | `FR-9`, `FR-50`, `FR-51`, `NFR-2`, `NFR-6` |
@@ -5362,7 +5363,7 @@ green, the coordinator removes `continue-on-error` from the CI integration job a
 | **ID** | `P2-T38` |
 | **State** | `TODO` — built 2026-11-10, awaiting the coordinator's review; the report goes to `plan/reports/P2-T38.md`. |
 | **Depends on** | `P2-T09`, `P2-T10` |
-| **Blocks** | `P2-T13`, `P2-T16` |
+| **Blocks** | `P2-T13`, `P2-T16`, `P2-T39` |
 | **Retires** | `plan/00` §6 item 362(b) |
 | **Implements** | `FR-50` |
 | **Estimate** | 0.75 d |
@@ -5448,6 +5449,87 @@ engine and the same origin in `candidatePairs`, which changes the labelled fixtu
 
 ---
 
+### P2-T39 — DOI-family comparison pass; newest F1000 version wins
+
+| Field | Value |
+|---|---|
+| **ID** | `P2-T39` |
+| **State** | `TODO` — built 2026-11-10, awaiting the coordinator's review; the report goes to `plan/reports/P2-T39.md`. |
+| **Depends on** | `P2-T38` |
+| **Blocks** | `P2-T13`, `P2-T16` |
+| **Retires** | `plan/00` §6 item 366(b) and (c) |
+| **Implements** | `FR-50` |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** Documents of one paper whose titles fall into different title blocks are compared and
+merged, the corpus holds those pairs, and when F1000Research versions merge the newest version's DOI
+and date win.
+
+**Why this is a card.** Rule 9: item 366(a) draws ten more pairs for the recall condition from the
+label set after this card, so the pairs this pass adds can be drawn (`plan/00` §6 item 366(a), (b)).
+
+**Read first.**
+- `plan/00` §6 items 363 and 366; `plan/reports/P2-T38.md` §2, §4 and §9 item 1.
+- `docs/02` §11.3's note "Decided 2026-11-10 … the documents of one paper are one work", and §11.4's
+  note of the same day.
+- `docs/07` §5.1, the two notes of 2026-11-10 (a review document yields; the coordinator's decision on
+  which record wins when no article is in the group).
+- `doiFamilyStem`, `sameDoiFamily` in `src/model/ids.ts`; `dedupeCascade`, `compareCandidates` in
+  `src/sources/shared/dedupe.ts`; `canonicalOrder`, `unionIds`, `merge` in `src/model/merge.ts`;
+  `candidatePairs`, `buildRows` in `scripts/build-dedup-corpus.ts`.
+
+**Files.** (rule 10 — callers named; everything changed is a pure function, nothing is constructed)
+- modify `docs/02-literature-database-apis.md` §11.3 and §11.4, `docs/07-architecture-and-data-model.md`
+  §5.1 (first)
+- modify `src/model/ids.ts` (`articleVersionOf`)
+- modify `src/sources/shared/dedupe.ts` (`doiFamilyPairs`, called by `dedupeCascade` behind
+  `dedupeRecords` and `dedupeRecordsAsync`, whose callers in `stages.ts` and `seed.ts` are unchanged)
+- modify `src/model/merge.ts` (`newestArticleVersionDoi`, `unionIds`, `merge`; callers `mergeGroups` in
+  `stages.ts` and `seed.ts`, unchanged)
+- modify `scripts/build-dedup-corpus.ts` (`PairOrigin`, `ENGINE_ORIGINS`, `candidatePairs`, `buildRows`'s
+  row order; it calls `doiFamilyPairs`)
+- modify `test/fixtures/dedup/pairs.jsonl`, `pairs.csv`, `_meta.json` — written only by
+  `build-dedup-corpus.ts`; never a label, a reason or `label-sample.json`
+- modify `test/unit/sources/dedupe.test.ts`, `test/unit/model/merge.test.ts`, `test/unit/model/ids.test.ts`,
+  `test/unit/sources/dedupeCorpus.test.ts`, `test/unit/sources/dedupeLabelSample.test.ts`
+
+**Do.**
+1. Document the pass in `docs/02` §11.3 and the winner in `docs/07` §5.1 (dated notes, history kept),
+   before the code.
+2. In the identifier pass, compare every two records whose DOIs are one paper's by `sameDoiFamily`,
+   whatever their titles and years; the cascade still decides.
+3. Give `candidatePairs` the matching origin `doi-family` and rebuild the corpus; new pairs enter
+   unlabelled.
+4. When the paper records carry two or more F1000Research versions of one article, the newest version's
+   DOI and date win and the others' DOIs stay in `ids` as conflicts.
+5. Snapshot every pair outcome and every merged work before and after; list every change.
+
+**Do NOT.**
+- Write or change any label, reason or `label-sample.json`; if a rebuild would change an existing pair's
+  id, records or label, stop.
+- Add a DOI form (item 366(d)).
+- Merge a pair through the pass without the cascade, or around the group-level version-link check.
+
+**Done when.**
+- [ ] No pair labelled `not-duplicate` or `linked-version` is merged.
+- [ ] Every changed outcome and every new pair is listed with its DOIs, titles and outcome.
+- [ ] Every record group with no member of a listed DOI form merges to a byte-identical work.
+- [ ] `npm run typecheck`, `npm run lint:check`, `npx eslint .`, `npm run test`, `npm run build` exit 0;
+      three clean integration runs.
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npx eslint . && npm run test && npm run build
+npx tsx scripts/build-dedup-corpus.ts --check && npm run dedup:report
+npm run test:integration -- --exit-on-finish
+```
+
+**Notes.** Owner decisions 2026-11-10 (`plan/00` §6 item 366(b)–(d)). Item 366(a), the ten-pair draw,
+follows this card and is the owner's.
+
+---
+
 ## Estimate roll-up
 
 | Task | Title | Estimate (d) |
@@ -5490,7 +5572,8 @@ engine and the same origin in `candidatePairs`, which changes the labelled fixtu
 | `P2-T36` | Four owner-approved behaviour changes (CJK titles, PubMed filters, two-letter codes, window fixtures) | 0.75 |
 | `P2-T37` | A re-run finds a record that has no DOI and no PMID | 0.50 |
 | `P2-T38` | Merge a paper's reviews and versions (the DOI family) | 0.75 |
-| **Total** | **38 tasks** | **34.00 d** |
+| `P2-T39` | DOI-family comparison pass; newest F1000 version wins | 0.50 |
+| **Total** | **39 tasks** | **34.50 d** |
 
 **Reconciliation with `docs/11`, revised 2026-09-09 (second pass).** The relationship has been
 inverted since the first pass: `docs/11` §1's Phase 2 band is now *derived from* this sum rather

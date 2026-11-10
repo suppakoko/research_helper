@@ -14,10 +14,10 @@
   "derived": true,
   "generatedBy": "npx tsx scripts/build-dedup-corpus.ts",
   "recordCount": 1058,
-  "pairCount": 534,
-  "engineComparedPairCount": 430,
+  "pairCount": 552,
+  "engineComparedPairCount": 448,
   "labelledPairCount": 60,
-  "labelSetPairCount": 267,
+  "labelSetPairCount": 285,
   "sampledOut": {
     "scotland-reports": {
       "pairs": 231,

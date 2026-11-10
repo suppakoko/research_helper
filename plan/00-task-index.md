@@ -3,7 +3,7 @@
 > **Generated from the task cards in `01`–`04`, `07` and `08`** (Phase 4's file, read since 2026-10-26, and
 > Phase 5's, read since 2026-11-01). If a row here disagrees with a card, the card wins — then regenerate
 > this file.
-> **Last updated:** 2026-11-10 · **215 tasks: 112 `DONE`, 103 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 38**, Phase 3 **0 of 39**, Phase 4 **0 of 25**, Phase 5 **0 of 32**. **The plan has grown from the 153 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25, plus the 30 Phase 5 was drafted and reviewed with on 2026-11-01; its 31st card, `P5-T31`, added when the owner's decisions were applied, counts as growth) to 215, so 62 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-11-10 · **216 tasks: 112 `DONE`, 104 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 39**, Phase 3 **0 of 39**, Phase 4 **0 of 25**, Phase 5 **0 of 32**. **The plan has grown from the 153 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25, plus the 30 Phase 5 was drafted and reviewed with on 2026-11-01; its 31st card, `P5-T31`, added when the owner's decisions were applied, counts as growth) to 216, so 63 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -23,12 +23,23 @@ Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0
 |---|---|---|---|---|
 | 0 — Toolchain spike | 35 | 17.75 d | 17.75–25 d | 6–9 d (+97%) |
 | 1 — PubMed slice | 46 | 29.25 d | 29.25–41 d | 9–12 d (+144%) |
-| 2 — Multi-source + dedup | 38 | 34.00 d | 34–48 d | 12–16 d (+113%) |
+| 2 — Multi-source + dedup | 39 | 34.50 d | 34.50–48 d | 12–16 d (+116%) |
 | 3 — LLM + summaries | 39 | 29.50 d | 29.5–41 d | 12–15 d (+97%) |
-| **Phases 0–3** | **158** | **110.50 d** | **110.50–155 d** | 39–52 d (+113% over the top of the band) |
+| **Phases 0–3** | **159** | **111.00 d** | **111.00–155 d** | 39–52 d (+113% over the top of the band) |
 | 4 — Trend report | 25 | 25.75 d | 25.75–36 d | 8–11 d (+134%) |
 | 5 — Related + recommendations | 32 | 36.25 d | 36.25–51 d | 10–14 d (+159%) |
 | 6–7 | not decomposed | — | 36–50 d ⚠ **scaled, not measured** | 17–24 d |
+
+**2026-11-10, later: `P2-T39` added, 0.5 d** (§6 item 366(b)–(c)). The owner's decisions that a paper's documents in
+different title blocks are compared by DOI family and that the newest F1000Research version wins the DOI and the date; the
+estimate is the coordinator's and unmeasured. Phase 2 is **39 cards and 34.50 d**, re-read from the cards' `Estimate` rows by
+script; 34.50 × 1.4 = 48.3 → 48, so the band is 34.50–48 d (was 34–48). The last column is 34.5 ÷ 16 = 2.156 → +116% (it read
++113%), and the Phases 0–3 row is 111.00 ÷ 52 = 2.135 → +113% (unchanged). The project total is 111.00 + 25.75 + 36.25 + 36 =
+**209.00 d** low and 155 + 36 + 51 + 50 = **292 d** high (was 208.50–292), still ≈ 10–14 months at 21 working days (209.00 ÷
+21 ≈ 10.0; 292 ÷ 21 ≈ 13.9). The critical path P0 → P1 → P2 → P4 → P6 → P7 becomes 17.75 + 29.25 + 34.50 + 25.75 + 15 + 21 =
+**143.25** low and **200** high (was 142.75–200); Phase 5's route P0 → P1 → P2 → P5 → P7 becomes **138.75–194** (was
+138.25–194), so **Phase 5's float stays 4.5–6 d**. The Phase 3 route stays 138.25–193, so Phase 2's lead over it grows from
+4.5 d / 7 d to **5 d / 7 d**. `docs/11` §1–§2 carry the rest.
 
 **2026-11-10: `P2-T38` added, 0.75 d** (§6 item 362(b)). The owner's decision that the reviews, recommendations,
 author responses and F1000Research versions of one paper merge into one item; the estimate is the coordinator's and
@@ -336,12 +347,12 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P2-T10` | Field-merge policy, source precedence, record provenance | `P2-T09` | 1.5 d |  |
 | ✅ `P2-T11` | Preprint ↔ published-version linking | `P2-T04`, `P2-T05`, `P2-T06`, `P2-T07`, `P2-T09`, `P2-T34` | 1.0 d | 🔒 |
 | ✅ `P2-T12` | Batched abstract-backfill pass | `P2-T03`, `P2-T04`, `P2-T05`, `P2-T10`, `P2-T29`, `P2-T30` | 0.75 d |  |
-| `P2-T13` | Dedup corpus and measured precision/recall report | `P2-T09`, `P2-T10`, `P2-T11`, `P2-T36`, `P2-T38` | 2.0 d | 🔒 |
+| `P2-T13` | Dedup corpus and measured precision/recall report | `P2-T09`, `P2-T10`, `P2-T11`, `P2-T36`, `P2-T38`, `P2-T39` | 2.0 d | 🔒 |
 | ✅ `P2-T14` | Search & Import window: chips, badges, per-source status | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T29`, `P2-T30`, `P2-T31`, `P2-T34` | 1.5 d |  |
 | ✅ `P2-T17` | Re-run a search from its provenance record | `P1-T13`, `P1-T17`, `P1-T19`, `P2-T01`, `P2-T14`, `P2-T22` | 1.5 d |  |
 | ✅ `P2-T18` | Translator import path behind `useTranslators` | `P1-T14`, `P2-T08`, `P2-T12` | 1.25 d |  |
 | ✅ `P2-T15` | Record and enforce the settled OpenAlex decision: out of v1 | — | 0.25 d |  |
-| `P2-T16` | Phase 2 end-to-end run against the definition of done | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18`, `P2-T29`, `P2-T30`, `P2-T31`, `P2-T34`, `P2-T35`, `P2-T36`, `P2-T37`, `P2-T38` | 1.0 d |  |
+| `P2-T16` | Phase 2 end-to-end run against the definition of done | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18`, `P2-T29`, `P2-T30`, `P2-T31`, `P2-T34`, `P2-T35`, `P2-T36`, `P2-T37`, `P2-T38`, `P2-T39` | 1.0 d |  |
 | ✅ `P2-T19` | Work-key detection for records with no DOI and no PMID, and… | `P1-T13`, `P2-T09` | 0.75 d |  |
 | ✅ `P2-T20` | Render `languages`, `openAccessOnly` and `raw` across the… | `P1-T08` | 0.5 d |  |
 | ✅ `P2-T21` | Make the concurrency cap resizable, so a tightened header… | `P1-T27`, `P1-T26` | 0.5 d |  |
@@ -362,6 +373,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P2-T36` | The four behaviour changes the owner approved on 2026-10-15 | `P2-T05`, `P2-T30` | 0.75 d |  |
 | `P2-T37` | A re-run finds a record that has no DOI and no PMID | `P2-T36` | 0.5 d |  |
 | `P2-T38` | Merge a paper's reviews and versions (the DOI family) | `P2-T09`, `P2-T10` | 0.75 d |  |
+| `P2-T39` | DOI-family comparison pass; newest F1000 version wins | `P2-T38` | 0.5 d |  |
 
 ### Phase 3
 
@@ -3218,6 +3230,11 @@ the caller of what the card builds; if it does not, the caller is added with a d
     - (b) **A comparison pass by DOI family** is added, so that documents of one paper whose titles fall in different blocking groups are compared (`plan/reports/P2-T38.md` §9 item 1). It adds pairs to the corpus; every outcome it moves is listed and any pair needing a label is asked. Card `P2-T39` under rule 9 (it blocks the recall condition through (a)).
     - (c) **When F1000Research versions merge, the newest version wins** the DOI and the date; the other versions' DOIs stay in `ids`. This replaces the coordinator's version-1 outcome recorded in `docs/07` §5.1 on item 363's day. Built in `P2-T39`.
     - (d) **No further DOI forms for now** (Wiley decision letters and author responses, F1000 sibling journals, an F1000 report joined to its article): none is in the corpus, so none can be measured. Added when one is seen.
+
+367. **`P2-T39` built, 2026-11-10** (`plan/reports/P2-T39.md`), building item 366(b) and (c). The identifier pass now proposes every two records whose DOIs share a family stem, whatever their titles (`doiFamilyPairs`), and the corpus script finds such pairs under the new origin `doi-family`; when F1000Research versions merge, the newest version supplies the DOI and both dates.
+    - (a) The corpus grew from 534 to 552 pairs: 18 new pairs, all unlabelled, all documents of three eLife papers, each now merged. 34 existing rows gained the origin `doi-family` beside `block`; the coordinator compared every existing row before and after and found no other field changed (60 labels untouched). Only one existing merged work changed (F1000Research 130932, now version 2's DOI and date); the 932 groups with no family member merge byte-for-byte as before.
+    - (b) The sample measures as before: precision and recall 1.0000, both undecided at 34 true duplicates. `dedup-label-sample.ts --check` now reports the label set (285) differs from the sample's population (267), as expected until item 366(a)'s draw.
+    - (c) Checks passed. Integration gave one clean run in four; the three failures are all the search dialog's light-and-dark contrast test (card `P5-T16`), which waits a fixed 250 milliseconds for the theme to switch, and the same test failed on the committed source with this card's files swapped out, so it predates the card. **DECIDED 2026-11-10 (coordinator, under item 313):** the test waits for the colour to change instead of a fixed time, as a test-only repair, and the three clean runs are taken after it for both cards.
 
 ## 7. Regenerating this file
 

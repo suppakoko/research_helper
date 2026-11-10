@@ -31,6 +31,7 @@ import {
   dedupeRecords,
   dedupeRecordsAsync,
   defaultYieldToEventLoop,
+  doiFamilyPairs,
   isPreprintDoi,
   JACCARD_CORROBORATED_THRESHOLD,
   JACCARD_REORDER_THRESHOLD,
@@ -715,6 +716,249 @@ describe("P2-T38 rule 2 — F1000Research reports on two versions are compared o
     const a = crossref("10.5256/f1000research.111111.r1", partOne, 2023);
     const b = crossref("10.5256/f1000research.222222.r2", partTwo, 2023);
     expect(compareRecords(a, b).verdict).toBe("distinct");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P2-T39 — the comparison pass by DOI family (owner, 2026-11-10, plan/00 §6
+// item 366(b); docs/02 §11.3's note of that date). The DOIs and titles are the
+// corpus records P2-T38's report §9 item 1 named as never compared.
+// ---------------------------------------------------------------------------
+
+describe("P2-T39 — the DOI-family pass compares a paper's documents across title blocks", () => {
+  const article = (): SourceRecord =>
+    crossref("10.7554/elife.85605", LEISH_TITLE, 2023, "journal-article");
+  const evaluation = (): SourceRecord =>
+    crossref(
+      "10.7554/elife.85605.sa0",
+      `Editor's evaluation: ${LEISH_TITLE}`,
+      2023,
+    );
+  const report = (year = 2024): SourceRecord =>
+    crossref(
+      "10.7554/elife.98867.1.sa1",
+      `Reviewer #1 (Public Review): ${NK_TITLE}`,
+      year,
+    );
+  const assessment = (year = 2024): SourceRecord =>
+    crossref(
+      "10.7554/elife.98867.3.sa0",
+      `eLife Assessment: ${NK_TITLE.toLowerCase()}`,
+      year,
+    );
+
+  it("the two pairs sit in different title blocks, so only the DOI-family pass can compare them", () => {
+    for (const [a, b] of [
+      [article(), evaluation()],
+      [report(), assessment()],
+    ] as const) {
+      expect(toCandidate(a).signature).not.toBe(toCandidate(b).signature);
+    }
+  });
+
+  it.each([
+    [
+      "eLife 85605: the article and its editor's evaluation",
+      article,
+      evaluation,
+    ],
+    [
+      "eLife 98867: a version-1 reviewer report and the version-3 assessment",
+      report,
+      assessment,
+    ],
+  ])("merges %s, in either input order", (_, makeA, makeB) => {
+    for (const order of [
+      [makeA(), makeB()],
+      [makeB(), makeA()],
+    ]) {
+      const counter = { comparisons: 0 };
+      const result = dedupeRecords(order, counter);
+      expect(result.groups).toHaveLength(1);
+      expect(
+        result.groups[0]?.decisions.map((d) => d.evidence["rule"]),
+      ).toEqual(["doi-family"]);
+      expect(counter.comparisons).toBe(1);
+    }
+  });
+
+  it("compares a family whatever the years, as an identifier key is", () => {
+    const result = dedupeRecords([report(2024), assessment(2026)]);
+    expect(result.groups).toHaveLength(1);
+  });
+
+  it("asks the cascade once per record joined: a family of five recommendations takes four comparisons", () => {
+    // Five titles in five different blocks, so the pass is the only path.
+    const titles = [
+      "Neurodegeneration pathways mapped across cortical organoids today",
+      "Photosynthetic efficiency improved through engineered chloroplasts here",
+      "Antimicrobial resistance surveillance across hospital wastewater systems",
+      "Earthquake forecasting with distributed acoustic sensing fibres",
+      "Microplastic accumulation measured inside freshwater invertebrates",
+    ];
+    const recs = titles.map((title, k) =>
+      crossref(
+        `10.3410/f.740477161.79358746${String(k)}`,
+        title,
+        2021,
+        "dataset",
+      ),
+    );
+    expect(new Set(recs.map((r) => toCandidate(r).signature)).size).toBe(5);
+    const counter = { comparisons: 0 };
+    const result = dedupeRecords(recs, counter);
+    expect(result.groups).toHaveLength(1);
+    expect(counter.comparisons).toBe(4);
+  });
+
+  it("doiFamilyPairs lists exactly the pairs of one family, by index", () => {
+    const candidates = [
+      article(), // 0
+      evaluation(), // 1
+      crossref("10.7554/elife.85605", LEISH_TITLE, 2023, "journal-article"), // 2: same DOI as 0
+      report(), // 3
+      assessment(), // 4
+      crossref(
+        "10.1056/nejmoa2300709",
+        "An unrelated trial of a vaccine in adults",
+        2023,
+      ), // 5
+    ].map(toCandidate);
+    expect(doiFamilyPairs(candidates)).toEqual([
+      [0, 1],
+      [1, 2],
+      [3, 4],
+    ]);
+  });
+
+  it("does not pair the documents of two different papers under one DOI prefix (negative)", () => {
+    const pairs = [
+      [
+        crossref(
+          "10.7554/elife.92046.2.sa0",
+          `eLife assessment: ${ATLAS_TITLE}`,
+          2024,
+        ),
+        crossref(
+          "10.7554/elife.98867.1.sa2",
+          `eLife Assessment: ${NK_TITLE}`,
+          2024,
+        ),
+      ],
+      [
+        crossref(
+          "10.1002/eng2.12854/v1/review1",
+          'Review for "Preserving node similarity adversarial learning graph representation"',
+          2023,
+        ),
+        crossref(
+          "10.1002/eng2.12999/v1/review1",
+          'Review for "A wholly different engineering study of bridge corrosion sensors"',
+          2023,
+        ),
+      ],
+      [
+        crossref(
+          "10.12688/f1000research.130932.1",
+          ASHWA_V1,
+          2023,
+          "journal-article",
+        ),
+        crossref(
+          "10.12688/f1000research.131344.2",
+          "Effect of topical Zingiber cassumunar on painful diabetic neuropathy: a randomized trial",
+          2023,
+          "journal-article",
+        ),
+      ],
+    ] as const;
+    for (const [a, b] of pairs) {
+      expect(doiFamilyPairs([a, b].map(toCandidate))).toEqual([]);
+      const counter = { comparisons: 0 };
+      expect(dedupeRecords([a, b], counter).groups).toHaveLength(2);
+      expect(counter.comparisons).toBe(0);
+    }
+  });
+
+  it("does not pair eLife version DOIs without `.sa`: only a sub-article joins the version of record (negative)", () => {
+    const reviewed = crossref(
+      "10.7554/elife.98867.1",
+      NK_TITLE,
+      2024,
+      "preprint",
+    );
+    const revised = crossref(
+      "10.7554/elife.98867.3",
+      `Revised: ${NK_TITLE}`,
+      2024,
+      "preprint",
+    );
+    const vor = crossref(
+      "10.7554/elife.98867",
+      `Version of record: ${NK_TITLE}`,
+      2025,
+      "journal-article",
+    );
+    const sub = report();
+    expect(doiFamilyPairs([reviewed, revised].map(toCandidate))).toEqual([]);
+    expect(doiFamilyPairs([reviewed, vor].map(toCandidate))).toEqual([]);
+    // 0 reviewed, 1 revised, 2 vor, 3 a sub-article: only the VOR and the sub-article.
+    expect(
+      doiFamilyPairs([reviewed, revised, vor, sub].map(toCandidate)),
+    ).toEqual([[2, 3]]);
+  });
+
+  it("does not pair two F1000Research reports on different versions: their stems differ (rule 2 is the title tiers')", () => {
+    const a = crossref("10.5256/f1000research.143730.r200814", REPORT_V1, 2023);
+    const b = crossref("10.5256/f1000research.163630.r264045", REPORT_V2, 2024);
+    expect(doiFamilyPairs([a, b].map(toCandidate))).toEqual([]);
+  });
+
+  it("does not bypass the group-level check: a family match never joins a preprint to the version it names (negative)", () => {
+    // X, an arXiv preprint with no DOI, names the eLife article Y as its
+    // published version. B is Y's sub-article whose title is X's. B–Y is a
+    // DOI-family match that only the new pass compares (different blocks);
+    // X–B match on title. Without the check X would join Y through B.
+    const preTitle =
+      "Single-cell atlas of the regenerating zebrafish fin reveals a blastema progenitor state";
+    const x = record({
+      source: "arxiv",
+      id: "2401.01234",
+      title: preTitle,
+      year: 2024,
+      type: "preprint",
+      ids: { arxivId: arxiv("2401.01234") },
+      related: { doi: doi("10.7554/elife.555") },
+    });
+    const y = crossref(
+      "10.7554/elife.555",
+      "Distinct fibroblast lineages give rise to the regenerating ray in adult fish",
+      2024,
+      "journal-article",
+    );
+    const b = crossref("10.7554/elife.555.sa1", preTitle, 2024, "preprint");
+    expect(toCandidate(b).signature).not.toBe(toCandidate(y).signature);
+    const orders = [
+      [x, y, b],
+      [x, b, y],
+      [y, x, b],
+      [y, b, x],
+      [b, x, y],
+      [b, y, x],
+    ];
+    expect(orders).toHaveLength(6);
+    for (const order of orders) {
+      const result = dedupeRecords(order);
+      const groupOf = (r: SourceRecord): number =>
+        result.groups.findIndex((g) => g.records.includes(r));
+      expect(groupOf(x)).not.toBe(groupOf(y));
+      // The family pair is the more certain (Tier 0), so B stays with Y.
+      expect(groupOf(b)).toBe(groupOf(y));
+      const link = result.links.find(
+        (p) => [p.a, p.b].includes(x) && [p.a, p.b].includes(y),
+      );
+      expect(link?.decision.evidence["groupSplit"]).toBe(true);
+    }
   });
 });
 

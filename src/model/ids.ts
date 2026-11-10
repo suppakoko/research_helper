@@ -201,6 +201,9 @@ interface DoiFamilyForm {
   readonly stemIsVersion: boolean;
 }
 
+/** The F1000Research article-version form; group 1 the stem, group 2 the version. */
+const F1000_ARTICLE_VERSION = /^(10\.12688\/f1000research\.\d+)\.(\d+)$/;
+
 /**
  * `docs/02` §11.3's table of DOI forms, row for row. Only the forms measured
  * in `P2-T13`'s corpus are listed; adding one is a decision (that note).
@@ -234,11 +237,39 @@ const DOI_FAMILY_FORMS: readonly DoiFamilyForm[] = [
   },
   // F1000Research article version: 10.12688/f1000research.130932.2.
   {
-    pattern: /^(10\.12688\/f1000research\.\d+)\.\d+$/,
+    pattern: F1000_ARTICLE_VERSION,
     reviewDocument: false,
     stemIsVersion: false,
   },
 ];
+
+/**
+ * An F1000Research article version's DOI: the stem (the article) and the
+ * version number. `docs/07` §5.1's note of 2026-11-10 (owner, `plan/00` §6
+ * item 366(c)): when versions of one article merge, the newest wins the DOI
+ * and the date.
+ */
+export interface ArticleVersion {
+  readonly stem: string;
+  readonly version: number;
+}
+
+/**
+ * The article and version an F1000Research article-version DOI names
+ * (`10.12688/f1000research.130932.2` → stem `10.12688/f1000research.130932`,
+ * version 2), or `undefined` for any other DOI — including every review
+ * document and every eLife DOI, whose versions are not merged by this rule.
+ */
+export function articleVersionOf(
+  doi: Doi | undefined,
+): ArticleVersion | undefined {
+  if (doi === undefined) return undefined;
+  const m = F1000_ARTICLE_VERSION.exec(doi);
+  const stem = m?.[1];
+  const version = m?.[2];
+  if (stem === undefined || version === undefined) return undefined;
+  return { stem, version: Number(version) };
+}
 
 /** The listed form `doi` takes and its stem, or `undefined` for none. */
 function doiFamilyForm(

@@ -2,7 +2,9 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import {
+  articleVersionOf,
   buildWorkKey,
+  doiFamilyStem,
   isSourceId,
   normalizeArxivId,
   normalizeDoi,
@@ -395,5 +397,36 @@ describe("SOURCE_IDS / isSourceId", () => {
   it("rejects non-strings", () => {
     expect(isSourceId(undefined)).toBe(false);
     expect(isSourceId(0)).toBe(false);
+  });
+});
+
+// P2-T39 (docs/07 §5.1's note of 2026-11-10, plan/00 §6 item 366(c)).
+describe("articleVersionOf", () => {
+  it("reads the article and version of an F1000Research article-version DOI", () => {
+    expect(articleVersionOf("10.12688/f1000research.130932.2" as Doi)).toEqual({
+      stem: "10.12688/f1000research.130932",
+      version: 2,
+    });
+    expect(
+      articleVersionOf("10.12688/f1000research.130932.12" as Doi)?.version,
+    ).toBe(12);
+    // The stem is the DOI family stem of the same form.
+    expect(
+      articleVersionOf("10.12688/f1000research.130932.2" as Doi)?.stem,
+    ).toBe(doiFamilyStem("10.12688/f1000research.130932.2" as Doi));
+  });
+
+  it.each([
+    "10.5256/f1000research.143730.r200814",
+    "10.7554/elife.98867.3",
+    "10.7554/elife.98867.1.sa1",
+    "10.12688/wellcomeopenres.17555.2",
+    "10.12688/f1000research.130932",
+  ])("is undefined for %s", (text) => {
+    expect(articleVersionOf(text as Doi)).toBeUndefined();
+  });
+
+  it("is undefined for no DOI", () => {
+    expect(articleVersionOf(undefined)).toBeUndefined();
   });
 });
