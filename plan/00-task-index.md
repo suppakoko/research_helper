@@ -3206,6 +3206,12 @@ the caller of what the card builds; if it does not, the caller is added with a d
     - (e) Answered one by one: S1 Implementation, E4 Theoretical model and X2 Data Analysis are methods; P1 Literature review is introduction; the arXiv papers A1, A4, A5 and A6 and the report XR2 were each divided as a whole; in E5 the boxed panel "Research in context" is other and methods resumes at the line after it.
     - (f) Lines that are not headings mark a section start in five places ((c) and E5's resumption); the detector cannot find those, and that counts in the measurement. `P3-T22` is now unblocked.
 
+365. **`P3-T22` built and measured, 2026-11-10** (`plan/reports/P3-T22.md`, `docs/spikes/imrad-accuracy-report.md`). `scripts/measure-imrad.ts` scores section attribution per body character against item 364's labels, on the path without a PDF outline (the only path the text fixtures exercise); the scoring rules are coordinator decisions in `docs/06` §4.3.
+    - (a) **68.00 %** (1,002,637 of 1,474,524 characters over the 34 papers with IMRaD structure) against the 85 % bar: **gate `G-22` is triggered.** `IMRAD_DETECTOR_VALIDATED` is derived from the committed figure and is false, so `acquire.ts` returns `sectionAware: false` and the full-text prompt carries no section sentence. No default or preference changed. Applying the heading table at the owner's own start positions reaches only 79.92 %, so part of the gap is the table and part is finding headings.
+    - (b) The largest losses, listed by paper and line in the report: Roman-numeral and pipe numbering not matched (the three IEEE papers, A1 and W5 score 0), a heading followed by a numbered subheading missed, no row for back matter, decimal subsection numbers, "Experimental Results" read as methods, and section names outside the table. The detector was not tuned against the labels.
+    - (c) Checks passed; three integration runs 355 passed, 0 failed each. The coordinator re-ran typecheck and the measurement before the commit.
+    - (d) **For the owner (`G-22`):** keep whole-document chunking without section labels (today's behaviour), or revert `summary.fullTextMode`'s default to abstracts; and whether a detector-improvement card is wanted, which would be measured against these labels and so needs a held-out set or the owner's acceptance of that.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4

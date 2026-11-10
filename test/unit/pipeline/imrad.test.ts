@@ -703,7 +703,15 @@ function port(
   };
 }
 
-const OPTIONS = { estimateTokens: (t: string) => t.length };
+/**
+ * These tests are of the detector's wiring, so they switch `P3-T22`'s degrade
+ * switch off; `imradAccuracy.test.ts` covers the product default, where
+ * `IMRAD_DETECTOR_VALIDATED` is false and every acquisition is flat.
+ */
+const OPTIONS = {
+  estimateTokens: (t: string) => t.length,
+  imradDetectorValidated: true,
+};
 
 describe("acquireSource exposes sectionAware (P3-T21 step 4)", () => {
   it("Tier 2: sections are offsets into the final text, after the abstract preamble", async () => {

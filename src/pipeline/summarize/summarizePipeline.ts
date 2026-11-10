@@ -108,6 +108,7 @@ import type {
   ValidationResult,
 } from "../types";
 
+import { IMRAD_DETECTOR_VALIDATED } from "./imrad";
 import { detectLanguage } from "./languageDetect";
 import {
   screenItems,
@@ -1303,8 +1304,9 @@ export function createSummarizePipeline(
         // The run's confirmation covered the model: `prepare` returned "run"
         // only after the surface confirmed, or found nothing to confirm.
         modelConfirmed: true,
-        // Flat until `P3-T22` and `G-22` rule (`plan/00` §6 item 300).
-        imradDetectorValidated: false,
+        // Flat while the detector is unvalidated (`P3-T22`, gate `G-22`;
+        // `plan/00` §6 item 300).
+        imradDetectorValidated: IMRAD_DETECTOR_VALIDATED,
       });
       let lastStop: CeilingStop | undefined;
       let failed = 0;

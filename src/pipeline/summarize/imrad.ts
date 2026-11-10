@@ -40,6 +40,18 @@
  * (`offset` is where the body starts in it), and `text` is exactly that slice.
  * Sections are contiguous from the first character of the body to its last,
  * so `P3-T22` can score attribution per character.
+ *
+ * ## Validation (`P3-T22`, risk `R-19b`, gate `G-22`)
+ *
+ * {@link IMRAD_MEASUREMENT} is the committed result of
+ * `scripts/measure-imrad.ts` over `P3-T20`'s 40-paper fixture set, scored as
+ * `docs/06` §4.3's note of 2026-11-10 defines; {@link IMRAD_DETECTOR_VALIDATED}
+ * is that result against {@link IMRAD_ACCURACY_BAR}. Callers:
+ * `acquireSource` (`./acquire.ts`) returns `sectionAware: false` and no
+ * sections while it is false, and the summarize and trend-report pipelines
+ * pass it to `summarizeItem` as `imradDetectorValidated`.
+ * `test/unit/pipeline/imradAccuracy.test.ts` re-measures and fails below the
+ * recorded value.
  */
 
 import type { AcquiredSection, ImradSection } from "../../model/summary";
@@ -52,6 +64,53 @@ export const MIN_IMRAD_SECTIONS = 2;
 
 /** §4.3's candidate-heading length bound for the line-scan fallback. */
 export const MAX_HEADING_LINE_CHARS = 90;
+
+// ---------------------------------------------------------------------------
+// Validation (`P3-T22`, module note)
+// ---------------------------------------------------------------------------
+
+/** §4.3's bar: ≥ 85 % correct section attribution, per character. */
+export const IMRAD_ACCURACY_BAR = 0.85;
+
+/** One recorded run of `scripts/measure-imrad.ts`. */
+export interface ImradMeasurement {
+  /** The day it was measured (ISO date). */
+  readonly measuredOn: string;
+  /**
+   * What ran: the PDF path with no document structure, the only input the
+   * text-only fixtures allow (`docs/06` §4.3's note of 2026-11-10, (9)).
+   */
+  readonly path: "pdf-without-structure";
+  /** Papers pooled: those whose `hasImradStructure` is true. */
+  readonly papers: number;
+  /** Characters scored over those papers. */
+  readonly countedChars: number;
+  /** Of those, characters attributed correctly. */
+  readonly correctChars: number;
+}
+
+/**
+ * The committed measurement (`docs/spikes/imrad-accuracy-report.md`). Change
+ * it only from a run of `scripts/measure-imrad.ts`, never by hand.
+ */
+export const IMRAD_MEASUREMENT: ImradMeasurement = {
+  measuredOn: "2026-11-10",
+  path: "pdf-without-structure",
+  papers: 34,
+  countedChars: 1_474_524,
+  correctChars: 1_002_637,
+};
+
+/**
+ * Whether the detector met {@link IMRAD_ACCURACY_BAR} in
+ * {@link IMRAD_MEASUREMENT}. While it is false, `auto` degrades to
+ * whole-document flat chunking and no prompt claims section provenance
+ * (`docs/06` §4.3, `docs/11` R-19b).
+ */
+export const IMRAD_DETECTOR_VALIDATED: boolean =
+  IMRAD_MEASUREMENT.countedChars > 0 &&
+  IMRAD_MEASUREMENT.correctChars >=
+    IMRAD_ACCURACY_BAR * IMRAD_MEASUREMENT.countedChars;
 
 /** The order labels are listed in when a section carries more than one. */
 const LABEL_ORDER: readonly ImradSection[] = [

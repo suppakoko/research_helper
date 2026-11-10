@@ -148,6 +148,7 @@ import {
   type InputScopeKind,
   type RoutineConfirmation,
 } from "../shared/privacyPolicy";
+import { IMRAD_DETECTOR_VALIDATED } from "../summarize/imrad";
 import { detectLanguage } from "../summarize/languageDetect";
 import {
   screenItems,
@@ -1741,7 +1742,7 @@ export function createTrendReportPipeline(
           store,
           ...(deps.modelInfo !== undefined && { modelInfo: deps.modelInfo }),
           modelConfirmed: true,
-          imradDetectorValidated: false,
+          imradDetectorValidated: IMRAD_DETECTOR_VALIDATED,
         });
         const onPaused = (record: JobRecord): void => {
           const run = pooledRef.current;

@@ -73,6 +73,13 @@
  * `false` on Tiers 1 and 4 and whenever fewer than two IMRaD sections were
  * recognized.
  *
+ * **The degrade switch (`P3-T22`).** While `IMRAD_DETECTOR_VALIDATED`
+ * (`./imrad.ts`) is false, every tier returns `sectionAware: false` and no
+ * sections, whatever the detector found: `docs/06` §4.3 forbids labels the
+ * detector has not been shown to justify, so `auto` runs whole-document flat
+ * chunking. The detector still runs, and its own answer stays on the
+ * diagnostics line (`sectionAwareDetected`, `sectionLabels`).
+ *
  * ## `contentHash`
  *
  * Lower-case hex SHA-256 over the exact `text` returned, through
@@ -116,6 +123,7 @@ import {
 import {
   detectSectionsFromJats,
   detectSectionsFromPdf,
+  IMRAD_DETECTOR_VALIDATED,
   NO_SECTIONS,
   type PdfDetectionStats,
   type SectionDetection,
@@ -232,6 +240,12 @@ export interface AcquireOptions<I = unknown> {
   readonly recovery?: AbstractRecovery<I> | undefined;
   /** Diagnostics: tier, sizes and the probe's numbers, never text. */
   readonly logger?: Logger | undefined;
+  /**
+   * Overrides `IMRAD_DETECTOR_VALIDATED` (module note, "The degrade switch").
+   * For tests of the detector's wiring only: the product never passes it, so
+   * the committed measurement decides.
+   */
+  readonly imradDetectorValidated?: boolean;
 }
 
 /**
@@ -646,7 +660,11 @@ export async function acquireSource<
     text = "";
   }
 
-  const sections = detectBodySections(body, abstract);
+  const detected = detectBodySections(body, abstract);
+  const validated = options.imradDetectorValidated ?? IMRAD_DETECTOR_VALIDATED;
+  const sections = validated
+    ? detected
+    : { ...detected, sections: [], sectionAware: false };
 
   const language = text === "" ? null : detectLanguage(text);
   if (language?.nonEnglish === true) {
@@ -678,8 +696,10 @@ export async function acquireSource<
       ocrSplitShare: body.clean.ocr.splitShare,
     }),
     sectionAware: sections.sectionAware,
-    sectionsRecognized: sections.recognized,
-    sectionLabels: sections.sections.map((s) => s.labels.join("+")).join(","),
+    sectionAwareDetected: detected.sectionAware,
+    imradDetectorValidated: validated,
+    sectionsRecognized: detected.recognized,
+    sectionLabels: detected.sections.map((s) => s.labels.join("+")).join(","),
     ...(body?.tier === "fulltext_pdf" && {
       structureSkipped: body.structureSkipped,
     }),

@@ -656,6 +656,23 @@ describe("summarizeItem — requests and the stored payload", () => {
     );
   });
 
+  it("sends PAPER_SUMMARY_FULLTEXT with no section-provenance sentence while the chunker runs flat (P3-T22 step 3)", async () => {
+    const h = await harness();
+    await summarized(
+      h,
+      input(fullTextSource(body(30), { sectionAware: true }), {
+        fullTextMode: "always",
+      }),
+    );
+    const full = h.provider.calls.filter(
+      (c) => kindOf(c.request) === "FULLTEXT",
+    );
+    expect(full).toHaveLength(1);
+    const user = userOf(full[0]?.request as ChatRequest);
+    expect(user).toContain("SOURCE TEXT (untrusted):");
+    expect(user).not.toMatch(/\[SECTION|sections are label/iu);
+  });
+
   it("corrects a mismatched itemKey with exactly one warning", async () => {
     const h = await harness([
       answering({

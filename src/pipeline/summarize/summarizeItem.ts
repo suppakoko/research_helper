@@ -30,8 +30,11 @@
  *    full text (`PAPER_SUMMARY_FULLTEXT`) or the chunked full text
  *    (`CHUNK_MAP` then `CHUNK_REDUCE`), planned by `planChunks` and sent
  *    through `runWithContextRetry` (`src/llm/shared/chunking.ts`). The
- *    chunker runs **flat** until `P3-T22` and gate `G-22` rule (`plan/00` §6
- *    item 300): {@link SummarizeItemDeps.imradDetectorValidated}.
+ *    chunker runs **flat** while the detector is unvalidated (`P3-T22`, gate
+ *    `G-22`; `plan/00` §6 item 300):
+ *    {@link SummarizeItemDeps.imradDetectorValidated}, and on the flat path
+ *    `PAPER_SUMMARY_FULLTEXT` is sent without its section-label clause
+ *    ({@link fullTextPromptFor}).
  * 5. **The cache first** (`P3-T26`): every plan's key is looked up before any
  *    call; a hit makes none. Under the item pane's Regenerate
  *    ({@link SummarizeItemInput.bypassCache}, item 305(c)) nothing is looked
@@ -176,6 +179,40 @@ export const COMPLETE_NOTE =
 
 /** `<omittedSections>` on the flat path (`docs/12` §5's note of 2026-10-28). */
 export const FLAT_OMITTED_SECTIONS = "the end of the text";
+
+/**
+ * The one clause of `PAPER_SUMMARY_FULLTEXT`'s user text that says the plugin
+ * labelled the sections (`docs/12` §5).
+ */
+export const SECTION_PROVENANCE_CLAUSE =
+  "; sections are labelled [SECTION: name]";
+
+/** What must not remain once {@link SECTION_PROVENANCE_CLAUSE} is dropped. */
+const SECTION_PROVENANCE_PATTERN = /\[SECTION\b|sections are label/iu;
+
+/**
+ * `P3-T22` step 3, the prompt selector (`docs/12` §5's note of 2026-11-10):
+ * `template` as it is when `sectionAware`, else with
+ * {@link SECTION_PROVENANCE_CLAUSE} removed from its user text, so a flat
+ * text is never described as section-labelled. The system text, the file,
+ * its version and its cache epoch are untouched.
+ *
+ * @throws ConfigurationError when section-label wording would remain — a
+ *   reworded clause in a later prompt version must be handled here, not sent
+ */
+export function fullTextPromptFor(
+  template: PromptTemplate,
+  sectionAware: boolean,
+): PromptTemplate {
+  if (sectionAware) return template;
+  const user = template.user.split(SECTION_PROVENANCE_CLAUSE).join("");
+  if (SECTION_PROVENANCE_PATTERN.test(user)) {
+    throw new ConfigurationError(
+      `${template.id} ${template.version} still claims section labels on the flat path`,
+    );
+  }
+  return user === template.user ? template : { ...template, user };
+}
 
 /** A missing metadata value, as sent (`docs/12` §5's note of 2026-10-28). */
 export const UNKNOWN_METADATA = "unknown";
@@ -347,8 +384,9 @@ export interface SummarizeItemDeps {
    */
   readonly modelConfirmed?: boolean;
   /**
-   * `P3-T22`'s `IMRAD_DETECTOR_VALIDATED`. Until it is wired, `false`: the
-   * chunker runs flat (`plan/00` §6 item 300).
+   * `P3-T22`'s `IMRAD_DETECTOR_VALIDATED` (`./imrad.ts`), which both
+   * pipelines pass. Absent or `false`: the chunker runs flat and the full-text
+   * prompt drops its section-label clause (`plan/00` §6 item 300).
    */
   readonly imradDetectorValidated?: boolean;
   /** The token counter; `estTokens(text, modelId)` by default. */
@@ -882,7 +920,14 @@ export async function summarizeItem(
     // The full-text paths
     // -----------------------------------------------------------------------
     const tier = source.tier;
-    const fullTemplate = deps.prompts.get("PAPER_SUMMARY_FULLTEXT");
+    // Flat while the detector is unvalidated (`P3-T22`, gate `G-22`;
+    // `plan/00` §6 item 300).
+    const sectionAware =
+      deps.imradDetectorValidated === true ? source.sectionAware : false;
+    const fullTemplate = fullTextPromptFor(
+      deps.prompts.get("PAPER_SUMMARY_FULLTEXT"),
+      sectionAware,
+    );
     const mapTemplate = deps.prompts.get("CHUNK_MAP");
     const reduceTemplate = deps.prompts.get("CHUNK_REDUCE");
     const fullSchema = schemaOf(fullTemplate);
@@ -937,9 +982,7 @@ export async function summarizeItem(
       abstract: source.abstract,
       text: source.text,
       sections: source.sections,
-      // Flat until `P3-T22` and `G-22` rule (`plan/00` §6 item 300).
-      sectionAware:
-        deps.imradDetectorValidated === true ? source.sectionAware : false,
+      sectionAware,
     };
     const planAt = (budgetScale: number): ChunkPlan =>
       planChunks(chunkSource, chunkModel, "PAPER_SUMMARY_FULLTEXT", {

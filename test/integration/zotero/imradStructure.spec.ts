@@ -507,6 +507,9 @@ describe("P3-T21 IMRaD section detector on getStructuredDocumentText", function 
         estimateTokens: (text) => Math.ceil(text.length / 4),
         tryEuropePmc: false,
         logger,
+        // This spec measures the detector itself, so `P3-T22`'s degrade
+        // switch (`IMRAD_DETECTOR_VALIDATED`, false) is overridden here.
+        imradDetectorValidated: true,
       });
       const structure = await getDocumentStructure(attachment);
       const lineScanOnly = detectSectionsFromPdf(source.text, null);
@@ -569,6 +572,27 @@ describe("P3-T21 IMRaD section detector on getStructuredDocumentText", function 
       assert.isFalse(
         lineScanOnly.sections.some((s) => s.imrad === "methods"),
         `${name}: the line scan alone misses the Methods heading`,
+      );
+      // `P3-T22`: the product default. With the degrade switch as committed
+      // (`IMRAD_DETECTOR_VALIDATED` false) the same file is acquired flat,
+      // and the detector's own answer stays on the diagnostics line.
+      const flat = captureLogger();
+      const productDefault = await acquireZoteroSource(parent, {
+        estimateTokens: (text) => Math.ceil(text.length / 4),
+        tryEuropePmc: false,
+        logger: flat.logger,
+      });
+      assert.isFalse(productDefault.sectionAware, `${name}: flat by default`);
+      assert.deepEqual(productDefault.sections, [], `${name}: no sections`);
+      assert.strictEqual(
+        productDefault.text,
+        source.text,
+        `${name}: same text`,
+      );
+      assert.strictEqual(
+        flat.lines[0]?.sectionAwareDetected,
+        true,
+        `${name}: the detector's own answer is still logged`,
       );
     }
   });
