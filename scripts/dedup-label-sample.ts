@@ -53,11 +53,26 @@
  * report measures the union of the two draws and says it is not one
  * stratified draw (`scripts/dedup-report.ts`).
  *
+ * **Several top-ups** (since 2026-11-12; owner's decision of 2026-11-11,
+ * `plan/00` §6 item 370(d); `docs/02` §11.3's note of that date).
+ * `--extend=N` now appends the **next** numbered block — `topUp`, then
+ * `topUp2`, `topUp3`, … ({@link topUpKey}) — and refuses only a seed an
+ * earlier draw used. Its population is the label-set pairs with no label that
+ * are in no earlier draw's sample (the first draw's or an earlier top-up's),
+ * under the engine's outcome on its day; `--date=`, `--seed=` and
+ * `--decision=` name it, and the seed defaults to {@link topUpSeed}. The
+ * first top-up's block is unchanged, so a file written before this reads and
+ * writes back byte for byte. `--check` re-derives every draw from its own
+ * population and seed, checks that every pair an earlier block saw is still
+ * in the label set, and that today's label set is what the newest block saw.
+ *
  * ```sh
  * npx tsx scripts/dedup-label-sample.ts                          # draw and write, if no sample exists
  * npx tsx scripts/dedup-label-sample.ts --check                  # exit 1 if the committed sample does not re-derive
  * npx tsx scripts/dedup-label-sample.ts --page-order=out.json    # write the labelling page's id list (first draw)
- * npx tsx scripts/dedup-label-sample.ts --extend=10              # append the top-up, once (owner, 2026-11-11)
+ * npx tsx scripts/dedup-label-sample.ts --extend=10 --date=2026-11-11   # the first top-up (owner, 2026-11-11)
+ * npx tsx scripts/dedup-label-sample.ts --extend=20 --date=2026-11-12 \
+ *   --decision="owner, 2026-11-11, plan/00 §6 item 370(d); docs/02 §11.3"   # the second (item 370(d))
  * npx tsx scripts/dedup-label-sample.ts --redraw                 # overwrite (the owner's decision only)
  * ```
  */
@@ -82,6 +97,7 @@ import {
   outcomeIndex,
   parseLabelSample,
   PREDICTIONS,
+  topUpKey,
   type LabelSample,
   type LabelSampleTopUp,
   type Prediction,
@@ -274,6 +290,7 @@ export function buildLabelSample(
     population: sorted,
     sample: draw.sample,
     displayOrder: draw.displayOrder,
+    topUps: [],
   };
 }
 
@@ -282,18 +299,31 @@ export function buildLabelSample(
 // method is docs/02 §11.3's note of that date)
 // ---------------------------------------------------------------------------
 
-/** The top-up's fixed seed (`docs/02` §11.3); changing it changes the ten. */
+/** The first top-up's fixed seed (`docs/02` §11.3); changing it changes the ten. */
 export const TOP_UP_SEED = "P2-T13 label sample top-up 2026-11-11";
 
-/** How many pairs the top-up draws (`plan/00` §6 item 366(a)). */
+/** How many pairs the first top-up draws (`plan/00` §6 item 366(a)). */
 export const TOP_UP_SIZE = 10;
 
-/** The top-up's day, recorded in its block. */
+/** The first top-up's day, recorded in its block. */
 export const TOP_UP_DATE = "2026-11-11";
 
-/** The decision the top-up block cites. */
+/** The decision the first top-up block cites. */
 const TOP_UP_DECISION =
   "owner, 2026-11-11, plan/00 §6 item 366(a); docs/02 §11.3";
+
+/**
+ * The default seed of top-up `number` (1-based) drawn on `date`: the first
+ * top-up's form for 1 (it equals {@link TOP_UP_SEED} on its day), and
+ * `P2-T13 label sample top-up <number> <date>` after it — for the second,
+ * `P2-T13 label sample top-up 2 2026-11-12` (`docs/02` §11.3's note of
+ * 2026-11-12, `plan/00` §6 item 370(d)).
+ */
+export function topUpSeed(number: number, date: string): string {
+  return number === 1
+    ? `P2-T13 label sample top-up ${date}`
+    : `P2-T13 label sample top-up ${String(number)} ${date}`;
+}
 
 /** One sentence the top-up block carries, so it explains itself. */
 const TOP_UP_METHOD =
@@ -303,15 +333,35 @@ const TOP_UP_METHOD =
   "block's seed. Drawn after the engine changed (P2-T38, P2-T39): the union of the two draws " +
   "is not one stratified draw.";
 
+/** The method sentence of every later top-up block (since 2026-11-12, item 370(d)). */
+const LATER_TOP_UP_METHOD =
+  "Label-set pairs that carried no label and were in no earlier draw's sample (the first " +
+  "draw's or an earlier top-up's), stratified by the engine's outcome on this block's date " +
+  "(merged / linked / flagged / distinct); allocation, within-stratum rank and display order " +
+  "exactly as the first draw, under this block's seed. Drawn after the engine changed: the " +
+  "union of the draws is not one stratified draw.";
+
+/** What names a top-up besides its size; each part has a default ({@link buildTopUp}). */
+export interface TopUpNaming {
+  readonly seed?: string;
+  readonly date?: string;
+  readonly decision?: string;
+}
+
 /**
- * The top-up block for a committed first draw: the population is every
+ * The next top-up block for a committed sample: the population is every
  * label-set pair of `today` (the label set with today's engine outcome, as
  * {@link stratifyLabelSet} gives it) that carries no label in `rows` and is
- * not in the first draw's sample, and it is drawn by
- * {@link drawStratifiedSample} under `seed`. Pure: it reads `rows` and never
- * writes a label anywhere.
+ * in no earlier draw's sample (the first draw's or an earlier top-up's), and
+ * it is drawn by {@link drawStratifiedSample} under its seed. Pure: it reads
+ * `rows` and never writes a label anywhere.
  *
- * @throws Error when `committed` already holds a top-up, or when `today`
+ * The seed defaults to {@link topUpSeed} for the block's number and date; the
+ * date to {@link TOP_UP_DATE}; the decision and method to the first top-up's
+ * for the first block and to a later block's otherwise. Before 2026-11-12 a
+ * second top-up was refused; since then (item 370(d)) only a repeated seed is.
+ *
+ * @throws Error when the seed is one an earlier draw used, or when `today`
  *   names a pair `rows` does not hold
  * @throws RangeError when the population holds fewer than `size` pairs
  */
@@ -320,16 +370,23 @@ export function buildTopUp(
   rows: readonly PairRow[],
   today: readonly StratifiedPair[],
   size: number = TOP_UP_SIZE,
-  seed: string = TOP_UP_SEED,
-  date: string = TOP_UP_DATE,
+  naming: TopUpNaming = {},
 ): LabelSampleTopUp {
-  if (committed.topUp !== undefined) {
+  const number = committed.topUps.length + 1;
+  const date = naming.date ?? TOP_UP_DATE;
+  const seed = naming.seed ?? topUpSeed(number, date);
+  const used = [committed.seed, ...committed.topUps.map((t) => t.seed)];
+  if (used.includes(seed)) {
     throw new Error(
-      `the sample already holds a top-up (seed "${committed.topUp.seed}"); it is drawn once`,
+      `the seed "${seed}" is already used by an earlier draw of the sample; each draw has its own`,
     );
   }
   const byPair = new Map(rows.map((r) => [r.pairId, r]));
-  const firstSampled = new Set(committed.sample.map((s) => s.pairId));
+  const earlierSampled = new Set(
+    [committed.sample, ...committed.topUps.map((t) => t.sample)].flatMap((s) =>
+      s.map((x) => x.pairId),
+    ),
+  );
   const population: StratifiedPair[] = [];
   const excludedLabelled: string[] = [];
   for (const p of today) {
@@ -337,7 +394,7 @@ export function buildTopUp(
     if (row === undefined) {
       throw new Error(`pair ${p.pairId} is not in the corpus`);
     }
-    if (firstSampled.has(p.pairId)) continue;
+    if (earlierSampled.has(p.pairId)) continue;
     if (row.label !== "") excludedLabelled.push(p.pairId);
     else population.push({ pairId: p.pairId, stratum: p.stratum });
   }
@@ -354,11 +411,15 @@ export function buildTopUp(
     ]),
   ) as LabelSampleTopUp["strata"];
   return {
-    decision: TOP_UP_DECISION,
+    decision:
+      naming.decision ??
+      (number === 1
+        ? TOP_UP_DECISION
+        : `owner; docs/02 §11.3's top-up note of ${date}`),
     date,
     seed,
     size,
-    method: TOP_UP_METHOD,
+    method: number === 1 ? TOP_UP_METHOD : LATER_TOP_UP_METHOD,
     strata,
     excludedLabelled,
     population,
@@ -386,10 +447,9 @@ function redrawTopUp(t: LabelSampleTopUp): LabelSampleTopUp {
   };
 }
 
-/** The first draw alone: the file's content without its top-up block. */
+/** The first draw alone: the file's content without its top-up blocks. */
 function firstDrawOf(s: LabelSample): LabelSample {
-  const { topUp: _topUp, ...first } = s;
-  return first;
+  return { ...s, topUps: [] };
 }
 
 /** JSON with one pair per line, so a diff of the file reads pair by pair. */
@@ -402,12 +462,13 @@ export function serializeLabelSample(s: LabelSample): string {
     ).join(",\n");
   const ids = (list: readonly string[], indent: string): string =>
     list.map((id) => `${indent}${JSON.stringify(id)}`).join(",\n");
-  const t = s.topUp;
-  const topUp =
-    t === undefined
-      ? ""
-      : ",\n" +
-        `  "topUp": {\n` +
+  // One block per top-up, under its numbered key; the first is byte for byte
+  // the single `topUp` block written before 2026-11-12.
+  const topUp = s.topUps
+    .map(
+      (t, i) =>
+        ",\n" +
+        `  ${JSON.stringify(topUpKey(i))}: {\n` +
         `    "decision": ${JSON.stringify(t.decision)},\n` +
         `    "date": ${JSON.stringify(t.date)},\n` +
         `    "seed": ${JSON.stringify(t.seed)},\n` +
@@ -418,7 +479,9 @@ export function serializeLabelSample(s: LabelSample): string {
         `    "displayOrder": [\n${ids(t.displayOrder, "      ")}\n    ],\n` +
         `    "excludedLabelled": [${t.excludedLabelled.length === 0 ? "" : `\n${ids(t.excludedLabelled, "      ")}\n    `}],\n` +
         `    "population": [\n${t.population.map((p) => pair(p, "      ")).join(",\n")}\n    ]\n` +
-        `  }`;
+        `  }`,
+    )
+    .join("");
   return (
     "{\n" +
     `  "card": ${JSON.stringify(s.card)},\n` +
@@ -438,8 +501,8 @@ export function serializeLabelSample(s: LabelSample): string {
 /**
  * The labelling page's list: the sampled ids in display order, and nothing
  * about strata or outcomes (the coordinator republishes the page from it).
- * The first draw only; the top-up is labelled in chat (`plan/00` §6 item
- * 366(a)) and its ids are in its own block's `displayOrder`.
+ * The first draw only; the top-ups are labelled in chat (`plan/00` §6 items
+ * 366(a) and 370(d)) and their ids are in their own blocks' `displayOrder`.
  */
 export function pageOrderOf(s: LabelSample): string {
   return `${JSON.stringify(
@@ -470,16 +533,20 @@ function sameIds(a: readonly string[], b: readonly string[]): boolean {
  * recorded population and seed; the first draw's population must still be
  * inside today's label set; and today's label set must be exactly what the
  * top-up saw — the first draw's sample, the top-up's population and the
- * labelled pairs it left out.
+ * labelled pairs it left out. *Since 2026-11-12 (item 370(d)), with several
+ * top-ups:* every block re-derives from its own population and seed; what
+ * each block saw (every earlier draw's sample, its population and the
+ * labelled pairs it left out) must still be inside today's label set; and
+ * today's label set must be exactly what the **newest** block saw.
  */
 export function checkLabelSample(
   committed: LabelSample,
   labelSetIds: readonly string[],
 ): string[] {
   const problems: string[] = [];
-  const t = committed.topUp;
   const pop = committed.population.map((p) => p.pairId);
-  if (t === undefined) {
+  const now = new Set(labelSetIds);
+  if (committed.topUps.length === 0) {
     if (!sameIds(pop, labelSetIds)) {
       problems.push(
         `the sample's population (${String(pop.length)} pairs) is not today's label set ` +
@@ -487,7 +554,6 @@ export function checkLabelSample(
       );
     }
   } else {
-    const now = new Set(labelSetIds);
     const gone = pop.filter((id) => !now.has(id));
     if (gone.length > 0) {
       problems.push(
@@ -495,19 +561,34 @@ export function checkLabelSample(
           `label set (${gone.slice(0, 3).join(", ")}${gone.length > 3 ? ", …" : ""})`,
       );
     }
-    const seen = [
-      ...committed.sample.map((s) => s.pairId),
-      ...t.population.map((p) => p.pairId),
-      ...t.excludedLabelled,
-    ];
-    if (!sameIds(seen, labelSetIds)) {
-      problems.push(
-        `the label set the top-up saw (${String(seen.length)} pairs: the first draw's ` +
-          `${String(committed.sample.length)}, its population of ${String(t.population.length)} ` +
-          `and ${String(t.excludedLabelled.length)} labelled pairs left out) is not today's ` +
-          `label set (${String(labelSetIds.length)} pairs)`,
-      );
-    }
+    const earlier: string[] = committed.sample.map((s) => s.pairId);
+    const last = committed.topUps.length - 1;
+    committed.topUps.forEach((t, i) => {
+      const seen = [
+        ...earlier,
+        ...t.population.map((p) => p.pairId),
+        ...t.excludedLabelled,
+      ];
+      const name = `top-up ${String(i + 1)}`;
+      if (i === last && !sameIds(seen, labelSetIds)) {
+        problems.push(
+          `the label set ${name} saw (${String(seen.length)} pairs: the earlier draws' ` +
+            `${String(earlier.length)}, its population of ${String(t.population.length)} ` +
+            `and ${String(t.excludedLabelled.length)} labelled pairs left out) is not today's ` +
+            `label set (${String(labelSetIds.length)} pairs)`,
+        );
+      }
+      if (i < last) {
+        const lost = seen.filter((id) => !now.has(id));
+        if (lost.length > 0) {
+          problems.push(
+            `${String(lost.length)} pairs that ${name} saw are no longer in the label set ` +
+              `(${lost.slice(0, 3).join(", ")}${lost.length > 3 ? ", …" : ""})`,
+          );
+        }
+      }
+      earlier.push(...t.sample.map((s) => s.pairId));
+    });
   }
   const first = firstDrawOf(committed);
   const redrawn = buildLabelSample(first.population, first.size, first.seed);
@@ -516,15 +597,16 @@ export function checkLabelSample(
       "the committed sample does not re-derive from its population and seed",
     );
   }
-  if (
-    t !== undefined &&
-    serializeLabelSample({ ...first, topUp: redrawTopUp(t) }) !==
-      serializeLabelSample(committed)
-  ) {
-    problems.push(
-      "the committed top-up does not re-derive from its own population and seed",
-    );
-  }
+  committed.topUps.forEach((t, i) => {
+    if (
+      serializeLabelSample({ ...first, topUps: [redrawTopUp(t)] }) !==
+      serializeLabelSample({ ...first, topUps: [t] })
+    ) {
+      problems.push(
+        `top-up ${String(i + 1)} does not re-derive from its own population and seed`,
+      );
+    }
+  });
   return problems;
 }
 
@@ -539,8 +621,8 @@ export interface MainOptions {
  *
  * @returns 0 on success; 1 when `--check` finds a problem, when a sample
  *   exists and neither `--redraw` nor `--extend=` was given, or when
- *   `--extend=` finds a top-up already drawn or no first draw; 2 on an
- *   unreadable input or a bad `--extend=` value
+ *   `--extend=` finds no first draw or a seed an earlier draw used; 2 on an
+ *   unreadable input or a bad `--extend=` or `--date=` value
  */
 export async function main(
   argv: readonly string[],
@@ -555,6 +637,11 @@ export async function main(
   const extendArg = argv
     .find((a) => a.startsWith("--extend="))
     ?.slice("--extend=".length);
+  const valueOf = (flag: string): string | undefined =>
+    argv.find((a) => a.startsWith(`${flag}=`))?.slice(flag.length + 1);
+  const dateArg = valueOf("--date");
+  const seedArg = valueOf("--seed");
+  const decisionArg = valueOf("--decision");
   const sampleFile = resolve(dir, LABEL_SAMPLE_FILE);
 
   let extendSize: number | undefined;
@@ -572,6 +659,17 @@ export async function main(
       );
       return 2;
     }
+  }
+  if (dateArg !== undefined && !/^\d{4}-\d{2}-\d{2}$/u.test(dateArg)) {
+    process.stderr.write(`--date= takes YYYY-MM-DD, not "${dateArg}".\n`);
+    return 2;
+  }
+  if (
+    extendArg === undefined &&
+    [dateArg, seedArg, decisionArg].some((v) => v !== undefined)
+  ) {
+    process.stderr.write("--date=, --seed= and --decision= need --extend=.\n");
+    return 2;
   }
 
   let rows: readonly PairRow[];
@@ -602,10 +700,14 @@ export async function main(
       );
       return 1;
     }
-    if (committed.topUp !== undefined) {
+    const number = committed.topUps.length + 1;
+    const date = dateArg ?? localDate();
+    const seed = seedArg ?? topUpSeed(number, date);
+    const used = [committed, ...committed.topUps].find((d) => d.seed === seed);
+    if (used !== undefined) {
       process.stderr.write(
-        `${sampleFile} already holds a top-up (seed "${committed.topUp.seed}", ` +
-          `${committed.topUp.date}); it is drawn once (docs/02 §11.3). Nothing was written.\n`,
+        `${sampleFile} already holds a draw under the seed "${seed}"; each draw has its own ` +
+          `(docs/02 §11.3). Nothing was written.\n`,
       );
       return 1;
     }
@@ -617,12 +719,18 @@ export async function main(
       rows,
       stratifyLabelSet(rows, byId, dedupeRecords(pool)),
       extendSize,
+      {
+        seed,
+        date,
+        ...(decisionArg !== undefined && { decision: decisionArg }),
+      },
     );
-    committed = { ...committed, topUp };
+    committed = { ...committed, topUps: [...committed.topUps, topUp] };
     await writeFile(sampleFile, serializeLabelSample(committed), "utf8");
     process.stdout.write(
-      `Appended a top-up to ${sampleFile}: ${String(topUp.size)} of ${String(topUp.population.length)} ` +
-        `label-set pairs with no label outside the first draw ` +
+      `Appended top-up ${String(number)} ("${topUpKey(number - 1)}") to ${sampleFile}: ` +
+        `${String(topUp.size)} of ${String(topUp.population.length)} ` +
+        `label-set pairs with no label outside the earlier draws ` +
         `(${String(topUp.excludedLabelled.length)} labelled pairs left out), seed "${topUp.seed}"; ` +
         `per stratum ` +
         PREDICTIONS.map(
@@ -643,13 +751,17 @@ export async function main(
     for (const p of problems) process.stderr.write(`${p}\n`);
     if (problems.length > 0) return 1;
     process.stdout.write(
-      committed.topUp === undefined
+      committed.topUps.length === 0
         ? `${sampleFile} re-derives from its seed and population.\n`
-        : `${sampleFile} re-derives: the first draw from its seed and population, and the ` +
-            `top-up from its own; today's label set is what the top-up saw.\n`,
+        : committed.topUps.length === 1
+          ? `${sampleFile} re-derives: the first draw from its seed and population, and the ` +
+            `top-up from its own; today's label set is what the top-up saw.\n`
+          : `${sampleFile} re-derives: the first draw from its seed and population, and each of ` +
+            `the ${String(committed.topUps.length)} top-ups from its own; today's label set is what ` +
+            `the newest top-up saw.\n`,
     );
   } else if (committed === undefined || redraw) {
-    if (committed?.topUp !== undefined) {
+    if (committed !== undefined && committed.topUps.length > 0) {
       process.stderr.write(
         `${sampleFile} holds a top-up; redrawing the first draw would drop it. ` +
           `Nothing was written.\n`,
@@ -688,6 +800,12 @@ export async function main(
     );
   }
   return 0;
+}
+
+/** Today's local date as YYYY-MM-DD: a top-up's default `--date=`. */
+function localDate(): string {
+  const d = new Date();
+  return `${String(d.getFullYear())}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 /** `true` when this module is the process entry point rather than an import. */

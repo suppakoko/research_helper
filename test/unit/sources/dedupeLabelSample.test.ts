@@ -20,6 +20,11 @@
  *    the same method under a new seed from the label-set pairs with no label
  *    outside the first draw — deterministic, never drawn twice, never writing a
  *    label, and measured with the first draw as their union.
+ * 5. **Several top-ups** (added 2026-11-12; owner's decision of 2026-11-11,
+ *    `plan/00` §6 item 370(d); `docs/02` §11.3's note of 2026-11-12): the
+ *    file's numbered blocks `topUp`, `topUp2`, …, the first kept byte for
+ *    byte; `--extend=` appends the next and refuses only a repeated seed;
+ *    `--check` re-derives each; the report measures the union of all draws.
  */
 
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -53,6 +58,7 @@ import {
   TOP_UP_DATE,
   TOP_UP_SEED,
   TOP_UP_SIZE,
+  topUpSeed,
 } from "../../../scripts/dedup-label-sample";
 import {
   inLabelSet,
@@ -63,6 +69,7 @@ import {
   parseLabelSample,
   PREDICTIONS,
   sampledPairsOf,
+  topUpKey,
   wilsonInterval,
   Z_95,
   type LabelSample,
@@ -268,10 +275,12 @@ describe("test/fixtures/dedup/label-sample.json", () => {
   // pairs): the first draw re-derives from its 267, the top-up from its own
   // 225, and the label set is what the top-up saw. The 18 stay unlabelled
   // unless the top-up sampled them (the owner labels those in chat).
+  //
+  // Updated 2026-11-12 (item 370(d)): "the top-up" is now every top-up.
   it("re-derives byte for byte from its own seed and population, and its population is today's label set less the 18 P2-T39 pairs", () => {
     const population = new Set(committedSample.population.map((p) => p.pairId));
     const topUpSampled = new Set(
-      committedSample.topUp?.sample.map((s) => s.pairId) ?? [],
+      committedSample.topUps.flatMap((t) => t.sample.map((s) => s.pairId)),
     );
     const added = committedRows.filter(
       (r) => inLabelSet(r) && !population.has(r.pairId),
@@ -292,14 +301,16 @@ describe("test/fixtures/dedup/label-sample.json", () => {
   });
 
   // Updated 2026-11-11 (plan/00 §6 item 366(a)): both draws' pairs, the
-  // first draw's 60 and the top-up's 10.
+  // first draw's 60 and the top-up's 10. Updated 2026-11-12 (item 370(d)):
+  // and top-up 2's 20.
   it("holds no label and no pair outside the label set", () => {
     expect(committedSampleText).not.toMatch(/"label"/u);
     const labelSet = new Set(
       committedRows.filter(inLabelSet).map((r) => r.pairId),
     );
     const sampled = sampledPairsOf(committedSample);
-    expect(sampled).toHaveLength(70);
+    expect(sampled).toHaveLength(90);
+    expect(new Set(sampled.map((s) => s.pairId)).size).toBe(90);
     for (const s of sampled) {
       expect(labelSet.has(s.pairId)).toBe(true);
     }
@@ -337,7 +348,15 @@ describe("test/fixtures/dedup/label-sample.json", () => {
   // eleven sampled pairs to merged. The sample is NOT redrawn (docs/02 §11.3);
   // this pins which pairs moved, and how, instead — the count the report
   // prints as "Sampled pairs whose engine outcome has changed since the draw".
-  it("was stratified by the engine's own outcome on the draw day; since then exactly the P2-T38 eleven moved, all to merged", async () => {
+  //
+  // Replaced again 2026-11-12 (`P2-T40`, plan/00 §6 item 370(a)–(c)): the
+  // family now links, so ten of the eleven are back under their draw-day
+  // stratum (linked) and the eleventh, a pair of F1000Research reports on two
+  // versions, moved from flagged to linked. The top-up's draw-day pin is
+  // replaced by the list of what moved, as it said it would be: 45 of its
+  // population, every one from merged to linked, two of them sampled. Top-up 2
+  // was drawn after `P2-T40`, so it carries its own draw-day pin.
+  it("was stratified by the engine's own outcome on each draw day; since P2-T40 one first-draw pair and 45 of top-up 1's population moved, all to linked", async () => {
     const corpus = await loadCorpusRecords();
     const pool = corpus.records.map((c) => c.record);
     const byId = new Map(pool.map((r) => [r.id, r]));
@@ -351,40 +370,40 @@ describe("test/fixtures/dedup/label-sample.json", () => {
       .filter((s) => today.get(s.pairId) !== s.stratum)
       .map((s) => `${s.pairId} ${s.stratum} -> ${String(today.get(s.pairId))}`)
       .sort();
-    expect(moved).toEqual(
-      [
-        "p-136a40c667ec linked -> merged",
-        "p-1588230667d8 linked -> merged",
-        "p-1714f98efd0e linked -> merged",
-        "p-3a7cc467c9f3 linked -> merged",
-        "p-5671166c13d8 linked -> merged",
-        "p-6caef4b71a46 linked -> merged",
-        "p-770263a3b79f linked -> merged",
-        "p-940c511c1fe1 linked -> merged",
-        "p-95df2d7ba01d linked -> merged",
-        "p-f446658730ea linked -> merged",
-        "p-f581335f8a55 flagged -> merged",
-      ].sort(),
-    );
+    expect(moved).toEqual(["p-f581335f8a55 flagged -> linked"]);
     // The committed file's first draw still re-derives from its own
     // population (updated 2026-11-11: the file now also carries the top-up
-    // block, kept as it is).
+    // blocks, kept as they are).
     expect(
       serializeLabelSample({
         ...buildLabelSample(committedSample.population),
-        ...(committedSample.topUp !== undefined && {
-          topUp: committedSample.topUp,
-        }),
+        topUps: committedSample.topUps,
       }),
     ).toBe(committedSampleText);
-    // Draw-day pin for the top-up (2026-11-11): it was stratified by the
-    // engine's outcome that day, so today every one of its population's
-    // pairs is under its recorded stratum. When the engine moves one, this
-    // pin is replaced by a list of what moved, as the first draw's was.
-    const topUp = committedSample.topUp;
-    if (topUp === undefined) throw new Error("no top-up");
+    const [one, two] = committedSample.topUps;
+    if (one === undefined || two === undefined) throw new Error("top-ups");
+    // Top-up 1: what moved since 2026-11-11.
+    const movedOne = one.population.filter(
+      (s) => today.get(s.pairId) !== s.stratum,
+    );
+    expect(movedOne).toHaveLength(45);
     expect(
-      topUp.population.filter((s) => today.get(s.pairId) !== s.stratum),
+      new Set(
+        movedOne.map((s) => `${s.stratum} -> ${String(today.get(s.pairId))}`),
+      ),
+    ).toEqual(new Set(["merged -> linked"]));
+    const sampledOne = new Set(one.sample.map((s) => s.pairId));
+    expect(
+      movedOne
+        .filter((s) => sampledOne.has(s.pairId))
+        .map((s) => s.pairId)
+        .sort(),
+    ).toEqual(["p-7e83a20f4a2b", "p-df298cf5ca83"]);
+    // Draw-day pin for top-up 2 (2026-11-12): stratified by today's engine,
+    // so every pair of its population is under its recorded stratum. When the
+    // engine moves one, this pin is replaced by a list of what moved.
+    expect(
+      two.population.filter((s) => today.get(s.pairId) !== s.stratum),
     ).toEqual([]);
   }, 120_000);
 
@@ -415,19 +434,20 @@ describe("test/fixtures/dedup/label-sample.json", () => {
     ).toThrow(/not in the population/u);
     // Added 2026-11-11: a top-up that repeats a first-draw pair, or lists a
     // left-out labelled pair that a draw holds, is refused too.
+    // Updated 2026-11-12 (item 370(d)): "an earlier draw" for any top-up.
     const t = raw.topUp as Record<string, unknown>;
     const brokenTopUp = (patch: Record<string, unknown>): string =>
       JSON.stringify({ ...raw, topUp: { ...t, ...patch } });
     expect(() => parseLabelSample(brokenTopUp({ size: 9 }))).toThrow(
       /topUp\.sample holds/u,
     );
-    const topUpStrata = committedSample.topUp?.strata;
+    const topUpStrata = committedSample.topUps[0]?.strata;
     if (topUpStrata === undefined) throw new Error("no top-up");
     expect(() =>
       parseLabelSample(
         brokenTopUp({
           population: [
-            ...(committedSample.topUp?.population ?? []),
+            ...(committedSample.topUps[0]?.population ?? []),
             { pairId: first.pairId, stratum: first.stratum },
           ],
           strata: {
@@ -439,13 +459,45 @@ describe("test/fixtures/dedup/label-sample.json", () => {
           },
         }),
       ),
-    ).toThrow(/which the first draw sampled/u);
+    ).toThrow(/which an earlier draw sampled/u);
     expect(() =>
       parseLabelSample(brokenTopUp({ excludedLabelled: [first.pairId] })),
     ).toThrow(/excludedLabelled holds/u);
     expect(() => parseLabelSample(brokenTopUp({ date: 20261111 }))).toThrow(
       /topUp\."date"/u,
     );
+    // Added 2026-11-12 (item 370(d)): a later block may not repeat a seed,
+    // hold a pair an earlier top-up sampled, or skip a number.
+    const t2 = raw.topUp2 as Record<string, unknown>;
+    const brokenTopUp2 = (patch: Record<string, unknown>): string =>
+      JSON.stringify({ ...raw, topUp2: { ...t2, ...patch } });
+    expect(() =>
+      parseLabelSample(brokenTopUp2({ seed: committedSample.seed })),
+    ).toThrow(/topUp2\.seed repeats the seed of an earlier draw/u);
+    const oneSampled = committedSample.topUps[0]?.sample[0];
+    const two = committedSample.topUps[1];
+    if (oneSampled === undefined || two === undefined) {
+      throw new Error("top-ups");
+    }
+    expect(() =>
+      parseLabelSample(
+        brokenTopUp2({
+          population: [...two.population, oneSampled],
+          strata: {
+            ...two.strata,
+            [oneSampled.stratum]: {
+              ...two.strata[oneSampled.stratum],
+              population: two.strata[oneSampled.stratum].population + 1,
+            },
+          },
+        }),
+      ),
+    ).toThrow(/topUp2\.population holds .*which an earlier draw sampled/u);
+    const { topUp2: moved, ...withoutTwo } = raw;
+    expect(() =>
+      parseLabelSample(JSON.stringify({ ...withoutTwo, topUp3: moved })),
+    ).toThrow(/"topUp3" is not the next top-up block \(expected "topUp2"\)/u);
+    expect([0, 1, 2].map(topUpKey)).toEqual(["topUp", "topUp2", "topUp3"]);
   });
 });
 
@@ -540,7 +592,10 @@ describe("npm run dedup:report in sample mode (the default)", () => {
   // top-up's 10. While any of the 70 is unlabelled the report refuses, as it
   // always has, naming the count per draw; --allow-partial measures the
   // labelled ones and says how many of the 70 carry a label.
-  it("measures the committed corpus over both draws, and refuses without --allow-partial while a top-up pair is unlabelled", async () => {
+  //
+  // Updated 2026-11-12 (item 370(d)): the union of every draw, now 90 pairs
+  // with top-up 2's 20, which the owner labels in chat after this card.
+  it("measures the committed corpus over every draw, and refuses without --allow-partial while a sampled pair is unlabelled", async () => {
     const out = vi
       .spyOn(process.stdout, "write")
       .mockImplementation(() => true);
@@ -549,24 +604,23 @@ describe("npm run dedup:report in sample mode (the default)", () => {
       .mockImplementation(() => true);
     try {
       const labelOf = new Map(committedRows.map((r) => [r.pairId, r.label]));
-      const topUpIds = committedSample.topUp?.sample.map((s) => s.pairId) ?? [];
-      expect(topUpIds).toHaveLength(10);
-      const topUpLabelled = topUpIds.filter(
-        (id) => labelOf.get(id) !== "",
-      ).length;
-      const firstLabelled = committedSample.sample.filter(
-        (s) => labelOf.get(s.pairId) !== "",
-      ).length;
+      const labelledOf = (ids: readonly StratifiedPair[]): number =>
+        ids.filter((s) => labelOf.get(s.pairId) !== "").length;
+      expect(committedSample.topUps.map((t) => t.size)).toEqual([10, 20]);
+      const firstLabelled = labelledOf(committedSample.sample);
       expect(firstLabelled).toBe(60);
-      const labelled = firstLabelled + topUpLabelled;
+      const perTopUp = committedSample.topUps.map((t) => labelledOf(t.sample));
+      const labelled = firstLabelled + perTopUp.reduce((n, k) => n + k, 0);
+      const unlabelled = 90 - labelled;
       const byDraw =
-        `(of the 70 sampled pairs, ${String(labelled)} have labels: first draw 60 of 60, ` +
-        `top-up ${String(topUpLabelled)} of 10)`;
-      if (topUpLabelled < 10) {
+        `(of the 90 sampled pairs, ${String(labelled)} have labels: first draw 60 of 60, ` +
+        `top-up 1 ${String(perTopUp[0])} of 10, top-up 2 ${String(perTopUp[1])} of 20)`;
+      if (unlabelled > 0) {
         expect(await reportMain([])).toBe(1);
         expect(err.mock.calls.map((c) => String(c[0])).join("")).toContain(
-          `${String(10 - topUpLabelled)} of 70 sampled pairs have no label ` +
-            `(first draw 60 of 60 labelled, top-up ${String(topUpLabelled)} of 10 labelled)`,
+          `${String(unlabelled)} of 90 sampled pairs have no label ` +
+            `(first draw 60 of 60 labelled, top-up 1 ${String(perTopUp[0])} of 10 labelled, ` +
+            `top-up 2 ${String(perTopUp[1])} of 20 labelled)`,
         );
         expect(await reportMain(["--allow-partial"])).toBe(0);
       } else {
@@ -625,13 +679,18 @@ describe("npm run dedup:report in sample mode (the default)", () => {
   // now carries the top-up, so the single-draw output is pinned on a copy of
   // the file without its top-up block (`--sample=`), and the union's output
   // on the committed file with the top-up's pairs given synthetic labels too.
+  //
+  // Updated 2026-11-12 (`P2-T40`; item 370(d)): today's engine links the
+  // family, so the first draw's synthetic duplicates are its 23 merged pairs
+  // again and one pair has moved; the two-draw union is pinned on a copy
+  // without top-up 2, and the three-draw union on the committed file.
   it("states each target with its Wilson interval and says plainly when the interval cannot decide", async () => {
     // Synthetic labels, in a temporary copy only: each sampled pair is given
     // the label that agrees with the engine's outcome today, so precision and
-    // recall are both 34 of 34 on the first draw — the 23 merged at the draw
-    // and the eleven `P2-T38` moved to merged — and 39 of 39 on the union,
-    // the top-up adding 5 merged. Nothing here is a human label or reaches
-    // the repository.
+    // recall are both 23 of 23 on the first draw, 26 of 26 on the first two
+    // draws (top-up 1 adds the 3 of its 5 merged pairs that are still
+    // merged) and 33 of 33 on all three (top-up 2 adds 7). Nothing here is a
+    // human label or reaches the repository.
     const dir = await mkdtemp(join(tmpdir(), "dedup-sample-"));
     const out = vi
       .spyOn(process.stdout, "write")
@@ -676,9 +735,11 @@ describe("npm run dedup:report in sample mode (the default)", () => {
         );
         return file;
       };
-      const { topUp: _topUp, ...firstDraw } = committedSample;
       const firstOnly = join(dir, "first-draw-only.json");
-      await writeFile(firstOnly, serializeLabelSample(firstDraw));
+      await writeFile(
+        firstOnly,
+        serializeLabelSample({ ...committedSample, topUps: [] }),
+      );
 
       // The first draw alone: the output as it was before the top-up.
       const file = await synthetic("first.jsonl", committedSample.sample);
@@ -692,55 +753,98 @@ describe("npm run dedup:report in sample mode (the default)", () => {
       expect(text).toMatch(/ merged +103 +23 +23\n/u);
       expect(text).toMatch(/ flagged +22 +5 +5\n/u);
       expect(text).toContain(
-        "Sampled pairs whose engine outcome has changed since the draw: 11",
+        "Sampled pairs whose engine outcome has changed since the draw: 1",
       );
       expect(text).toContain(
         "Labelled label-set pairs outside the sample, not measured in this mode: 1",
       );
       expect(text).toContain(
-        "Precision 1.0000   95 % Wilson interval [0.8985, 1.0000] over 34 merged pairs   " +
+        "Precision 1.0000   95 % Wilson interval [0.8569, 1.0000] over 23 merged pairs   " +
           "target ≥ 0.99   UNDECIDED: the interval is too wide to decide the target — " +
           "even with no error the low end reaches 0.99 only from 381 merged pairs",
       );
       expect(text).toContain(
-        "Recall    1.0000   95 % Wilson interval [0.8985, 1.0000] over 34 true duplicates   " +
+        "Recall    1.0000   95 % Wilson interval [0.8569, 1.0000] over 23 true duplicates   " +
           "target ≥ 0.9   UNDECIDED",
       );
       expect(text).toContain("Labelled pairs measured: 60\n");
       expect(text).not.toContain("Top-up");
 
-      // The union of the two draws, on the committed sample file.
+      // The first draw and top-up 1: the union of two draws.
+      const [one, two] = committedSample.topUps;
+      if (one === undefined || two === undefined) throw new Error("top-ups");
+      const firstTwo = join(dir, "first-two.json");
+      await writeFile(
+        firstTwo,
+        serializeLabelSample({ ...committedSample, topUps: [one] }),
+      );
+      const twoDraws = await synthetic("two.jsonl", [
+        ...committedSample.sample,
+        ...one.sample,
+      ]);
+      expect(await reportMain([twoDraws, `--sample=${firstTwo}`])).toBe(0);
+      const pair = out.mock.calls.map((c) => String(c[0])).join("");
+      out.mockClear();
+      expect(pair).toContain(
+        `Top-up 1 (owner, 2026-11-11, plan/00 §6 item 366(a); docs/02 §11.3): 10 more pairs, ` +
+          `seed "P2-T13 label sample top-up 2026-11-11", drawn from the 225 label-set pairs ` +
+          `that had no label and were in no earlier draw`,
+      );
+      expect(pair).toMatch(/ merged +125 +5 +5\n/u);
+      expect(pair).toMatch(/ distinct +60 +3 +3\n/u);
+      expect(pair).toContain(
+        "The measured sample is the union of the two draws (60 + 10 = 70 pairs). " +
+          "Each top-up was drawn after the engine changed",
+      );
+      expect(pair).toContain(
+        "Sampled pairs whose engine outcome has changed since their draw: 3",
+      );
+      expect(pair).toContain(
+        "Labelled pairs measured: 70 (of the 70 sampled pairs, 70 have labels: " +
+          "first draw 60 of 60, top-up 1 10 of 10)",
+      );
+      expect(pair).toContain(
+        "Precision 1.0000   95 % Wilson interval [0.8713, 1.0000] over 26 merged pairs   " +
+          "target ≥ 0.99   UNDECIDED",
+      );
+      expect(pair).not.toContain("Top-up 2");
+
+      // All three draws, on the committed sample file.
       const union = await synthetic(
         "union.jsonl",
         sampledPairsOf(committedSample),
       );
       expect(await reportMain([union])).toBe(0);
-      const both = out.mock.calls.map((c) => String(c[0])).join("");
-      expect(both).toContain(
-        `Top-up (owner, 2026-11-11, plan/00 §6 item 366(a)): 10 more pairs, ` +
-          `seed "P2-T13 label sample top-up 2026-11-11", drawn from the 225 label-set pairs`,
+      const all = out.mock.calls.map((c) => String(c[0])).join("");
+      expect(all).toContain(
+        `Top-up 2 (owner, 2026-11-11, plan/00 §6 item 370(d); docs/02 §11.3): 20 more pairs, ` +
+          `seed "P2-T13 label sample top-up 2 2026-11-12", drawn from the 215 label-set pairs ` +
+          `that had no label and were in no earlier draw, stratified by the engine's outcome ` +
+          `on 2026-11-12 in proportion`,
       );
-      expect(both).toMatch(/ merged +103 +23 +23\n/u);
-      expect(both).toMatch(/ merged +125 +5 +5\n/u);
-      expect(both).toMatch(/ distinct +60 +3 +3\n/u);
-      expect(both).toContain(
-        "The measured sample is the union of the two draws (60 + 10 = 70 pairs). " +
-          "The top-up was drawn after the engine changed (P2-T38, P2-T39)",
+      expect(all).toMatch(/ merged +103 +23 +23\n/u);
+      expect(all).toMatch(/ merged +125 +5 +5\n/u);
+      expect(all).toMatch(/ merged +77 +7 +7\n/u);
+      expect(all).toMatch(/ linked +70 +7 +7\n/u);
+      expect(all).toContain(
+        "The measured sample is the union of the three draws (60 + 10 + 20 = 90 pairs). " +
+          "Each top-up was drawn after the engine changed and from a different population, " +
+          "so the union is NOT one stratified draw",
       );
-      expect(both).toContain(
-        "Sampled pairs whose engine outcome has changed since their draw: 11",
+      expect(all).toContain(
+        "Sampled pairs whose engine outcome has changed since their draw: 3",
       );
-      expect(both).toContain(
-        "Labelled pairs measured: 70 (of the 70 sampled pairs, 70 have labels: " +
-          "first draw 60 of 60, top-up 10 of 10)",
+      expect(all).toContain(
+        "Labelled pairs measured: 90 (of the 90 sampled pairs, 90 have labels: " +
+          "first draw 60 of 60, top-up 1 10 of 10, top-up 2 20 of 20)",
       );
-      expect(both).toContain(
-        "Precision 1.0000   95 % Wilson interval [0.9103, 1.0000] over 39 merged pairs   " +
+      expect(all).toContain(
+        "Precision 1.0000   95 % Wilson interval [0.8957, 1.0000] over 33 merged pairs   " +
           "target ≥ 0.99   UNDECIDED",
       );
-      expect(both).toContain(
-        "Recall    1.0000   95 % Wilson interval [0.9103, 1.0000] over 39 true duplicates   " +
-          "target ≥ 0.9   met (the whole interval is at or above the target)",
+      expect(all).toContain(
+        "Recall    1.0000   95 % Wilson interval [0.8957, 1.0000] over 33 true duplicates   " +
+          "target ≥ 0.9   UNDECIDED",
       );
     } finally {
       out.mockRestore();
@@ -750,8 +854,8 @@ describe("npm run dedup:report in sample mode (the default)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 4. The top-up (owner's decision of 2026-11-11, plan/00 §6 item 366(a);
-//    docs/02 §11.3's note of that date)
+// 4. The top-ups (owner's decisions of 2026-11-11, plan/00 §6 items 366(a)
+//    and 370(d); docs/02 §11.3's notes of 2026-11-11 and 2026-11-12)
 // ---------------------------------------------------------------------------
 
 /** Minimal corpus rows for {@link buildTopUp}: it reads pair ids and labels only. */
@@ -828,6 +932,11 @@ describe("buildTopUp", () => {
     expect(allocateProportional(counts(125, 28, 12, 60), 10)).toEqual(
       counts(5, 1, 1, 3),
     );
+    // Top-up 2's (2026-11-12): 20·N_h/215 = 7.16, 6.51, 1.02, 5.30; floors
+    // 7 + 6 + 1 + 5 = 19, the one owed to linked (.51).
+    expect(allocateProportional(counts(77, 70, 11, 57), 20)).toEqual(
+      counts(7, 7, 1, 5),
+    );
   });
 
   it("is deterministic under its seed, independent of input order, and differs under another seed", () => {
@@ -838,7 +947,9 @@ describe("buildTopUp", () => {
     expect(one.seed).toBe(TOP_UP_SEED);
     expect(one.seed).toBe("P2-T13 label sample top-up 2026-11-11");
     expect(one.date).toBe(TOP_UP_DATE);
-    const other = buildTopUp(first, rows, today, 10, `${TOP_UP_SEED} (other)`);
+    const other = buildTopUp(first, rows, today, 10, {
+      seed: `${TOP_UP_SEED} (other)`,
+    });
     expect(other.sample.map((s) => s.pairId)).not.toEqual(
       one.sample.map((s) => s.pairId),
     );
@@ -846,36 +957,74 @@ describe("buildTopUp", () => {
     expect(ranks).toEqual([...ranks].sort());
   });
 
-  it("refuses to draw a second top-up", () => {
-    const once = { ...first, topUp: buildTopUp(first, rows, today) };
-    expect(() => buildTopUp(once, rows, today)).toThrow(
-      /already holds a top-up/u,
-    );
+  // Replaced 2026-11-12 (item 370(d)): a second top-up was refused; now the
+  // next block is drawn, and only a seed an earlier draw used is refused.
+  it("draws the next top-up from the pairs in no earlier draw, under its own default seed, and refuses only a repeated seed", () => {
+    const once = { ...first, topUps: [buildTopUp(first, rows, today)] };
+    const oneSampled = new Set(once.topUps[0]?.sample.map((s) => s.pairId));
+    const second = buildTopUp(once, rows, today, 20, { date: "2026-11-12" });
+    expect(second.seed).toBe("P2-T13 label sample top-up 2 2026-11-12");
+    expect(second.seed).toBe(topUpSeed(2, "2026-11-12"));
+    expect(topUpSeed(1, TOP_UP_DATE)).toBe(TOP_UP_SEED);
+    expect(second.sample).toHaveLength(20);
+    // Its population is the first top-up's less the ten that one drew.
+    expect(second.population).toHaveLength(285 - 60 - 5 - 10);
+    for (const p of second.population) {
+      expect(firstSampled.has(p.pairId)).toBe(false);
+      expect(oneSampled.has(p.pairId)).toBe(false);
+      expect(labelled.has(p.pairId)).toBe(false);
+    }
+    expect(second.excludedLabelled).toEqual(once.topUps[0]?.excludedLabelled);
+    expect(second.method).toMatch(/no earlier draw's sample/u);
+    expect(second.method).not.toBe(once.topUps[0]?.method);
+    expect(() =>
+      buildTopUp(once, rows, today, 10, { seed: TOP_UP_SEED }),
+    ).toThrow(/already used by an earlier draw/u);
+    expect(() =>
+      buildTopUp(once, rows, today, 10, { seed: first.seed }),
+    ).toThrow(/already used by an earlier draw/u);
+    // The default seed of the first top-up on its own day is the one it used.
+    expect(() =>
+      buildTopUp(once, rows, today, 10, { date: TOP_UP_DATE }),
+    ).not.toThrow();
   });
 
-  it("never writes a label: its rows are untouched and its block holds none", () => {
+  it("never writes a label: its rows are untouched and its blocks hold none", () => {
     const before = JSON.stringify(rows);
-    const withTopUp = { ...first, topUp: buildTopUp(first, rows, today) };
+    const withTopUp = { ...first, topUps: [buildTopUp(first, rows, today)] };
+    const withTwo = {
+      ...withTopUp,
+      topUps: [
+        ...withTopUp.topUps,
+        buildTopUp(withTopUp, rows, today, 20, { date: "2026-11-12" }),
+      ],
+    };
     expect(JSON.stringify(rows)).toBe(before);
-    expect(serializeLabelSample(withTopUp)).not.toMatch(/"label"/u);
-    // The serialized file reads back as written, and its check passes
-    // against the label set the top-up saw.
-    expect(parseLabelSample(serializeLabelSample(withTopUp))).toEqual(
-      withTopUp,
-    );
+    for (const s of [withTopUp, withTwo]) {
+      expect(serializeLabelSample(s)).not.toMatch(/"label"/u);
+      // The serialized file reads back as written, and its check passes
+      // against the label set the newest top-up saw.
+      expect(parseLabelSample(serializeLabelSample(s))).toEqual(s);
+      expect(
+        checkLabelSample(
+          s,
+          today.map((p) => p.pairId),
+        ),
+      ).toEqual([]);
+    }
+    // Appending a block changes nothing before it.
+    const one = serializeLabelSample(withTopUp);
     expect(
-      checkLabelSample(
-        withTopUp,
-        today.map((p) => p.pairId),
-      ),
-    ).toEqual([]);
+      serializeLabelSample(withTwo).startsWith(one.slice(0, -"\n}\n".length)),
+    ).toBe(true);
+    expect(serializeLabelSample(withTwo)).toContain('\n  "topUp2": {\n');
   });
 
-  it("makes --check fail when the label set grows again, when a first-draw pair goes, or when the top-up is edited", () => {
-    const withTopUp = { ...first, topUp: buildTopUp(first, rows, today) };
+  it("makes --check fail when the label set grows again, when a first-draw pair goes, or when a top-up is edited", () => {
+    const withTopUp = { ...first, topUps: [buildTopUp(first, rows, today)] };
     const ids = today.map((p) => p.pairId);
     expect(checkLabelSample(withTopUp, [...ids, "p-new"])).toEqual([
-      expect.stringMatching(/the label set the top-up saw \(285 pairs/u),
+      expect.stringMatching(/the label set top-up 1 saw \(285 pairs/u),
     ]);
     const gone = firstPop.find((p) => !firstSampled.has(p.pairId))?.pairId;
     expect(
@@ -884,7 +1033,8 @@ describe("buildTopUp", () => {
         ids.filter((id) => id !== gone),
       ).join("\n"),
     ).toMatch(/no longer in the label set/u);
-    const t = withTopUp.topUp;
+    const t = withTopUp.topUps[0];
+    if (t === undefined) throw new Error("no top-up");
     const swapped = t.population.find(
       (p) =>
         p.stratum === "merged" && !t.sample.some((s) => s.pairId === p.pairId),
@@ -897,22 +1047,57 @@ describe("buildTopUp", () => {
       checkLabelSample(
         {
           ...withTopUp,
-          topUp: {
-            ...t,
-            sample: edited,
-            displayOrder: edited.map((s) => s.pairId),
-          },
+          topUps: [
+            { ...t, sample: edited, displayOrder: edited.map((s) => s.pairId) },
+          ],
         },
         ids,
       ),
-    ).toEqual([
-      "the committed top-up does not re-derive from its own population and seed",
+    ).toEqual(["top-up 1 does not re-derive from its own population and seed"]);
+  });
+
+  it("with two top-ups, checks the newest against today's label set and the earlier one only for pairs gone", () => {
+    const one = buildTopUp(first, rows, today);
+    const two = buildTopUp({ ...first, topUps: [one] }, rows, today, 20, {
+      date: "2026-11-12",
+    });
+    const both = { ...first, topUps: [one, two] };
+    const ids = today.map((p) => p.pairId);
+    expect(checkLabelSample(both, ids)).toEqual([]);
+    expect(checkLabelSample(both, [...ids, "p-new"])).toEqual([
+      expect.stringMatching(
+        /^the label set top-up 2 saw \(285 pairs: the earlier draws' 70, its population of 210 and 5 labelled pairs left out\)/u,
+      ),
+    ]);
+    // A pair top-up 1 drew leaves the label set: top-up 1 saw it and top-up 2
+    // counted it among the earlier draws' pairs.
+    const drawnByOne = one.sample[0]?.pairId;
+    expect(
+      checkLabelSample(
+        both,
+        ids.filter((id) => id !== drawnByOne),
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(
+          /^1 pairs that top-up 1 saw are no longer in the label set/u,
+        ),
+        expect.stringMatching(/^the label set top-up 2 saw/u),
+      ]),
+    );
+    const edited = { ...two, seed: `${two.seed} (edited)` };
+    expect(checkLabelSample({ ...both, topUps: [one, edited] }, ids)).toEqual([
+      "top-up 2 does not re-derive from its own population and seed",
     ]);
   });
 });
 
-describe("dedup-label-sample.ts --extend=10 on a temporary copy", () => {
-  it("draws the committed top-up from today's corpus, writes no label, and refuses a second run", async () => {
+// Reworked 2026-11-12 (`P2-T40`; item 370(d)): the first top-up's draw-day pin
+// cannot hold after `P2-T40` moved 45 pairs of its population, so the
+// re-drawing run is now top-up 2's, drawn the same day; the first top-up's
+// header still re-derives under its own defaults.
+describe("dedup-label-sample.ts --extend= on a temporary copy", () => {
+  it("draws the committed top-up 2 from today's corpus, writes no label, and refuses only a repeated seed", async () => {
     const dir = await mkdtemp(join(tmpdir(), "dedup-topup-"));
     const out = vi
       .spyOn(process.stdout, "write")
@@ -921,12 +1106,12 @@ describe("dedup-label-sample.ts --extend=10 on a temporary copy", () => {
       .spyOn(process.stderr, "write")
       .mockImplementation(() => true);
     try {
-      const committedTopUp = committedSample.topUp;
-      if (committedTopUp === undefined) throw new Error("no top-up");
-      // The corpus as it was at the draw: the top-up's ten unlabelled (the
+      const [one, two] = committedSample.topUps;
+      if (one === undefined || two === undefined) throw new Error("top-ups");
+      // The corpus as it was at the draw: top-up 2's twenty unlabelled (the
       // owner labels them in chat afterwards; this clears them in the copy
       // only).
-      const drawn = new Set(committedTopUp.sample.map((s) => s.pairId));
+      const drawn = new Set(two.sample.map((s) => s.pairId));
       const pairsText = committedRows
         .map(
           (r) =>
@@ -934,35 +1119,92 @@ describe("dedup-label-sample.ts --extend=10 on a temporary copy", () => {
         )
         .join("");
       await writeFile(join(dir, PAIRS_FILE), pairsText);
-      const { topUp: _topUp, ...firstDraw } = committedSample;
-      const firstText = serializeLabelSample(firstDraw);
-      await writeFile(join(dir, LABEL_SAMPLE_FILE), firstText);
+      const beforeText = serializeLabelSample({
+        ...committedSample,
+        topUps: [one],
+      });
+      await writeFile(join(dir, LABEL_SAMPLE_FILE), beforeText);
+      const args = [
+        "--extend=20",
+        "--date=2026-11-12",
+        "--decision=owner, 2026-11-11, plan/00 §6 item 370(d); docs/02 §11.3",
+      ];
 
-      expect(await sampleMain(["--extend=10"], { dir })).toBe(0);
+      expect(await sampleMain(args, { dir })).toBe(0);
       const written = await readFile(join(dir, LABEL_SAMPLE_FILE), "utf8");
-      // Draw-day pin (2026-11-11): today's engine draws exactly the
-      // committed ten. Replaced, as the first draw's was, when the engine
-      // moves a pair of the top-up's population.
+      // Draw-day pin (2026-11-12): today's engine draws exactly the committed
+      // twenty, and everything before the new block is unchanged.
       expect(written).toBe(committedSampleText);
-      expect(written.startsWith(firstText.slice(0, -"\n  ]\n}\n".length))).toBe(
-        true,
-      );
+      expect(
+        written.startsWith(beforeText.slice(0, -"\n}\n".length) + ",\n"),
+      ).toBe(true);
       expect(await readFile(join(dir, PAIRS_FILE), "utf8")).toBe(pairsText);
       expect(written).not.toMatch(/"label"/u);
+      expect(String(out.mock.calls.at(-1)?.[0])).toContain(
+        'Appended top-up 2 ("topUp2")',
+      );
       expect(String(out.mock.calls.at(-1)?.[0])).toContain(
         "No label was written.",
       );
 
-      expect(await sampleMain(["--extend=10"], { dir })).toBe(1);
-      expect(String(err.mock.calls.at(-1)?.[0])).toMatch(
-        /already holds a top-up .* Nothing was written/u,
+      // The same seed again: refused, nothing written. (Without --seed= the
+      // default seed carries the next block number, so repeating the command
+      // as it was would draw a third block: only a repeated seed is refused.)
+      expect(await sampleMain([...args, `--seed=${two.seed}`], { dir })).toBe(
+        1,
       );
+      expect(String(err.mock.calls.at(-1)?.[0])).toMatch(
+        /already holds a draw under the seed "P2-T13 label sample top-up 2 2026-11-12".* Nothing was written/u,
+      );
+      expect(
+        await sampleMain(
+          ["--extend=5", "--date=2026-11-12", `--seed=${TOP_UP_SEED}`],
+          { dir },
+        ),
+      ).toBe(1);
       expect(await sampleMain(["--redraw"], { dir })).toBe(1);
       expect(await readFile(join(dir, LABEL_SAMPLE_FILE), "utf8")).toBe(
         written,
       );
       expect(await sampleMain(["--check"], { dir })).toBe(0);
       expect(await sampleMain(["--extend=ten"], { dir })).toBe(2);
+      expect(
+        await sampleMain(["--extend=5", "--date=12 Nov 2026"], { dir }),
+      ).toBe(2);
+      expect(await sampleMain(["--seed=x"], { dir })).toBe(2);
+
+      // A new seed is the next block, topUp3, and --check passes on it.
+      expect(
+        await sampleMain(["--extend=5", "--date=2026-11-13"], { dir }),
+      ).toBe(0);
+      const three = parseLabelSample(
+        await readFile(join(dir, LABEL_SAMPLE_FILE), "utf8"),
+      );
+      expect(three.topUps.map((t) => t.seed)).toEqual([
+        one.seed,
+        two.seed,
+        "P2-T13 label sample top-up 3 2026-11-13",
+      ]);
+      expect(await sampleMain(["--check"], { dir })).toBe(0);
+
+      // The first top-up's header still comes from its own defaults: from the
+      // first draw alone, --extend=10 --date=2026-11-11 names it as committed
+      // (its pairs differ today, because P2-T40 moved its population).
+      await writeFile(
+        join(dir, LABEL_SAMPLE_FILE),
+        serializeLabelSample({ ...committedSample, topUps: [] }),
+      );
+      await writeFile(join(dir, PAIRS_FILE), pairsText);
+      expect(
+        await sampleMain(["--extend=10", "--date=2026-11-11"], { dir }),
+      ).toBe(0);
+      const redone = parseLabelSample(
+        await readFile(join(dir, LABEL_SAMPLE_FILE), "utf8"),
+      ).topUps[0];
+      expect(redone?.seed).toBe(one.seed);
+      expect(redone?.decision).toBe(one.decision);
+      expect(redone?.method).toBe(one.method);
+      expect(redone?.date).toBe(one.date);
     } finally {
       out.mockRestore();
       err.mockRestore();

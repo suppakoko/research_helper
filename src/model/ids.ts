@@ -186,23 +186,22 @@ export function normalizeDoi(raw: string | null | undefined): Doi | null {
 
 // ---------------------------------------------------------------------------
 // 2a. DOI families — docs/02 §11.3's note of 2026-11-10 (owner, plan/00 §6
-//     item 362(b)); read by the dedup cascade's Tier 0 and by the merge
+//     item 362(b)); read by the dedup cascade's Tier 0, which since
+//     2026-11-12 links a family's documents instead of merging them (owner,
+//     plan/00 §6 item 370(a)–(c); docs/02 §11.3's note of that day). The
+//     review-document and article-version readers the merge used were
+//     removed that day with the merge rules (docs/07 §5.1's note).
 // ---------------------------------------------------------------------------
 
 /**
  * One listed DOI form: the pattern (on a normalized, lowercase {@link Doi}),
- * whose first group is the family stem, and whether a DOI of the form is a
- * review document rather than the paper itself.
+ * whose first group is the family stem.
  */
 interface DoiFamilyForm {
   readonly pattern: RegExp;
-  readonly reviewDocument: boolean;
   /** The stem names the version reviewed, not the article (F1000 reports). */
   readonly stemIsVersion: boolean;
 }
-
-/** The F1000Research article-version form; group 1 the stem, group 2 the version. */
-const F1000_ARTICLE_VERSION = /^(10\.12688\/f1000research\.\d+)\.(\d+)$/;
 
 /**
  * `docs/02` §11.3's table of DOI forms, row for row. Only the forms measured
@@ -213,63 +212,30 @@ const DOI_FAMILY_FORMS: readonly DoiFamilyForm[] = [
   // DOI without `.sa` (10.7554/elife.98867.3) is deliberately not a form.
   {
     pattern: /^(10\.7554\/elife\.\d+)(?:\.\d+)?\.sa\d+$/,
-    reviewDocument: true,
     stemIsVersion: false,
   },
   // Transparent peer review report: <article DOI>/v1/review2.
   {
     pattern: /^(10\.\d{4,9}\/\S+?)\/v\d+\/review\d+$/,
-    reviewDocument: true,
     stemIsVersion: false,
   },
   // Faculty Opinions recommendation: 10.3410/f.740477161.793587507.
   {
     pattern: /^(10\.3410\/f\.\d+)\.\d+$/,
-    reviewDocument: true,
     stemIsVersion: false,
   },
   // F1000Research peer review report: 10.5256/f1000research.143730.r200814,
   // whose stem is the version reviewed.
   {
     pattern: /^(10\.5256\/f1000research\.\d+)\.r\d+$/,
-    reviewDocument: true,
     stemIsVersion: true,
   },
   // F1000Research article version: 10.12688/f1000research.130932.2.
   {
-    pattern: F1000_ARTICLE_VERSION,
-    reviewDocument: false,
+    pattern: /^(10\.12688\/f1000research\.\d+)\.\d+$/,
     stemIsVersion: false,
   },
 ];
-
-/**
- * An F1000Research article version's DOI: the stem (the article) and the
- * version number. `docs/07` §5.1's note of 2026-11-10 (owner, `plan/00` §6
- * item 366(c)): when versions of one article merge, the newest wins the DOI
- * and the date.
- */
-export interface ArticleVersion {
-  readonly stem: string;
-  readonly version: number;
-}
-
-/**
- * The article and version an F1000Research article-version DOI names
- * (`10.12688/f1000research.130932.2` → stem `10.12688/f1000research.130932`,
- * version 2), or `undefined` for any other DOI — including every review
- * document and every eLife DOI, whose versions are not merged by this rule.
- */
-export function articleVersionOf(
-  doi: Doi | undefined,
-): ArticleVersion | undefined {
-  if (doi === undefined) return undefined;
-  const m = F1000_ARTICLE_VERSION.exec(doi);
-  const stem = m?.[1];
-  const version = m?.[2];
-  if (stem === undefined || version === undefined) return undefined;
-  return { stem, version: Number(version) };
-}
 
 /** The listed form `doi` takes and its stem, or `undefined` for none. */
 function doiFamilyForm(
@@ -306,16 +272,6 @@ export function sameDoiFamily(a: Doi | undefined, b: Doi | undefined): boolean {
   const sb = doiFamilyStem(b);
   if (sa === undefined && sb === undefined) return false;
   return (sa ?? a) === (sb ?? b);
-}
-
-/**
- * Is this DOI a review document's — an eLife sub-article, a transparent peer
- * review report, a Faculty Opinions recommendation or an F1000Research peer
- * review report? `docs/07` §5.1's merge note: such a record yields to its
- * article inside one merged work.
- */
-export function isReviewDocumentDoi(doi: Doi | undefined): boolean {
-  return doiFamilyForm(doi)?.form.reviewDocument === true;
 }
 
 /**

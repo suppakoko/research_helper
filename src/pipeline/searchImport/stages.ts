@@ -173,7 +173,7 @@ import type { Logger } from "../../core/logger";
 import type { MergeDecision } from "../../core/provenance";
 import type { CanonicalWork } from "../../model/canonicalWork";
 import type { ExternalIds, ProviderId, SourceId } from "../../model/ids";
-import { isReviewDocument, merge, type IdConflict } from "../../model/merge";
+import { merge, type IdConflict } from "../../model/merge";
 import type { SourceRecord } from "../../model/sourceRecord";
 import {
   dedupeRecords,
@@ -870,9 +870,9 @@ export interface VersionLink {
 /** What {@link dedupeAndMerge} hands the pipeline at the end of `Merging`. */
 export interface DedupeMergeResult {
   /**
-   * One record per work — each group's first record in fetch order, skipping
-   * review documents when the group also holds its paper's records (`docs/07`
-   * §5.1's merge note of 2026-11-10) — so that
+   * One record per work — each group's first record in fetch order (again
+   * since 2026-11-12: `docs/07` §5.1's note of that day removed the
+   * review-document exception of 2026-11-10) — so that
    * `SearchImportOutput.records` keeps its positional contract with `works`:
    * `works[i]` was merged from the group whose representative is `records[i]`.
    */
@@ -1005,25 +1005,25 @@ function mergeGroups(
     });
   }
 
-  // Each group's representative: its first record in fetch order that is not
-  // a review document, else its first (`docs/07` §5.1's merge note of
-  // 2026-11-10), so the preview row of a paper merged with its reviews draws
-  // the paper, as its work does.
-  const representatives: SourceRecord[] = [];
   const deduplicatedAwayBySource: Partial<Record<SourceId, number>> = {};
   for (const entry of merged) {
-    const representative =
-      entry.records.find((record) => !isReviewDocument(record)) ??
-      entry.records[0];
-    if (representative === undefined) {
-      throw new RangeError("[research-helper] dedupeAndMerge: empty group");
-    }
-    representatives.push(representative);
-    for (const record of entry.records) {
-      if (record === representative) continue;
+    for (const record of entry.records.slice(1)) {
       deduplicatedAwayBySource[record.sourceId] =
         (deduplicatedAwayBySource[record.sourceId] ?? 0) + 1;
     }
+  }
+
+  // Each group's representative is its first record in fetch order. The
+  // review-document exception of 2026-11-10 was removed on 2026-11-12: a
+  // paper's attached documents are linked, never grouped with it (`docs/07`
+  // §5.1's note of that day).
+  const representatives: SourceRecord[] = [];
+  for (const entry of merged) {
+    const first = entry.records[0];
+    if (first === undefined) {
+      throw new RangeError("[research-helper] dedupeAndMerge: empty group");
+    }
+    representatives.push(first);
   }
 
   return {

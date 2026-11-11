@@ -2529,6 +2529,23 @@ Precedence is a single exported constant so it can be tuned in one place and uni
 > work that changes: all 932 record groups with no member of a listed DOI form give byte-identical
 > merged works before and after.
 
+> **Superseded 2026-11-12 (owner, `plan/00` §6 item 370(a)–(c); `plan/03` `P2-T40`): the four notes
+> above no longer apply, and the code they describe is removed.** The documents attached to one paper and
+> the versions of one F1000Research article are now linked, not merged (`02-literature-database-apis.md`
+> §11.3's note of that day), and the group-level check keeps any two of them out of one group. So no
+> merged group holds a review document with the paper it is attached to, or two versions of one
+> F1000Research article, and the merge rules written for such groups have nothing to act on. **DECIDED
+> 2026-11-12 (coordinator, under item 313):** they are removed rather than kept dormant — the review-yields
+> rule (`isReviewDocument` and its place in `canonicalOrder` and `merge`, `isReviewDocumentDoi` in
+> `src/model/ids.ts`, and the representative-record test in `mergeGroups`), and the newest-version rule
+> (`newestArticleVersionDoi`, the date pool, `unionIds`'s preferred DOI, and `articleVersionOf`). The review
+> rule could still have fired on a group that joins a review document with a record carrying no DOI at all,
+> where it would let that record's fields win; no decision asks for that, and no such group is in the
+> corpus. Every group is combined by the table above again, in the canonical order of source precedence
+> then record id, and a group's representative record is its first record in fetch order, as before
+> `P2-T38`. The coordinator's outcome (a), the ordinary policy for a group of review documents only, is now
+> simply what every group gets.
+
 ### 5.2 Analysis artifacts
 
 **Who owns what.** The *content* of a summary — every extracted field, its JSON Schema and its

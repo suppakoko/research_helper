@@ -102,8 +102,9 @@ export const SIGNATURE_TOKEN_COUNT = 3;
  * Confidence of each decision kind, from the §11.3 tier table (Tiers 0–5 and
  * 7), §11.3.3's `0.80–0.94` band for the three Tier 6 duplicate rows, §11.2
  * for the bioRxiv accession secondary key, §11.3's note of 2026-11-10 for the
- * DOI-family secondary key (below the accession: it joins different documents
- * of one paper, not two spellings of one DOI), and §11.4's `0.75 → flag` row
+ * DOI-family secondary key (below the accession: it relates different
+ * documents of one paper, not two spellings of one DOI; since 2026-11-12 it is
+ * a link's confidence, §11.3's note of that day), and §11.4's `0.75 → flag` row
  * for a title match between a preprint and a non-preprint.
  */
 export const TIER_CONFIDENCE = Object.freeze({
@@ -504,7 +505,8 @@ interface TierContext {
    * Two F1000Research reports on different versions (`docs/02` §11.3's note
    * of 2026-11-10, rule 2): their DOIs are not a conflict, and the title
    * tiers read titles without the version note
-   * ({@link arePeerReviewReportsAcrossVersions}).
+   * ({@link arePeerReviewReportsAcrossVersions}); since 2026-11-12 a match
+   * they give is a link ({@link compareCandidates}).
    */
   readonly reportsAcrossVersions: boolean;
 }
@@ -775,10 +777,13 @@ function identifierTier(
 
 /**
  * Tier 0: exact normalized DOI, with two secondary keys — §11.2's accession
- * suffix, and §11.3's DOI family (owner, 2026-11-10, `plan/00` §6 item
- * 362(b)): two DOIs that reduce to one stem ({@link sameDoiFamily}) are the
- * documents or versions of one paper and match. Two F1000Research reports on
- * different versions record no conflict, so the title tiers decide.
+ * suffix, and §11.3's DOI family: two DOIs that reduce to one stem
+ * ({@link sameDoiFamily}) are the documents or versions of one paper. Since
+ * 2026-11-12 (owner, `plan/00` §6 item 370(a)–(c); `docs/02` §11.3's note of
+ * that day) they are a **link**, not a match, and because this tier runs first
+ * no later tier decides the pair: a shared PMID or a same-titled report would
+ * otherwise be read as one work. Two F1000Research reports on different
+ * versions record no conflict, so the title tiers decide.
  */
 const DOI_TIER: DedupTier = {
   id: "doi",
@@ -795,7 +800,7 @@ const DOI_TIER: DedupTier = {
       });
     }
     if (sameDoiFamily(x, y)) {
-      return decide("match", "doi", TIER_CONFIDENCE.doiFamily, {
+      return decide("link", "doi", TIER_CONFIDENCE.doiFamily, {
         rule: "doi-family",
         family: doiFamilyStem(x) ?? x,
       });
@@ -922,7 +927,8 @@ export const F1000_VERSION_NOTE =
  * peer review reports on different versions ({@link isPerVersionReviewDoi},
  * different stems)? Their DOIs name the version reviewed, so they may review
  * one article; the cascade then compares their titles without the version
- * note and records no DOI conflict.
+ * note and records no DOI conflict, and (since 2026-11-12) a match it finds is
+ * a link: two reports are two documents of one paper.
  */
 export function arePeerReviewReportsAcrossVersions(
   a: DedupCandidate,
@@ -952,7 +958,10 @@ function withoutVersionNote(c: DedupCandidate): DedupCandidate {
  * ({@link arePeerReviewReportsAcrossVersions}) are compared without the
  * version note on their titles and with no DOI conflict, and the decision's
  * evidence says so (`peerReviewReportsAcrossVersions`). Blocking, which runs
- * before this, keeps the full titles.
+ * before this, keeps the full titles. Since 2026-11-12 (owner, `plan/00` §6
+ * item 370(a); `docs/02` §11.3's note of that day) a match such a pair gets is
+ * returned as a link at the same tier and confidence: the reports are
+ * attached documents of one paper, not one work.
  */
 export function compareCandidates(
   a: DedupCandidate,
@@ -968,6 +977,7 @@ export function compareCandidates(
     if (!across) return decision;
     return {
       ...decision,
+      verdict: decision.verdict === "match" ? "link" : decision.verdict,
       evidence: { ...decision.evidence, peerReviewReportsAcrossVersions: true },
     };
   }
@@ -988,8 +998,8 @@ export function compareCandidates(
  * when their titles start differently ("Reviewer #1 (Public Review): …",
  * "eLife assessment: …"), so without this pass such a pair is never compared.
  *
- * It only **proposes** pairs: the cascade still decides each one, and the
- * group-level version-link check still applies. Two F1000Research reports on
+ * It only **proposes** pairs: the cascade still decides each one — since
+ * 2026-11-12 a link at Tier 0 — and the group-level check keeps the two apart. Two F1000Research reports on
  * different versions have different stems and are not paired here (`docs/02`
  * §11.3's rule 2 compares them on title when blocking does). Equal DOIs are
  * not a family; the identifier pass pairs them.
@@ -1022,6 +1032,24 @@ export function doiFamilyPairs(
     }
   }
   return out.sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+}
+
+/**
+ * May these two never be one work, whatever a third record matches? True for
+ * a known version link ({@link isKnownVersionLink}, owner, 2026-10-16,
+ * `plan/00` §6 item 209) and, since 2026-11-12 (owner, `plan/00` §6 item
+ * 370(a)–(c); `docs/02` §11.3's note of that day, point 3), for two documents
+ * attached to one paper: two DOIs of one family ({@link sameDoiFamily}) or two
+ * F1000Research reports on different versions
+ * ({@link arePeerReviewReportsAcrossVersions}). The group-level check splits a
+ * group holding such a pair when its own verdict is not a match.
+ */
+export function mustStayApart(a: DedupCandidate, b: DedupCandidate): boolean {
+  return (
+    isKnownVersionLink(a, b) ||
+    sameDoiFamily(a.ids.doi, b.ids.doi) ||
+    arePeerReviewReportsAcrossVersions(a, b)
+  );
 }
 
 /** {@link compareCandidates} over two records. Builds both candidates. */
@@ -1116,7 +1144,8 @@ function tierRank(tier: DedupTierId | null): number {
  * `docs/02` §11.5 under rule 1, the group-level check (owner, 2026-10-16,
  * `plan/00` §6 item 209): rebuild one group from its single records so that
  * no `cannotJoin` pair — one record naming the other as its other version
- * ({@link isKnownVersionLink}) while their own verdict is not a match —
+ * ({@link isKnownVersionLink}), or since 2026-11-12 two documents attached to
+ * one paper ({@link mustStayApart}), while their own verdict is not a match —
  * ends up in one work.
  *
  * The group's `"match"` pairs are added **one tier at a time, in
@@ -1439,7 +1468,9 @@ function* dedupeCascade(
   // rebuilt tier by tier (`partitionAtVersionLinks`); a version pair whose
   // own verdict is a link is reported as one, marked `groupSplit`. A pair
   // whose own verdict is a match (docs/02 §11.5, item 200's equal-DOI and
-  // no-DOI cases) never splits a group.
+  // no-DOI cases) never splits a group. Since 2026-11-12 (owner, plan/00 §6
+  // item 370(a)–(c)) two documents attached to one paper are kept apart the
+  // same way (`mustStayApart`); their link keeps its own decision.
   /** One pair's decision: the one already made, or a counted new comparison. */
   const decidePair = function* (
     lo: number,
@@ -1480,7 +1511,7 @@ function* dedupeCascade(
         const a = candidates[i];
         const b = candidates[j];
         if (a === undefined || b === undefined) continue;
-        if (!isKnownVersionLink(a, b)) continue;
+        if (!mustStayApart(a, b)) continue;
         const decision = yield* decidePair(i, j);
         if (decision.verdict !== "match") cannotJoin.push({ i, j, decision });
       }
@@ -1512,10 +1543,19 @@ function* dedupeCascade(
     for (const { i, j, decision } of cannotJoin) {
       // A pair the cascade calls "distinct" (§11.3.3 guard 2) stays so.
       if (decision.verdict !== "link") continue;
+      const a = candidates[i];
+      const b = candidates[j];
+      // A known version link is reported as Tier 7's; two attached documents
+      // (2026-11-12) keep the decision that linked them.
       const link = pair(
         i,
         j,
-        versionLinkDecision({ ...decision.evidence, groupSplit: true }),
+        a !== undefined && b !== undefined && isKnownVersionLink(a, b)
+          ? versionLinkDecision({ ...decision.evidence, groupSplit: true })
+          : {
+              ...decision,
+              evidence: { ...decision.evidence, groupSplit: true },
+            },
       );
       const key = `${i}:${j}`;
       const existing = linkIndexByKey.get(key);
@@ -1578,7 +1618,7 @@ function* dedupeCascade(
  *    version reach Tier 7 whatever their titles and years. Since `P2-T39`
  *    it also compares every two records of one DOI family
  *    ({@link doiFamilyPairs}), so a paper's reviews in different title
- *    blocks reach Tier 0.
+ *    blocks reach Tier 0, which links them (`P2-T40`).
  * 2. **Blocking pass** (§11.3.3). Candidates with a comparable title are
  *    bucketed by {@link blockingSignature}; within a bucket, pairs within
  *    {@link MAX_YEAR_DELTA} of each other (or with an unknown year) are
@@ -1591,9 +1631,11 @@ function* dedupeCascade(
  * **Group-level check** (`docs/02` §11.5 under rule 1, owner, 2026-10-16,
  * `plan/00` §6 item 209). Unions are transitive, so a third record matching
  * each of two known versions would put both in one group. After both passes,
- * a group holding a pair of which one names the other as its other version,
- * and whose own verdict is not a match, is split tier by tier (the version a
- * bridging record matches at the earlier tier keeps it). A pair whose own
+ * a group holding a pair of which one names the other as its other version —
+ * or, since 2026-11-12, two documents attached to one paper
+ * ({@link mustStayApart}) — and whose own verdict is not a match, is split
+ * tier by tier (the version a bridging record matches at the earlier tier
+ * keeps it). A pair whose own
  * verdict is a link is reported as a link with `groupSplit: true` in its
  * evidence. The groups and links do not depend on input order.
  *

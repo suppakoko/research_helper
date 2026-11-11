@@ -21,7 +21,7 @@ them; it adds adapters and the merge layer above them.
 
 ## Effort estimate
 
-`docs/11` §1 Phase 2 is now **34.50–48.3 d, published as 34.50–48 d** (39 cards; `P2-T39` added 2026-11-10) — a band *derived from* the
+`docs/11` §1 Phase 2 is now **35.00–49.0 d, published as 35.00–49 d** (40 cards; `P2-T40` added 2026-11-12) — a band *derived from* the
 task sum in this file (low = the sum, high = the sum × 1.4, rounded to whole days), not an
 independent guess. The figure it superseded on 2026-09-09 was **12–16 developer-days** ("six
 adapters at ~1.5 days each plus 4–6 days for dedup and its evaluation corpus"). The reconciliation
@@ -44,7 +44,8 @@ is at the end of this file.
 > to the roll-up and to `docs/11` but not to this sentence. It now reads the roll-up's 33.25 d, after
 > `P2-T37` (0.5 d), and 33.25 × 1.4 = 46.55 → 47. *Updated 2026-11-10 (`plan/00` §6 item 362(b)): `P2-T38` (0.75 d)
 > takes the roll-up to 34.00 d over 38 cards, and 34.00 × 1.4 = 47.6 → 48.* *Updated again 2026-11-10 (`plan/00` §6 item 366(b)): `P2-T39` (0.5 d)
-> takes the roll-up to 34.50 d over 39 cards, and 34.50 × 1.4 = 48.3 → 48.*
+> takes the roll-up to 34.50 d over 39 cards, and 34.50 × 1.4 = 48.3 → 48.* *Updated 2026-11-12 (`plan/00` §6 item 370(a)–(c)): `P2-T40` (0.5 d)
+> takes the roll-up to 35.00 d over 40 cards, and 35.00 × 1.4 = 49.0 → 49.*
 
 ## Risks retired
 
@@ -1929,7 +1930,7 @@ abstracts. **15 mutants, all killed.** Nothing outside Files. Open: items 193–
 |---|---|
 | **ID** | `P2-T13` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T09`, `P2-T10`, `P2-T11`, `P2-T36`, `P2-T38`, `P2-T39` |
+| **Depends on** | `P2-T09`, `P2-T10`, `P2-T11`, `P2-T36`, `P2-T38`, `P2-T39`, `P2-T40` |
 | **Blocks** | `P2-T16` |
 | **Retires** | `R-18` (this is the card that proves it) |
 | **Implements** | `FR-50` |
@@ -2947,7 +2948,7 @@ decision record's section 5 today; whether the run-time half is worth a card is 
 |---|---|
 | **ID** | `P2-T16` |
 | **State** | `TODO` |
-| **Depends on** | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18`, `P2-T29`, `P2-T30`, `P2-T31`, `P2-T34`, `P2-T35`, `P2-T36`, `P2-T37`, `P2-T38`, `P2-T39` |
+| **Depends on** | `P2-T02`, `P2-T08`, `P2-T09`, `P2-T10`, `P2-T11`, `P2-T12`, `P2-T13`, `P2-T14`, `P2-T17`, `P2-T18`, `P2-T29`, `P2-T30`, `P2-T31`, `P2-T34`, `P2-T35`, `P2-T36`, `P2-T37`, `P2-T38`, `P2-T39`, `P2-T40` |
 | **Blocks** | none |
 | **Retires** | `R-2`, `R-18` (closes them), `R-3` (fallback proven) |
 | **Implements** | `FR-9`, `FR-50`, `FR-51`, `NFR-2`, `NFR-6` |
@@ -5456,7 +5457,7 @@ engine and the same origin in `candidatePairs`, which changes the labelled fixtu
 | **ID** | `P2-T39` |
 | **State** | `TODO` — built 2026-11-10, awaiting the coordinator's review; the report goes to `plan/reports/P2-T39.md`. |
 | **Depends on** | `P2-T38` |
-| **Blocks** | `P2-T13`, `P2-T16` |
+| **Blocks** | `P2-T13`, `P2-T16`, `P2-T40` |
 | **Retires** | `plan/00` §6 item 366(b) and (c) |
 | **Implements** | `FR-50` |
 | **Estimate** | 0.5 d |
@@ -5530,6 +5531,92 @@ follows this card and is the owner's.
 
 ---
 
+### P2-T40 — Link a paper's attached documents and versions, never merge
+
+| Field | Value |
+|---|---|
+| **ID** | `P2-T40` |
+| **State** | `TODO` — built 2026-11-12, awaiting the coordinator's review; the report goes to `plan/reports/P2-T40.md`. |
+| **Depends on** | `P2-T39` |
+| **Blocks** | `P2-T13`, `P2-T16` |
+| **Retires** | `plan/00` §6 item 370(a)–(c) |
+| **Implements** | `FR-50` |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** The documents attached to one paper (reviewer reports, assessments, decision letters, author
+responses, recommendations) and the versions of one F1000Research article are linked, never merged: each
+stays its own work, joined to the others by the engine's existing link, also across title blocks.
+
+**Why this is a card.** Rule 9: Phase 2's precision condition is not met on the owner's 70 labelled pairs —
+13 false merges, all made by `P2-T38`'s DOI family (`plan/reports/dedup-report-370.md`) — and the owner
+chose on 2026-11-11 to link these documents instead (`plan/00` §6 item 370(a)–(c)), which reverses item
+362(b) for review documents.
+
+**Read first.**
+- `plan/00` §6 items 362, 366 and 370; `plan/reports/dedup-report-370.md` (the 13 false merges).
+- `docs/02` §11.3's notes of 2026-11-10 (the DOI family; the comparison pass) and §11.4's of the same day;
+  `docs/07` §5.1's notes of 2026-11-10.
+- `DOI_TIER`, `compareCandidates`, `arePeerReviewReportsAcrossVersions`, `doiFamilyPairs`,
+  `partitionAtVersionLinks` and `dedupeCascade` in `src/sources/shared/dedupe.ts`; `doiFamilyStem`,
+  `sameDoiFamily`, `isReviewDocumentDoi`, `articleVersionOf` in `src/model/ids.ts`; `isReviewDocument`,
+  `canonicalOrder`, `newestArticleVersionDoi`, `unionIds`, `merge` in `src/model/merge.ts`; `mergeGroups` in
+  `src/pipeline/searchImport/stages.ts`.
+
+**Files.** (rule 10 — callers named; everything changed is a pure function, nothing is constructed)
+- modify `docs/02-literature-database-apis.md` §11.3 and §11.4, `docs/07-architecture-and-data-model.md`
+  §5.1 (first; dated notes, history kept)
+- modify `src/sources/shared/dedupe.ts` (Tier 0's family key and rule 2 give a link; the group-level check
+  keeps such pairs apart). Callers `dedupeAndMerge` / `dedupeAndMergeAsync` in `stages.ts`, `seed.ts`, and
+  `matchAgainstLibrary`'s callers — unchanged, read only
+- modify `src/model/ids.ts`, `src/model/merge.ts`, `src/pipeline/searchImport/stages.ts` and the comment on
+  `records` in `src/pipeline/searchImport/types.ts` (the rules that served only merging, as the coordinator
+  decides)
+- modify `test/unit/sources/dedupe.test.ts`, `test/unit/model/merge.test.ts`, `test/unit/model/ids.test.ts`,
+  `test/unit/sources/dedupeLabelSample.test.ts`, `test/unit/sources/dedupeCorpus.test.ts` (pins that move)
+- read `scripts/build-dedup-corpus.ts`, `scripts/dedup-report.ts`, `test/fixtures/dedup/` — never write a
+  label, a reason or the sample
+
+**Do.**
+1. Document the rule in `docs/02` §11.3 and §11.4 and the removed merge rules in `docs/07` §5.1, marking what
+   item 370 supersedes, before the code.
+2. Tier 0: two different DOIs of one family are a **link**, not a match, and no later tier decides the pair.
+3. Two F1000Research reports on different versions: a title match is a link.
+4. The group-level check keeps such pairs apart, so no third record joins them; their link carries
+   `groupSplit`.
+5. Remove, keep or keep dormant the code that served only merging (coordinator decision, recorded).
+6. Snapshot every pair outcome and group before and after across the corpus; list every change.
+
+**Do NOT.**
+- Write or change any label or reason in `test/fixtures/dedup/`.
+- Drop the DOI-family comparison pass (`P2-T39`), or add a DOI form (item 366(d)).
+- Change `matchAgainstLibrary` beyond what sharing `compareCandidates` gives it.
+
+**Done when.**
+- [ ] No pair of one DOI family, and no two F1000Research reports on versions of one article, is merged; no
+      pair labelled `not-duplicate` becomes merged or linked where it was distinct; every pair labelled
+      `duplicate` that was merged stays merged.
+- [ ] Every changed outcome is listed; every group with no family member merges byte-identically.
+- [ ] `npm run typecheck`, `npm run lint:check`, `npx eslint .`, `npm run test`, `npm run build` exit 0;
+      three clean integration runs.
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npx eslint . && npm run test && npm run build
+npx tsx scripts/build-dedup-corpus.ts --check && npm run dedup:report
+npm run test:integration -- --exit-on-finish
+```
+
+**Notes.** Owner decision 2026-11-11 (`plan/00` §6 item 370(a)–(c)). Item 370(d), the second top-up of twenty
+pairs, follows this card and is drawn by `scripts/dedup-label-sample.ts`, outside this card.
+*Recorded 2026-11-12:* item 370(d) was drawn the same day, after this card's code was final, by the same
+session: `scripts/dedup-label-sample.ts` and `scripts/dedup-report.ts` now read numbered top-up blocks,
+`test/fixtures/dedup/label-sample.json` gained `topUp2` (no label written), and
+`test/unit/sources/dedupeLabelSample.test.ts` follows (`docs/02` §11.3's note "a second top-up of twenty pairs";
+`plan/reports/P2-T40.md`). `test/unit/sources/dedupeCorpus.test.ts` needed no change: no corpus file moved.
+
+---
+
 ## Estimate roll-up
 
 | Task | Title | Estimate (d) |
@@ -5573,7 +5660,8 @@ follows this card and is the owner's.
 | `P2-T37` | A re-run finds a record that has no DOI and no PMID | 0.50 |
 | `P2-T38` | Merge a paper's reviews and versions (the DOI family) | 0.75 |
 | `P2-T39` | DOI-family comparison pass; newest F1000 version wins | 0.50 |
-| **Total** | **39 tasks** | **34.50 d** |
+| `P2-T40` | Link a paper's attached documents and versions, never merge | 0.50 |
+| **Total** | **40 tasks** | **35.00 d** |
 
 **Reconciliation with `docs/11`, revised 2026-09-09 (second pass).** The relationship has been
 inverted since the first pass: `docs/11` §1's Phase 2 band is now *derived from* this sum rather

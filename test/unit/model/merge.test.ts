@@ -828,11 +828,15 @@ const _typeCheck: CanonicalWork = merge(
 void _typeCheck;
 
 // ---------------------------------------------------------------------------
-// P2-T38 — a review document yields to its paper (docs/07 §5.1's merge note
-// of 2026-11-10, owner, plan/00 §6 item 362(b))
+// P2-T40 — a paper's attached documents and its F1000Research versions are
+// linked works, never one (owner, 2026-11-11, plan/00 §6 item 370(a)–(c);
+// docs/02 §11.3's and docs/07 §5.1's notes of 2026-11-12). The two merge rules
+// of 2026-11-10 (a review document yields to its paper; the newest
+// F1000Research version wins the DOI and the date) were removed that day;
+// these tests stand where theirs stood.
 // ---------------------------------------------------------------------------
 
-describe("a review document yields to its paper (P2-T38)", () => {
+describe("a paper and its attached documents stay separate, linked works (P2-T40)", () => {
   const LEISH =
     "Gene editing and scalable functional genomic screening in Leishmania species using the CRISPR/Cas9 cytosine base editor toolbox LeishBASEedit";
   const article = (): SourceRecord =>
@@ -842,10 +846,6 @@ describe("a review document yields to its paper (P2-T38)", () => {
       title: LEISH,
       type: "journal-article",
       abstract: "The article's abstract.",
-      authors: [
-        { family: "Engstler", given: "M" },
-        { family: "Beneke", given: "T" },
-      ],
       date: { year: 2023, month: 5, day: 2 },
       container: "eLife",
       ids: { doi: doi("10.7554/elife.85605") },
@@ -857,261 +857,142 @@ describe("a review document yields to its paper (P2-T38)", () => {
       title: `Author response: ${LEISH}`,
       type: "other",
       abstract: "A much longer author response text than the article abstract.",
-      authors: [
-        { family: "Engstler", given: "M" },
-        { family: "Beneke", given: "T" },
-        { family: "Third", given: "X" },
-      ],
       date: { year: 2023, month: 1, day: 10 },
       ids: { doi: doi("10.7554/elife.85605.sa2") },
     });
+  const letter = (): SourceRecord =>
+    record({
+      source: "crossref",
+      nativeId: "10.7554/elife.85605.sa1",
+      title: `Decision letter: ${LEISH}`,
+      type: "other",
+      date: { year: 2023, month: 1, day: 9 },
+      ids: { doi: doi("10.7554/elife.85605.sa1") },
+    });
 
-  it("keeps the article's title, type, DOI, authors, date and abstract, in every input order", () => {
+  it("dedupeAndMerge keeps the article and its author response as two works, each naming the other, in either order", () => {
     for (const order of permutations([article(), response()])) {
-      const { work, conflicts } = merge(order, AT);
-      expect(work.title).toBe(LEISH);
-      expect(work.type).toBe("journal-article");
-      expect(work.ids.doi).toBe("10.7554/elife.85605");
-      expect(work.workKey).toBe("doi:10.7554/elife.85605");
-      expect(work.abstract).toBe("The article's abstract.");
-      expect(work.authors.map((a) => a.family)).toEqual(["Engstler", "Beneke"]);
-      expect(work.publishedDate?.iso).toBe("2023-05-02");
-      expect(work.containerTitle).toBe("eLife");
-      // Every record is still named, the review last; its DOI is a conflict.
-      expect(work.provenance.recordIds).toEqual([
-        "crossref:10.7554/elife.85605",
-        "crossref:10.7554/elife.85605.sa2",
-      ]);
-      expect(conflicts).toEqual([
-        {
-          field: "ids.doi",
-          kept: "10.7554/elife.85605",
-          keptFrom: "crossref",
-          rejected: [
-            { value: "10.7554/elife.85605.sa2", sourceId: "crossref" },
-          ],
-        },
-      ]);
-      // Only one record supplied each field the review lost, so none was contested.
-      expect(work.provenance.fieldOrigin["title"]).toBeUndefined();
+      const result = dedupeAndMerge(order, AT);
+      expect(result.works).toHaveLength(2);
+      expect(result.records).toEqual(order);
+      expect(result.recordsDeduplicatedAway).toBe(0);
+      expect(result.deduplicatedAwayBySource).toEqual({});
+      expect(result.links).toHaveLength(1);
+      expect(result.links[0]?.decision.evidence["rule"]).toBe("doi-family");
+      // Neither side is a preprint, so nothing is tagged as superseded.
+      expect(result.links[0]?.preprintWorkKey).toBeUndefined();
+      const byDoi = new Map(result.works.map((w) => [w.ids.doi, w]));
+      const art = byDoi.get(doi("10.7554/elife.85605"));
+      const resp = byDoi.get(doi("10.7554/elife.85605.sa2"));
+      expect(art?.title).toBe(LEISH);
+      expect(art?.abstract).toBe("The article's abstract.");
+      expect(art?.relatedVersionIds?.doi).toBe("10.7554/elife.85605.sa2");
+      expect(resp?.title).toBe(`Author response: ${LEISH}`);
+      expect(resp?.relatedVersionIds?.doi).toBe("10.7554/elife.85605");
+      // No group, so no merge decision is recorded for either.
+      expect(mergeDecisionsOf(result)).toEqual([]);
     }
   });
 
-  it("combines a group of review documents only exactly as before: longest title, first DOI in canonical order", () => {
-    const one = record({
-      source: "crossref",
-      nativeId: "10.7554/elife.98867.1.sa2",
-      title:
-        "eLife Assessment: NK cell exhaustion in Wilson's disease predicts cholecystitis",
-      type: "other",
-      ids: { doi: doi("10.7554/elife.98867.1.sa2") },
-    });
-    const two = record({
-      source: "crossref",
-      nativeId: "10.7554/elife.98867.1.sa1",
-      title:
-        "Reviewer #1 (Public Review): NK cell exhaustion in Wilson's disease predicts cholecystitis",
-      type: "other",
-      ids: { doi: doi("10.7554/elife.98867.1.sa1") },
-    });
-    const { work } = merge([one, two], AT);
-    expect(work.title).toBe(two.work.title);
-    expect(work.ids.doi).toBe("10.7554/elife.98867.1.sa1");
-    expect(work.provenance.recordIds).toEqual([two.id, one.id]);
+  it("dedupeAndMerge keeps an article, its decision letter and its author response three works with three links, in every order", () => {
+    for (const order of permutations([article(), letter(), response()])) {
+      const result = dedupeAndMerge(order, AT);
+      expect(result.works).toHaveLength(3);
+      expect(result.links).toHaveLength(3);
+      expect(
+        result.links.every((l) => l.decision.evidence["rule"] === "doi-family"),
+      ).toBe(true);
+      for (const work of result.works) {
+        // Each names one family partner (relate keeps the first per kind).
+        expect(work.relatedVersionIds?.doi).toMatch(/^10\.7554\/elife\.85605/);
+        expect(work.relatedVersionIds?.doi).not.toBe(work.ids.doi);
+      }
+    }
   });
 
-  it("dedupeAndMerge represents the group by the article even when the review was fetched first", () => {
-    const a = article();
-    const r = response();
-    const result = dedupeAndMerge([r, a], AT);
+  it("still merges two sources' records of one review document: equal DOIs are one work", () => {
+    const epmc = record({
+      source: "europepmc",
+      nativeId: "PPR/X",
+      title: `Author response: ${LEISH}`,
+      type: "other",
+      ids: { doi: doi("10.7554/elife.85605.sa2") },
+    });
+    const result = dedupeAndMerge([response(), epmc], AT);
     expect(result.works).toHaveLength(1);
-    expect(result.records).toEqual([a]);
-    expect(result.works[0]?.title).toBe(LEISH);
-    expect(result.merged[0]?.records).toEqual([r, a]);
-    expect(result.merged[0]?.decisions[0]?.evidence["rule"]).toBe("doi-family");
+    expect(result.links).toEqual([]);
     expect(result.recordsDeduplicatedAway).toBe(1);
-    expect(result.deduplicatedAwayBySource).toEqual({ crossref: 1 });
   });
 });
 
-// ---------------------------------------------------------------------------
-// P2-T39 — the newest F1000Research version wins the DOI and the date
-// (docs/07 §5.1's note of 2026-11-10, owner, plan/00 §6 item 366(c)). The
-// records are the corpus's four of F1000Research 130932.
-// ---------------------------------------------------------------------------
-
-describe("the newest F1000Research version wins the DOI and the date (P2-T39)", () => {
+describe("F1000Research versions stay separate, linked works; one version's records still merge (P2-T40)", () => {
+  // The records are the corpus's four of F1000Research 130932.
   const V1 = "10.12688/f1000research.130932.1";
   const V2 = "10.12688/f1000research.130932.2";
-  const V3 = "10.12688/f1000research.130932.3";
   const ASHWA =
     "Effects of Ashwagandha (Withania somnifera) standardized root extract on physical endurance and VO2max in healthy adults performing resistance training";
-  const version = (
-    source: SourceId,
-    nativeId: string,
-    doiText: string,
-    date: { year: number; month: number; day: number },
-    extra: Partial<Spec> = {},
-  ): SourceRecord =>
-    record({
-      source,
-      nativeId,
-      title: ASHWA,
-      date,
-      ids: { doi: doi(doiText), ...extra.ids },
-      ...(extra.type !== undefined && { type: extra.type }),
-      ...(extra.title !== undefined && { title: extra.title }),
-    });
   const corpusFour = (): SourceRecord[] => [
-    version("crossref", V1, V1, { year: 2023, month: 3, day: 24 }),
-    version("crossref", V2, V2, { year: 2024, month: 4, day: 8 }),
-    version(
-      "europepmc",
-      "PPR/PPR834057",
-      V2,
-      { year: 2024, month: 4, day: 8 },
-      { type: "preprint" },
-    ),
-    version(
-      "pubmed",
-      "38988644",
-      V2,
-      { year: 2024, month: 7, day: 11 },
-      { ids: { pmid: pmid("38988644") }, title: `${ASHWA}.` },
-    ),
-  ];
-
-  it("takes version 2's DOI and date, keeps version 1's DOI as a conflict, in every input order", () => {
-    const works = new Set<string>();
-    for (const order of permutations(corpusFour())) {
-      const { work, conflicts } = merge(order, AT);
-      expect(work.ids.doi).toBe(V2);
-      expect(work.workKey).toBe(`doi:${V2}`);
-      expect(work.ids.pmid).toBe("38988644");
-      // The earliest complete date among version 2's records.
-      expect(work.publishedDate?.iso).toBe("2024-04-08");
-      expect(conflicts).toEqual([
-        {
-          field: "ids.doi",
-          kept: V2,
-          keptFrom: "crossref",
-          rejected: [{ value: V1, sourceId: "crossref" }],
-        },
-      ]);
-      works.add(JSON.stringify(work));
-    }
-    expect(works.size).toBe(1);
-  });
-
-  it("takes the highest version of three, listing the other two as conflicts", () => {
-    const three = [
-      version("crossref", V3, V3, { year: 2025, month: 1, day: 5 }),
-      version("crossref", V1, V1, { year: 2023, month: 3, day: 24 }),
-      version("crossref", V2, V2, { year: 2024, month: 4, day: 8 }),
-    ];
-    for (const order of permutations(three)) {
-      const { work, conflicts } = merge(order, AT);
-      expect(work.ids.doi).toBe(V3);
-      expect(work.publishedDate?.iso).toBe("2025-01-05");
-      expect(conflicts[0]?.rejected.map((r) => r.value).sort()).toEqual([
-        V1,
-        V2,
-      ]);
-    }
-  });
-
-  it("falls back to every record's dates when the newest version's records carry none", () => {
-    const v1 = version("crossref", V1, V1, { year: 2023, month: 3, day: 24 });
-    const v2 = record({
+    record({
+      source: "crossref",
+      nativeId: V1,
+      title: ASHWA,
+      date: { year: 2023, month: 3, day: 24 },
+      ids: { doi: doi(V1) },
+    }),
+    record({
       source: "crossref",
       nativeId: V2,
       title: ASHWA,
+      date: { year: 2024, month: 4, day: 8 },
       ids: { doi: doi(V2) },
-    });
-    const { work } = merge([v2, v1], AT);
-    expect(work.ids.doi).toBe(V2);
-    expect(work.publishedDate?.iso).toBe("2023-03-24");
-  });
-
-  it("leaves a group of one version alone: several records of version 2 merge as before", () => {
-    const [, two, epmc, pubmed] = corpusFour();
-    if (two === undefined || epmc === undefined || pubmed === undefined) {
-      throw new Error("fixture");
-    }
-    const { work, conflicts } = merge([pubmed, epmc, two], AT);
-    expect(work.ids.doi).toBe(V2);
-    expect(conflicts).toEqual([]);
-    expect(work.publishedDate?.iso).toBe("2024-04-08");
-    // A record with no DOI still competes for the date: one version is no
-    // set of versions, so the ordinary earliest-date rule applies.
-    const noDoi = record({
-      source: "semanticscholar",
-      nativeId: "s2-ashwa",
+    }),
+    record({
+      source: "europepmc",
+      nativeId: "PPR/PPR834057",
       title: ASHWA,
-      date: { year: 2024, month: 1, day: 2 },
-      ids: { pmid: pmid("38988644") },
-    });
-    expect(merge([two, noDoi], AT).work.publishedDate?.iso).toBe("2024-01-02");
-  });
+      type: "preprint",
+      date: { year: 2024, month: 4, day: 8 },
+      ids: { doi: doi(V2) },
+    }),
+    record({
+      source: "pubmed",
+      nativeId: "38988644",
+      title: `${ASHWA}.`,
+      date: { year: 2024, month: 7, day: 11 },
+      ids: { doi: doi(V2), pmid: pmid("38988644") },
+    }),
+  ];
 
-  it("takes the online date from the newest version too", () => {
-    const online = (
-      nativeId: string,
-      doiText: string,
-      date: { year: number; month: number; day: number },
-    ): SourceRecord => {
-      const base = record({
-        source: "crossref",
-        nativeId,
-        title: ASHWA,
-        ids: { doi: doi(doiText) },
-      });
-      return {
-        ...base,
-        work: { ...base.work, onlineDate: { ...date, iso: iso(date) } },
-      };
-    };
-    for (const order of permutations([
-      online(V1, V1, { year: 2023, month: 3, day: 1 }),
-      online(V2, V2, { year: 2024, month: 4, day: 1 }),
-    ])) {
-      expect(merge(order, AT).work.onlineDate?.iso).toBe("2024-04-01");
+  it("gives two works, version 1 and version 2, linked by the DOI family, in every input order", () => {
+    const works = new Set<string>();
+    for (const order of permutations(corpusFour())) {
+      const result = dedupeAndMerge(order, AT);
+      expect(result.works).toHaveLength(2);
+      const byDoi = new Map(result.works.map((w) => [w.ids.doi, w]));
+      const one = byDoi.get(doi(V1));
+      const two = byDoi.get(doi(V2));
+      expect(one?.publishedDate?.iso).toBe("2023-03-24");
+      expect(one?.provenance.recordIds).toEqual([`crossref:${V1}`]);
+      // Version 2's three records are one work by the ordinary policy.
+      expect(two?.ids.pmid).toBe("38988644");
+      expect(two?.publishedDate?.iso).toBe("2024-04-08");
+      expect(two?.provenance.recordIds).toHaveLength(3);
+      expect(result.merged.flatMap((m) => m.conflicts)).toEqual([]);
+      expect(result.recordsDeduplicatedAway).toBe(2);
+      expect(
+        result.links.some(
+          (l) =>
+            l.decision.evidence["rule"] === "doi-family" &&
+            new Set([l.aWorkKey, l.bWorkKey]).size === 2 &&
+            [l.aWorkKey, l.bWorkKey].includes(`doi:${V1}`) &&
+            [l.aWorkKey, l.bWorkKey].includes(`doi:${V2}`),
+        ),
+      ).toBe(true);
+      expect(one?.relatedVersionIds?.doi).toBe(V2);
+      expect(two?.relatedVersionIds?.doi).toBe(V1);
+      works.add(JSON.stringify([one, two]));
     }
-  });
-
-  it("does not apply to versions of two different F1000Research articles in one group (negative)", () => {
-    const a = version("crossref", V1, V1, { year: 2023, month: 3, day: 24 });
-    const b = version(
-      "crossref",
-      "10.12688/f1000research.131344.2",
-      "10.12688/f1000research.131344.2",
-      { year: 2024, month: 1, day: 1 },
-    );
-    const c = version("crossref", V2, V2, { year: 2024, month: 4, day: 8 });
-    // Two versions of 130932 and one of 131344: "newest" names no article.
-    for (const order of permutations([a, b, c])) {
-      const { work } = merge(order, AT);
-      // The ordinary policy: the first DOI in canonical order, the earliest date.
-      expect(work.ids.doi).toBe(V1);
-      expect(work.publishedDate?.iso).toBe("2023-03-24");
-    }
-  });
-
-  it("does not apply to eLife versions: the version of record and a reviewed preprint merge by the ordinary policy (negative)", () => {
-    const vor = record({
-      source: "crossref",
-      nativeId: "10.7554/elife.98867",
-      date: { year: 2025, month: 2, day: 1 },
-      ids: { doi: doi("10.7554/elife.98867") },
-    });
-    const rp = record({
-      source: "crossref",
-      nativeId: "10.7554/elife.98867.3",
-      date: { year: 2024, month: 6, day: 1 },
-      ids: { doi: doi("10.7554/elife.98867.3") },
-    });
-    const { work } = merge([vor, rp], AT);
-    expect(work.ids.doi).toBe("10.7554/elife.98867");
-    expect(work.publishedDate?.iso).toBe("2024-06-01");
+    // One answer whatever the order.
+    expect(works.size).toBe(1);
   });
 });

@@ -8,7 +8,6 @@ import type { WorkType } from "../../../src/model/canonicalWork";
 import {
   doiFamilyStem,
   isPerVersionReviewDoi,
-  isReviewDocumentDoi,
   normalizeArxivId,
   sameDoiFamily,
   type ArxivId,
@@ -347,9 +346,13 @@ describe("Tier 0 — exact normalized DOI", () => {
 });
 
 // ---------------------------------------------------------------------------
-// P2-T38 — the documents of one paper are one work (owner, 2026-11-10,
-// plan/00 §6 item 362(b); docs/02 §11.3's note of that date). The DOIs and
-// titles are the corpus records of the eleven pairs the owner labelled.
+// P2-T38 — the DOI family of one paper (owner, 2026-11-10, plan/00 §6 item
+// 362(b); docs/02 §11.3's note of that date). The DOIs and titles are the
+// corpus records of the eleven pairs the owner labelled.
+//
+// P2-T40 (owner, 2026-11-11, plan/00 §6 item 370(a)–(c); docs/02 §11.3's
+// note of 2026-11-12): a family's documents are LINKED, not merged. The
+// forms and stems below are unchanged; what Tier 0 does with them is a link.
 // ---------------------------------------------------------------------------
 
 const NK_TITLE =
@@ -363,6 +366,8 @@ const ASHWA_V1 =
 const ASHWA_V2 = ASHWA_V1.replace("preforming", "performing");
 const REPORT_V1 = `Peer Review Report For: ${ASHWA_V1} [version 1; peer review: 1 approved with reservations, 1 not approved]`;
 const REPORT_V2 = `Peer Review Report For: ${ASHWA_V2} [version 2; peer review: 1 approved, 2 approved with reservations]`;
+const WILEY_REVIEW =
+  'Review for "Pressure to publish introduces large‐language model risks"';
 
 /** A Crossref record carrying one DOI, as the corpus's review records do. */
 function crossref(
@@ -370,6 +375,7 @@ function crossref(
   title: string,
   year: number,
   type: WorkType = "other",
+  extraIds: ExternalIds = {},
 ): SourceRecord {
   return record({
     source: "crossref",
@@ -377,36 +383,46 @@ function crossref(
     title,
     year,
     type,
-    ids: { doi: doi(doiText) },
+    ids: { doi: doi(doiText), ...extraIds },
   });
+}
+
+/** Every ordering of `items` (n ≤ 5 here). */
+function orderings<T>(items: readonly T[]): T[][] {
+  if (items.length <= 1) return [[...items]];
+  const out: T[][] = [];
+  items.forEach((item, i) => {
+    const rest = [...items.slice(0, i), ...items.slice(i + 1)];
+    for (const p of orderings(rest)) out.push([item, ...p]);
+  });
+  return out;
+}
+
+/** The link between `x` and `y` in a result, if any. */
+function linkOf(
+  result: ReturnType<typeof dedupeRecords>,
+  x: SourceRecord,
+  y: SourceRecord,
+): DedupDecision | undefined {
+  return result.links.find(
+    (p) => (p.a === x && p.b === y) || (p.a === y && p.b === x),
+  )?.decision;
 }
 
 describe("P2-T38 — the DOI forms of docs/02 §11.3's table", () => {
   it.each([
-    ["10.7554/elife.98867.1.sa1", "10.7554/elife.98867", true, false],
-    ["10.7554/elife.85605.sa2", "10.7554/elife.85605", true, false],
-    [
-      "10.1111/2041-210x.14397/v1/review2",
-      "10.1111/2041-210x.14397",
-      true,
-      false,
-    ],
-    ["10.3410/f.740477161.793587507", "10.3410/f.740477161", true, false],
+    ["10.7554/elife.98867.1.sa1", "10.7554/elife.98867", false],
+    ["10.7554/elife.85605.sa2", "10.7554/elife.85605", false],
+    ["10.1111/2041-210x.14397/v1/review2", "10.1111/2041-210x.14397", false],
+    ["10.3410/f.740477161.793587507", "10.3410/f.740477161", false],
     [
       "10.5256/f1000research.143730.r200814",
       "10.5256/f1000research.143730",
       true,
-      true,
     ],
-    [
-      "10.12688/f1000research.130932.2",
-      "10.12688/f1000research.130932",
-      false,
-      false,
-    ],
-  ])("%s reduces to %s", (text, stem, review, perVersion) => {
+    ["10.12688/f1000research.130932.2", "10.12688/f1000research.130932", false],
+  ])("%s reduces to %s", (text, stem, perVersion) => {
     expect(doiFamilyStem(doi(text))).toBe(stem);
-    expect(isReviewDocumentDoi(doi(text))).toBe(review);
     expect(isPerVersionReviewDoi(doi(text))).toBe(perVersion);
   });
 
@@ -420,7 +436,7 @@ describe("P2-T38 — the DOI forms of docs/02 §11.3's table", () => {
     "10.1056/nejmoa2300709",
   ])("%s is of no listed form", (text) => {
     expect(doiFamilyStem(doi(text))).toBeUndefined();
-    expect(isReviewDocumentDoi(doi(text))).toBe(false);
+    expect(isPerVersionReviewDoi(doi(text))).toBe(false);
   });
 
   it("a DOI of no listed form is its own stem; equal or absent DOIs are no family", () => {
@@ -448,7 +464,7 @@ describe("P2-T38 — the DOI forms of docs/02 §11.3's table", () => {
   });
 });
 
-describe("P2-T38 rule 1 — Tier 0's DOI family merges the reviews and versions of one paper", () => {
+describe("P2-T40 — Tier 0's DOI family links the documents and versions of one paper, never merges them", () => {
   it.each([
     [
       "two eLife reviewer reports of one version (p-6caef4b71a46)",
@@ -486,20 +502,12 @@ describe("P2-T38 rule 1 — Tier 0's DOI family merges the reviews and versions 
       ),
     ],
     [
-      "two transparent peer review reports of one article (p-940c511c1fe1)",
-      crossref(
-        "10.1111/2041-210x.14397/v1/review1",
-        'Review for "Pressure to publish introduces large‐language model risks"',
-        2024,
-      ),
-      crossref(
-        "10.1111/2041-210x.14397/v1/review2",
-        'Review for "Pressure to publish introduces large‐language model risks"',
-        2024,
-      ),
+      "two transparent peer review reports of one article, same title (p-940c511c1fe1)",
+      crossref("10.1111/2041-210x.14397/v1/review1", WILEY_REVIEW, 2024),
+      crossref("10.1111/2041-210x.14397/v1/review2", WILEY_REVIEW, 2024),
     ],
     [
-      "two Faculty Opinions recommendations of one article (p-5671166c13d8)",
+      "two Faculty Opinions recommendations of one article, same title (p-5671166c13d8)",
       crossref(
         "10.3410/f.740477161.793587507",
         "Faculty Opinions recommendation of Highly accurate protein structure prediction with AlphaFold.",
@@ -514,7 +522,7 @@ describe("P2-T38 rule 1 — Tier 0's DOI family merges the reviews and versions 
       ),
     ],
     [
-      "two F1000Research reports on version 1 (p-f446658730ea)",
+      "two F1000Research reports on version 1, same title (p-f446658730ea)",
       crossref("10.5256/f1000research.143730.r200814", REPORT_V1, 2023),
       crossref("10.5256/f1000research.143730.r219543", REPORT_V1, 2023),
     ],
@@ -553,13 +561,21 @@ describe("P2-T38 rule 1 — Tier 0's DOI family merges the reviews and versions 
   ])("%s", (_, a, b) => {
     for (const d of [compareRecords(a, b), compareRecords(b, a)]) {
       expect(d).toMatchObject({
-        verdict: "match",
+        verdict: "link",
         tier: "doi",
         confidence: TIER_CONFIDENCE.doiFamily,
       });
       expect(d.evidence["rule"]).toBe("doi-family");
     }
-    expect(dedupeRecords([a, b]).groups).toHaveLength(1);
+    for (const order of [
+      [a, b],
+      [b, a],
+    ]) {
+      const result = dedupeRecords(order);
+      expect(result.groups).toHaveLength(2);
+      expect(result.links).toHaveLength(1);
+      expect(linkOf(result, a, b)?.evidence["rule"]).toBe("doi-family");
+    }
   });
 
   it("names the family stem in the evidence", () => {
@@ -578,9 +594,56 @@ describe("P2-T38 rule 1 — Tier 0's DOI family merges the reviews and versions 
     expect(d.evidence["family"]).toBe("10.7554/elife.98867");
   });
 
-  it("does not merge the reviews of two different eLife papers, even under one title (negative)", () => {
+  it("decides before every later tier: a shared PMID or an exact title does not make two family members one work (negative)", () => {
+    // Two reports of one paper that also share a PMID: Tier 1 would match
+    // them across the conflicting DOIs, since item 200's rule lowers that
+    // only for a known version link. The family speaks first.
+    const a = crossref(
+      "10.1111/2041-210x.14397/v1/review1",
+      WILEY_REVIEW,
+      2024,
+      "other",
+      { pmid: pmid("39000001") },
+    );
+    const b = crossref(
+      "10.1111/2041-210x.14397/v1/review2",
+      WILEY_REVIEW,
+      2024,
+      "other",
+      { pmid: pmid("39000001") },
+    );
+    const d = compareRecords(a, b);
+    expect(d).toMatchObject({ verdict: "link", tier: "doi" });
+    expect(d.evidence["rule"]).toBe("doi-family");
+    expect(dedupeRecords([a, b]).groups).toHaveLength(2);
+  });
+
+  it("still merges the same document from two sources: equal DOIs are Tier 0's ordinary match", () => {
+    const a = crossref(
+      "10.7554/elife.85605.sa2",
+      `Author response: ${LEISH_TITLE}`,
+      2023,
+    );
+    const b = record({
+      source: "europepmc",
+      title: `Author response: ${LEISH_TITLE}`,
+      year: 2023,
+      type: "other",
+      ids: { doi: doi("10.7554/elife.85605.sa2") },
+    });
+    const d = compareRecords(a, b);
+    expect(d).toMatchObject({
+      verdict: "match",
+      tier: "doi",
+      confidence: TIER_CONFIDENCE.doi,
+    });
+    expect(dedupeRecords([a, b]).groups).toHaveLength(1);
+  });
+
+  it("does not link the reviews of two different eLife papers by family, even under one title (negative)", () => {
     // One journal DOI prefix, two articles: the stems differ, the DOI
-    // conflict stands (§11.5 rule 1), so an identical title is a link.
+    // conflict stands (§11.5 rule 1), so an identical title is a link of
+    // that rule, not of the family.
     const a = crossref(
       "10.7554/elife.92046.2.sa2",
       `Reviewer #2 (Public Review): ${ATLAS_TITLE}`,
@@ -593,6 +656,7 @@ describe("P2-T38 rule 1 — Tier 0's DOI family merges the reviews and versions 
     );
     const d = compareRecords(a, b);
     expect(d.verdict).toBe("link");
+    expect(d.evidence["rule"]).not.toBe("doi-family");
     expect(d.evidence["conflictingIds"]).toBe("doi");
     expect(dedupeRecords([a, b]).groups).toHaveLength(2);
     const other = crossref(
@@ -600,10 +664,10 @@ describe("P2-T38 rule 1 — Tier 0's DOI family merges the reviews and versions 
       `Reviewer #1 (Public Review): ${NK_TITLE}`,
       2024,
     );
-    expect(compareRecords(a, other).verdict).not.toBe("match");
+    expect(compareRecords(a, other).verdict).toBe("distinct");
   });
 
-  it("does not merge the reviews of two different articles of one Wiley journal (negative)", () => {
+  it("does not link the reviews of two different articles of one Wiley journal by family (negative)", () => {
     const a = crossref(
       "10.1002/eng2.12854/v1/review1",
       'Review for "Preserving node similarity adversarial learning graph representation with graph neural network"',
@@ -614,11 +678,13 @@ describe("P2-T38 rule 1 — Tier 0's DOI family merges the reviews and versions 
       'Review for "Preserving node similarity adversarial learning graph representation with graph neural network"',
       2023,
     );
-    expect(compareRecords(a, b).verdict).toBe("link");
+    const d = compareRecords(a, b);
+    expect(d.verdict).toBe("link");
+    expect(d.evidence["rule"]).not.toBe("doi-family");
     expect(dedupeRecords([a, b]).groups).toHaveLength(2);
   });
 
-  it("does not merge F1000Research articles with different base numbers (negative)", () => {
+  it("does not link F1000Research articles with different base numbers by family (negative)", () => {
     const a = crossref(
       "10.12688/f1000research.130932.1",
       ASHWA_V1,
@@ -633,6 +699,7 @@ describe("P2-T38 rule 1 — Tier 0's DOI family merges the reviews and versions 
     );
     const d = compareRecords(a, b);
     expect(d.verdict).toBe("link");
+    expect(d.evidence["rule"]).not.toBe("doi-family");
     expect(d.evidence["conflictingIds"]).toBe("doi");
     expect(dedupeRecords([a, b]).groups).toHaveLength(2);
   });
@@ -650,44 +717,133 @@ describe("P2-T38 rule 1 — Tier 0's DOI family merges the reviews and versions 
     expect(d.evidence["rule"]).not.toBe("doi-family");
   });
 
-  it("joins an article, its reviews and its author response into one group, whatever the input order", () => {
-    const records = [
-      crossref(
-        "10.7554/elife.85605.sa2",
-        `Author response: ${LEISH_TITLE}`,
-        2023,
-      ),
-      crossref("10.7554/elife.85605", LEISH_TITLE, 2023, "journal-article"),
-      crossref(
-        "10.7554/elife.85605.sa1",
-        `Decision letter: ${LEISH_TITLE}`,
-        2023,
-      ),
-      crossref(
-        "10.7554/elife.92046.2.sa2",
-        `Reviewer #2 (Public Review): ${ATLAS_TITLE}`,
-        2024,
-      ),
-    ];
-    for (const order of [records, [...records].reverse()]) {
-      const sizes = dedupeRecords(order)
-        .groups.map((g) => g.records.length)
-        .sort();
-      expect(sizes).toEqual([1, 3]);
+  it("keeps an article, its decision letter and its author response three works, linked pairwise, in every input order", () => {
+    const article = crossref(
+      "10.7554/elife.85605",
+      LEISH_TITLE,
+      2023,
+      "journal-article",
+    );
+    const letter = crossref(
+      "10.7554/elife.85605.sa1",
+      `Decision letter: ${LEISH_TITLE}`,
+      2023,
+    );
+    const response = crossref(
+      "10.7554/elife.85605.sa2",
+      `Author response: ${LEISH_TITLE}`,
+      2023,
+    );
+    const unrelated = crossref(
+      "10.7554/elife.92046.2.sa2",
+      `Reviewer #2 (Public Review): ${ATLAS_TITLE}`,
+      2024,
+    );
+    const all = orderings([article, letter, response, unrelated]);
+    expect(all).toHaveLength(24);
+    for (const order of all) {
+      const result = dedupeRecords(order);
+      expect(result.groups.map((g) => g.records.length)).toEqual([1, 1, 1, 1]);
+      expect(result.links).toHaveLength(3);
+      for (const [x, y] of [
+        [article, letter],
+        [article, response],
+        [letter, response],
+      ] as const) {
+        expect(linkOf(result, x, y)?.evidence["rule"]).toBe("doi-family");
+      }
+      expect(result.links.some((p) => [p.a, p.b].includes(unrelated))).toBe(
+        false,
+      );
+    }
+  });
+
+  it("does not let a third record join two same-titled reports: the group splits and their link carries it, in every input order", () => {
+    // A copy with no DOI (another source's record of one of the reports)
+    // matches both reports on the exact title, which would join the two
+    // reports transitively. The group-level check keeps them apart.
+    const r1 = crossref(
+      "10.1111/2041-210x.14397/v1/review1",
+      WILEY_REVIEW,
+      2024,
+    );
+    const r2 = crossref(
+      "10.1111/2041-210x.14397/v1/review2",
+      WILEY_REVIEW,
+      2024,
+    );
+    const copy = record({
+      source: "europepmc",
+      title: WILEY_REVIEW,
+      year: 2024,
+      type: "other",
+    });
+    expect(compareRecords(copy, r1).verdict).toBe("match");
+    expect(compareRecords(copy, r2).verdict).toBe("match");
+    for (const order of orderings([r1, r2, copy])) {
+      const result = dedupeRecords(order);
+      const groupOf = (r: SourceRecord): number =>
+        result.groups.findIndex((g) => g.records.includes(r));
+      expect(groupOf(r1)).not.toBe(groupOf(r2));
+      // The copy matches both at one tier, so it joins neither (item 209).
+      expect(result.groups).toHaveLength(3);
+      const link = linkOf(result, r1, r2);
+      expect(link).toMatchObject({
+        verdict: "link",
+        tier: "doi",
+        confidence: TIER_CONFIDENCE.doiFamily,
+      });
+      expect(link?.evidence["rule"]).toBe("doi-family");
+      expect(link?.evidence["groupSplit"]).toBe(true);
+      expect(link?.evidence["knownVersionLink"]).toBeUndefined();
+    }
+  });
+
+  it("still merges ordinary duplicates: the same article from two sources (negative)", () => {
+    const a = record({
+      source: "pubmed",
+      title: PUBMED_TITLE,
+      year: 2023,
+      ids: { doi: doi("10.1038/s41586-023-06139-9"), pmid: pmid("37258680") },
+    });
+    const b = record({
+      source: "semanticscholar",
+      title: S2_TITLE,
+      year: 2023,
+      ids: { doi: doi("10.1038/s41586-023-06139-9") },
+    });
+    const c = record({
+      source: "europepmc",
+      title: PUBMED_TITLE,
+      year: 2023,
+      ids: { pmid: pmid("37258680") },
+    });
+    for (const order of orderings([a, b, c])) {
+      const result = dedupeRecords(order);
+      expect(result.groups).toHaveLength(1);
+      expect(result.links).toEqual([]);
     }
   });
 });
 
-describe("P2-T38 rule 2 — F1000Research reports on two versions are compared on the article's title", () => {
-  it("merges the version 1 and version 2 reports of one article (p-f581335f8a55)", () => {
+describe("P2-T38 rule 2, linked since P2-T40 — F1000Research reports on two versions are compared on the article's title", () => {
+  it("links the version 1 and version 2 reports of one article (p-f581335f8a55)", () => {
     const a = crossref("10.5256/f1000research.143730.r200814", REPORT_V1, 2023);
     const b = crossref("10.5256/f1000research.163630.r264045", REPORT_V2, 2024);
     for (const d of [compareRecords(a, b), compareRecords(b, a)]) {
-      expect(d).toMatchObject({ verdict: "match", tier: "title-fuzzy" });
+      expect(d).toMatchObject({
+        verdict: "link",
+        tier: "title-fuzzy",
+        confidence: TIER_CONFIDENCE.fuzzyLevenshtein,
+      });
       expect(d.evidence["peerReviewReportsAcrossVersions"]).toBe(true);
       expect(d.evidence["conflictingIds"]).toBeUndefined();
     }
-    expect(dedupeRecords([a, b]).groups).toHaveLength(1);
+    const result = dedupeRecords([a, b]);
+    expect(result.groups).toHaveLength(2);
+    expect(
+      linkOf(result, a, b)?.evidence["peerReviewReportsAcrossVersions"],
+    ).toBe(true);
   });
 
   it("reads the full titles for any other pair: the same two titles under article DOIs stay a flag", () => {
@@ -698,7 +854,7 @@ describe("P2-T38 rule 2 — F1000Research reports on two versions are compared o
     expect(compareRecords(a, b).verdict).toBe("flag");
   });
 
-  it("does not merge reports on two different articles (negative)", () => {
+  it("does not link reports on two different articles (negative)", () => {
     const a = crossref("10.5256/f1000research.143730.r200814", REPORT_V1, 2023);
     const b = crossref(
       "10.5256/f1000research.163631.r264046",
@@ -707,7 +863,9 @@ describe("P2-T38 rule 2 — F1000Research reports on two versions are compared o
     );
     const d = compareRecords(a, b);
     expect(d.verdict).toBe("distinct");
-    expect(dedupeRecords([a, b]).groups).toHaveLength(2);
+    const result = dedupeRecords([a, b]);
+    expect(result.groups).toHaveLength(2);
+    expect(result.links).toEqual([]);
   });
 
   it("keeps every title guard: a version-2 report of a part II is not the part I's", () => {
@@ -717,12 +875,46 @@ describe("P2-T38 rule 2 — F1000Research reports on two versions are compared o
     const b = crossref("10.5256/f1000research.222222.r2", partTwo, 2023);
     expect(compareRecords(a, b).verdict).toBe("distinct");
   });
+
+  it("does not let a third record join two reports on different versions: the group splits, in every input order", () => {
+    // Both reports carry one title here, so the title tiers give an exact
+    // match, which rule 2 turns into a link; a copy with no DOI matches both.
+    const r1 = crossref(
+      "10.5256/f1000research.143730.r200814",
+      REPORT_V1,
+      2023,
+    );
+    const r2 = crossref(
+      "10.5256/f1000research.163630.r264045",
+      REPORT_V1,
+      2023,
+    );
+    const copy = record({
+      source: "europepmc",
+      title: REPORT_V1,
+      year: 2023,
+      type: "other",
+    });
+    expect(compareRecords(r1, r2)).toMatchObject({
+      verdict: "link",
+      tier: "title-exact",
+    });
+    for (const order of orderings([r1, r2, copy])) {
+      const result = dedupeRecords(order);
+      expect(result.groups).toHaveLength(3);
+      const link = linkOf(result, r1, r2);
+      expect(link?.tier).toBe("title-exact");
+      expect(link?.evidence["groupSplit"]).toBe(true);
+      expect(link?.evidence["peerReviewReportsAcrossVersions"]).toBe(true);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
 // P2-T39 — the comparison pass by DOI family (owner, 2026-11-10, plan/00 §6
 // item 366(b); docs/02 §11.3's note of that date). The DOIs and titles are the
-// corpus records P2-T38's report §9 item 1 named as never compared.
+// corpus records P2-T38's report §9 item 1 named as never compared. Since
+// P2-T40 the pairs it proposes are linked, not merged.
 // ---------------------------------------------------------------------------
 
 describe("P2-T39 — the DOI-family pass compares a paper's documents across title blocks", () => {
@@ -767,28 +959,30 @@ describe("P2-T39 — the DOI-family pass compares a paper's documents across tit
       report,
       assessment,
     ],
-  ])("merges %s, in either input order", (_, makeA, makeB) => {
+  ])("links %s, in either input order", (_, makeA, makeB) => {
     for (const order of [
       [makeA(), makeB()],
       [makeB(), makeA()],
     ]) {
       const counter = { comparisons: 0 };
       const result = dedupeRecords(order, counter);
-      expect(result.groups).toHaveLength(1);
-      expect(
-        result.groups[0]?.decisions.map((d) => d.evidence["rule"]),
-      ).toEqual(["doi-family"]);
+      expect(result.groups).toHaveLength(2);
+      expect(result.links.map((p) => p.decision.evidence["rule"])).toEqual([
+        "doi-family",
+      ]);
       expect(counter.comparisons).toBe(1);
     }
   });
 
   it("compares a family whatever the years, as an identifier key is", () => {
     const result = dedupeRecords([report(2024), assessment(2026)]);
-    expect(result.groups).toHaveLength(1);
+    expect(result.links).toHaveLength(1);
   });
 
-  it("asks the cascade once per record joined: a family of five recommendations takes four comparisons", () => {
+  it("compares every two records of a family once: five recommendations take ten comparisons and give ten links", () => {
     // Five titles in five different blocks, so the pass is the only path.
+    // Since P2-T40 no two of them join a group, so the driver compares all
+    // n(n − 1)/2 pairs (docs/02 §11.3's note of 2026-11-12, point 4).
     const titles = [
       "Neurodegeneration pathways mapped across cortical organoids today",
       "Photosynthetic efficiency improved through engineered chloroplasts here",
@@ -807,8 +1001,9 @@ describe("P2-T39 — the DOI-family pass compares a paper's documents across tit
     expect(new Set(recs.map((r) => toCandidate(r).signature)).size).toBe(5);
     const counter = { comparisons: 0 };
     const result = dedupeRecords(recs, counter);
-    expect(result.groups).toHaveLength(1);
-    expect(counter.comparisons).toBe(4);
+    expect(result.groups).toHaveLength(5);
+    expect(result.links).toHaveLength(10);
+    expect(counter.comparisons).toBe(10);
   });
 
   it("doiFamilyPairs lists exactly the pairs of one family, by index", () => {
@@ -875,7 +1070,9 @@ describe("P2-T39 — the DOI-family pass compares a paper's documents across tit
     for (const [a, b] of pairs) {
       expect(doiFamilyPairs([a, b].map(toCandidate))).toEqual([]);
       const counter = { comparisons: 0 };
-      expect(dedupeRecords([a, b], counter).groups).toHaveLength(2);
+      const result = dedupeRecords([a, b], counter);
+      expect(result.groups).toHaveLength(2);
+      expect(result.links).toEqual([]);
       expect(counter.comparisons).toBe(0);
     }
   });
@@ -914,11 +1111,12 @@ describe("P2-T39 — the DOI-family pass compares a paper's documents across tit
     expect(doiFamilyPairs([a, b].map(toCandidate))).toEqual([]);
   });
 
-  it("does not bypass the group-level check: a family match never joins a preprint to the version it names (negative)", () => {
+  it("never joins a preprint to the version it names through a family document (negative)", () => {
     // X, an arXiv preprint with no DOI, names the eLife article Y as its
     // published version. B is Y's sub-article whose title is X's. B–Y is a
-    // DOI-family match that only the new pass compares (different blocks);
-    // X–B match on title. Without the check X would join Y through B.
+    // DOI-family pair that only the pass compares (different blocks); X–B
+    // match on title. Before P2-T40 B–Y matched and the group-level check
+    // split X from Y; now B–Y is a link, so B stays with X and Y stays apart.
     const preTitle =
       "Single-cell atlas of the regenerating zebrafish fin reveals a blastema progenitor state";
     const x = record({
@@ -938,26 +1136,17 @@ describe("P2-T39 — the DOI-family pass compares a paper's documents across tit
     );
     const b = crossref("10.7554/elife.555.sa1", preTitle, 2024, "preprint");
     expect(toCandidate(b).signature).not.toBe(toCandidate(y).signature);
-    const orders = [
-      [x, y, b],
-      [x, b, y],
-      [y, x, b],
-      [y, b, x],
-      [b, x, y],
-      [b, y, x],
-    ];
+    const orders = orderings([x, y, b]);
     expect(orders).toHaveLength(6);
     for (const order of orders) {
       const result = dedupeRecords(order);
       const groupOf = (r: SourceRecord): number =>
         result.groups.findIndex((g) => g.records.includes(r));
       expect(groupOf(x)).not.toBe(groupOf(y));
-      // The family pair is the more certain (Tier 0), so B stays with Y.
-      expect(groupOf(b)).toBe(groupOf(y));
-      const link = result.links.find(
-        (p) => [p.a, p.b].includes(x) && [p.a, p.b].includes(y),
-      );
-      expect(link?.decision.evidence["groupSplit"]).toBe(true);
+      expect(groupOf(b)).not.toBe(groupOf(y));
+      expect(groupOf(b)).toBe(groupOf(x));
+      expect(linkOf(result, b, y)?.evidence["rule"]).toBe("doi-family");
+      expect(linkOf(result, x, y)?.evidence["knownVersionLink"]).toBe(true);
     }
   });
 });

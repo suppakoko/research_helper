@@ -2567,6 +2567,9 @@ Tier 7  Known preprint↔published link               → LINK, not merge (§11.
 > the two versions stay two works joined by a link. The rule is in §11.5 under rule 1.
 
 > **Decided 2026-11-10 (owner, `plan/00` §6 item 362(b)): the documents of one paper are one work.**
+> *Superseded 2026-11-12 by the owner's decision of 2026-11-11 (`plan/00` §6 item 370(a)–(c)) for what
+> the family does: rule 1's pairs are **linked**, not matched, and rule 2's title match is a link — the
+> note "Decided 2026-11-11 by the owner, written 2026-11-12" below. The table of forms and stems is unchanged; the merge rule this note points to is removed.*
 > The owner labelled "same paper" nine pairs of reviewer reports, recommendations and an author
 > response about one paper, and two pairs of F1000Research versions 1 and 2 of one article, all with
 > different DOIs, which the cascade linked or flagged (`plan/reports/dedup-report-361.md`). The owner
@@ -2653,7 +2656,9 @@ Tier 7  Known preprint↔published link               → LINK, not merge (§11.
 > relation, and an eLife paper's reviews of several versions can span years; it lists every two
 > records of one family (the driver skips a pair already in one group, so a family of `n` records
 > costs `n − 1` comparisons, not `n(n − 1)/2`); and in `pairs.jsonl` a row found only by this pass
-> sorts after the block rows, so no existing row moves.
+> sorts after the block rows, so no existing row moves. *The cost clause is superseded 2026-11-12
+> (`P2-T40`): family members no longer join one group, so all `n(n − 1)/2` are compared — the next
+> note, point 4.*
 >
 > *Measured the same day (`P2-T39`, `plan/reports/P2-T39.md`):* the corpus grows from 534 to **552
 > pairs** (448 compared by the cascade, was 430; label set 285, was 267). 52 pairs carry the origin:
@@ -2664,6 +2669,86 @@ Tier 7  Known preprint↔published link               → LINK, not merge (§11.
 > 135, distinct 183; record groups 949 → 946. The owner's sample is unchanged (none of the 18 is in
 > it): precision 1.0000, [0.8985, 1.0000] over 34 merged pairs, and recall 1.0000, [0.8985, 1.0000]
 > over 34 true duplicates, both undecided.
+
+> **Decided 2026-11-11 by the owner, written 2026-11-12 (`plan/00` §6 item 370(a)–(c); `plan/03`
+> `P2-T40`): the documents attached to one paper, and the versions of one F1000Research article, are
+> linked versions, not one work.** It reverses item 362(b) for review documents and the first note above for what a DOI family
+> *does*; that note's forms, stems and table stay as they are, and no form is added (item 366(d)).
+> Labelling the ten top-up pairs on 2026-11-11, the owner answered "linked version" for an eLife
+> assessment against a reviewer's report of one paper, then chose to make the earlier "same paper"
+> answers for reviewer reports, recommendations and an author response "linked version" too, and also
+> versions 1 and 2 of one F1000Research article (`plan/reports/dedup-report-370.md`: the 13 false
+> merges were exactly those pairs, all merged by the family). Each such document stays its own Zotero
+> item, related to the others by §11.4's link, exactly as the engine's other links are.
+>
+> 1. **Tier 0's DOI-family key is a link** (`DOI_TIER` in `src/sources/shared/dedupe.ts`): two
+>    different DOIs with one family stem (`sameDoiFamily`, rule 1's table) give verdict `"link"`,
+>    tier `"doi"`, confidence 0.97 (`TIER_CONFIDENCE.doiFamily`), evidence `rule: "doi-family"` and the
+>    stem. Equal DOIs still match, so the same document from two sources is still one work.
+>    **The family evidence wins over every later tier**, because Tier 0 runs first and the cascade stops
+>    at the first tier that decides. Without it the later tiers would decide some of these pairs
+>    differently: two reports with the same title (Wiley's `…/v1/review1` and `…/v1/review2`, both
+>    `Review for "…"`; two Faculty Opinions recommendations of one article) are a Tier 5 match that
+>    §11.5 rule 1 turns into a link only because their DOIs conflict; and a pair that shares a PMID, a
+>    PMCID, an arXiv id or a Semantic Scholar corpus id would be a Tier 1–4 **match** across the
+>    conflicting DOIs, since §11.5's item-200 rule lowers that only for a known version link. A shared
+>    DOI stem is the publisher's own statement that the two are different documents of one paper, so it
+>    decides the pair before any weaker evidence is read.
+> 2. **Rule 2 above is kept, and its match is a link.** Two F1000Research reports on different versions
+>    of one article still record no DOI conflict and are still compared on their titles without the
+>    version note; that comparison is what shows they review one article, since their stems name
+>    different versions. When the title tiers would make them a match, the decision is `"link"` at the
+>    same tier and confidence, evidence `peerReviewReportsAcrossVersions: true`; a flag stays a flag and
+>    a distinct pair stays distinct (`compareCandidates`).
+> 3. **No third record can join them** (§11.5 under rule 1, the group-level check). A pair of one DOI
+>    family, or two F1000Research reports on different versions, whose own verdict is not a match is
+>    kept apart exactly as a pair one of which names the other as its other version: a group that would
+>    hold it is rebuilt tier by tier (`partitionAtVersionLinks`). So a copy without a DOI whose title
+>    matches both of two same-titled reports does not make them one work. The link reported for such a
+>    pair keeps its own decision and gains `groupSplit: true`.
+> 4. **The comparison pass by DOI family stays** (the previous note), so these documents are still
+>    compared, and so linked, whatever their title blocks. Its cost note is superseded: family members
+>    no longer join one group, so the driver compares every two records of a family — `n(n − 1)/2`
+>    comparisons and links for a family of `n`, not `n − 1`.
+> 5. **What is left of the merge rules** that served only the merged family is `docs/07` §5.1's note of
+>    this day: the review-yields rule and the newest-version rule are removed. The table's "Review
+>    document" column no longer drives anything.
+> 6. **The existing library** (§11.6) shares the cascade (`matchAgainstLibrary` calls
+>    `compareCandidates`), so an incoming document whose DOI is of one family with an item already in the
+>    library is reported as a link, not a match, and is imported as its own item. No lookup by family is
+>    added there.
+>
+> **DECIDED 2026-11-12 (coordinator, under item 313): what happens to the code that served only
+> merging.** Each was checked for a caller that can still reach it. (a) **Removed**: `newestArticleVersionDoi`
+> and the date pool in `src/model/merge.ts`, `unionIds`'s preferred DOI, and `articleVersionOf` in
+> `src/model/ids.ts` — a merged group can hold two version DOIs of one article only by joining a family
+> pair, which point 3 now forbids, so nothing reaches them. (b) **Removed**: the review-yields rule —
+> `isReviewDocument` and its place in `canonicalOrder` and `merge`, `isReviewDocumentDoi` in
+> `src/model/ids.ts`, and the review-document test in `mergeGroups`'s choice of a group's representative
+> (`src/pipeline/searchImport/stages.ts`), which returns to the group's first record in fetch order.
+> A group can no longer hold a review document with the paper it is attached to; the rule could still
+> fire only on a group that joins a review document with a record carrying no DOI at all, where it would
+> let that record's fields win — which no decision asks for — and no such group is in the corpus.
+> (c) **Kept, with its outcome changed**: rule 2 (`arePeerReviewReportsAcrossVersions`,
+> `F1000_VERSION_NOTE`, `isPerVersionReviewDoi`), which every pair of F1000Research reports on two
+> versions still reaches. (d) **Kept**: `doiFamilyStem`, `sameDoiFamily`, `doiFamilyPairs` and
+> `TIER_CONFIDENCE.doiFamily`, which now find and score the links. Removed code is described in the dated
+> notes that introduced it, which stay as history.
+>
+> *Measured the same day (`P2-T40`, `plan/reports/P2-T40.md`):* the corpus files are unchanged (every
+> file under `test/fixtures/dedup/` has the same SHA-256 before and after: the candidate pairs carry no
+> verdict), so no label, reason, label set or sample changes. Over the 552 corpus pairs exactly **56
+> outcomes change, every one from *merged* to *linked***: 52 by the DOI family and 4 by rule 2 (two
+> F1000Research reports on different versions). 13 of the 56 are labelled "linked version" and 43 carry
+> no label; no pair labelled "same paper" stops being merged, and no pair labelled "different" becomes
+> merged or linked. Outcomes over the 552: merged 103 (was 159), linked 131 (was 75), flagged 135,
+> distinct 183. Over the whole pool the engine compares 434 pairs (was 401) and forms 969 record groups
+> (was 946); the 932 groups that hold no family document are byte-identical before and after, and no
+> group holds two different DOIs of one family. On the owner's 70 labelled pairs: precision **1.0000**,
+> [0.8713, 1.0000] over 26 merged pairs (no false merge; was 0.6667, not met, with 13), and recall
+> 0.9630, [0.8172, 0.9934] over 27 true duplicates, both **undecided**; linked versions recognised as
+> links 18 of 23 (was 5). The one missed merge is unchanged: the conference and journal versions of
+> "Focal Loss for Dense Object Detection" (different DOIs), which the engine links.
 
 #### 11.3.1 ID normalization
 
@@ -2853,7 +2938,9 @@ Korean titles, so the non-Latin path §11.3.2 now preserves is measured rather t
 > their display order; the first block is not touched. The script refuses to draw a second
 > top-up and never writes a label. `--check` re-derives each draw from its own recorded population
 > and seed, and checks that today's label set is exactly what the top-up saw: the first draw's 60,
-> the top-up's population, and the labelled pairs it left out.
+> the top-up's population, and the labelled pairs it left out. *Superseded 2026-11-12 (item 370(d)) for
+> "refuses to draw a second top-up": `--extend=` now appends further numbered blocks and refuses only a
+> repeated seed — the next note.*
 > **DECIDED 2026-11-11 (coordinator, under item 313): how the two draws are reported.** The
 > measured sample is the **union of the 60 and the 10**. The top-up was drawn **after the engine
 > changed** (`P2-T38`, `P2-T39`) and from a different population (the unlabelled remainder of a
@@ -2871,6 +2958,41 @@ Korean titles, so the non-Latin path §11.3.2 now preserves is measured rather t
 > Two of the ten are `P2-T39` pairs. `--check` passes again. Until the owner labels the ten,
 > `npm run dedup:report` refuses with "10 of 70 sampled pairs have no label" and exits 1;
 > `--allow-partial` measures the 60 as before (precision and recall 1.0000, both undecided at 34).
+
+> **Decided 2026-11-11 by the owner, written 2026-11-12 (`plan/00` §6 item 370(d)): a second top-up of
+> twenty pairs**, drawn after `P2-T40` (the note "Decided 2026-11-11 by the owner, written 2026-11-12"
+> above), because with items 370(a) and 370(b) the sample holds 27 true duplicates and recall can be
+> decided only from 35 (the note of 2026-10-25). The owner labels them in chat, with no engine outcome and
+> no stratum shown. **How the twenty are drawn** (`scripts/dedup-label-sample.ts --extend=20`), by the
+> method of the 2026-11-11 top-up with two words changed:
+>
+> - **Population:** today's label-set pairs (`inLabelSet`) that carry **no label** and are **in no
+>   earlier draw** — not among the first draw's 60 and not among the first top-up's 10. Labelled pairs
+>   outside the earlier draws are left out and listed, as before.
+> - **Strata:** each pair's outcome under **today's engine, after `P2-T40`**, read by `outcomeIndex`
+>   from one `dedupeRecords` run over the whole pool.
+> - **Allocation:** the twenty in proportion by `allocateProportional` (largest remainder, ties in
+>   `PREDICTIONS` order, at least one pair per non-empty stratum).
+> - **Within a stratum and display order:** the smallest SHA-256 of `seed + "\n" + pairId`, ties by pair
+>   id; the twenty shown sorted by SHA-256 of `seed + "\ndisplay\n" + pairId`.
+> - **Seed:** **`P2-T13 label sample top-up 2 2026-11-12`**; date 2026-11-12; size 20.
+>
+> No cluster rule, as before. The block records its decision, date, seed, size, method, strata, every pair
+> of its population with its stratum, the labelled pairs it left out, the twenty and their display order,
+> so it re-derives from the file alone.
+> **DECIDED 2026-11-12 (coordinator, under item 313): the file holds numbered top-up blocks, and the
+> first is kept byte for byte.** The first top-up stays under its key `topUp`; the second is `topUp2`,
+> and a later one would be `topUp3`, each with its own seed, date, size, population and strata at its
+> draw. Appending a block adds text after the first top-up and changes none before it, so no migration is
+> needed: the committed file reads and writes back unchanged. `--extend=N` appends the next block
+> (`--date=`, `--seed=` and `--decision=` name it; the seed defaults to
+> `P2-T13 label sample top-up <number> <date>`, without the number for the first) and refuses only a seed
+> that an earlier draw (the first draw or a top-up) already used. `--check` re-derives every draw from its own recorded population
+> and seed, checks that each block's population shares no pair with an earlier draw, that every pair an
+> earlier block saw is still in the label set, and that today's label set is exactly what the **newest**
+> block saw (every earlier draw's pairs, its population and the labelled pairs it left out).
+> `npm run dedup:report` measures the union of all the draws, prints each block's strata, and says plainly
+> that the union is not one stratified draw, as the coordinator decided on 2026-11-11.
 
 ### 11.4 Preprint ↔ published-version linking
 
@@ -2931,6 +3053,13 @@ and add `Preprint DOI: <doi>` / `Published DOI: <doi>` to `extra` when only one 
 > *Updated later on 2026-11-10 (owner, `plan/00` §6 item 366(c)): the **newest** version wins the DOI
 > and the date, and the other versions' DOIs stay in `ids` as conflicts — `docs/07` §5.1's note of
 > that day, which replaces the version-1 outcome.*
+
+> **Superseded 2026-11-12 (owner, `plan/00` §6 item 370(b); `plan/03` `P2-T40`).** The versions of one
+> F1000Research article are **linked versions** again: Tier 0's DOI family now gives a link, not a match
+> (§11.3's note of that day), so each version stays its own work and the two are related as this section
+> describes; the records of one version (one DOI, from several sources) still merge. The note above and
+> its "newest version wins" update stay as history; the newest-version rule applies to no group and is
+> removed (`docs/07` §5.1's note of 2026-11-12). Gate `G-16` is unchanged.
 
 ### 11.5 Merge precedence and conflict handling
 
