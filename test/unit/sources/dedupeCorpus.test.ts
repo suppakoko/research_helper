@@ -186,14 +186,23 @@ describe("the committed corpus is what the builder makes from the committed fixt
   // `P2-T39` (plan/00 §6 item 366(b)): 52 pairs are one paper's documents by
   // DOI family. 34 were already in the corpus through a title block; 18 are
   // found only by the DOI-family pass, and all 18 entered unlabelled.
-  it("pins the DOI-family pairs: 52, of which 18 only the DOI-family pass finds, all unlabelled", () => {
+  it("pins the DOI-family pairs: 52, of which 18 only the DOI-family pass finds, 16 of them unlabelled", () => {
     const family = committedRows.filter((r) =>
       r.origins.includes("doi-family"),
     );
     expect(family).toHaveLength(52);
     const only = family.filter((r) => r.origins.length === 1);
     expect(only).toHaveLength(18);
-    expect(only.every((r) => r.label === "" && r.reason === "")).toBe(true);
+    // Two of the 18 were drawn into the 2026-11-11 top-up and labelled by the
+    // owner in chat (plan/00 §6 items 369 and 370); the other 16 stay unlabelled.
+    const labelled = only.filter((r) => r.label !== "");
+    expect(labelled.map((r) => [r.pairId, r.label]).sort()).toEqual([
+      ["p-7e83a20f4a2b", "linked-version"],
+      ["p-df298cf5ca83", "linked-version"],
+    ]);
+    expect(
+      only.filter((r) => r.label === "").every((r) => r.reason === ""),
+    ).toBe(true);
     expect(only.every((r) => r.engineCompares && r.labelSet)).toBe(true);
     expect(
       family
@@ -826,7 +835,7 @@ describe("scripts/dedup-report.ts", () => {
       expect(code).toBe(1);
       const said = String(err.mock.calls[0]?.[0]);
       expect(said).toMatch(
-        /is not fully labelled: 225 of 285 label-set pairs have no label/u,
+        /is not fully labelled: 215 of 285 label-set pairs have no label/u,
       );
       expect(said).toContain(
         "Sampled out of the label set (owner, 2026-10-16): 267 of 552 pairs, " +
