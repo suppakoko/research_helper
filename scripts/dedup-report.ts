@@ -49,6 +49,16 @@
  * every labelled label-set pair as before, and prints the interval beside the
  * point verdict.
  *
+ * **Since 2026-11-11 it measures the union of two draws** (owner's decision,
+ * `plan/00` §6 item 366(a); `docs/02` §11.3's note of that date): the 60 and
+ * the ten-pair top-up in the sample file's `topUp` block. Each draw's strata
+ * are printed under it; the output says that the top-up was drawn after the
+ * engine changed and that the union is not one stratified draw, so its
+ * labelled pairs are pooled without weights (coordinator decision of that
+ * day, under item 313); and "Labelled pairs measured" says how many of the
+ * union's pairs carry a label, per draw. The refusal on unlabelled sampled
+ * pairs is unchanged and covers the top-up's pairs too.
+ *
  * ```sh
  * npm run dedup:report                                   # the owner's sample of the committed corpus
  * npm run dedup:report -- --full                         # every labelled label-set pair
@@ -344,6 +354,39 @@ export interface StratifiedPair {
   readonly stratum: Prediction;
 }
 
+/** Per stratum: pairs in a draw's population, and how many were drawn. */
+export type DrawStrata = Readonly<
+  Record<Prediction, { readonly population: number; readonly sampled: number }>
+>;
+
+/**
+ * The top-up draw appended to the sample file (owner's decision of
+ * 2026-11-11, `plan/00` §6 item 366(a); `docs/02` §11.3's note of that date).
+ * Drawn by the first draw's method from the label-set pairs that carried no
+ * label and were not among the first draw's pairs, stratified by the engine's
+ * outcome on the top-up's own day.
+ */
+export interface LabelSampleTopUp {
+  readonly decision: string;
+  /** The day of the draw (ISO date). */
+  readonly date: string;
+  readonly seed: string;
+  readonly size: number;
+  readonly method: string;
+  readonly strata: DrawStrata;
+  /**
+   * Label-set pairs outside the first draw that carried a label at the
+   * top-up, and so were left out of its population; by pair id.
+   */
+  readonly excludedLabelled: readonly string[];
+  /** Every pair of the top-up's population with its stratum, by pair id. */
+  readonly population: readonly StratifiedPair[];
+  /** The drawn pairs, by stratum in {@link PREDICTIONS} order, then by rank. */
+  readonly sample: readonly StratifiedPair[];
+  /** The drawn pair ids in the order they are shown to the owner. */
+  readonly displayOrder: readonly string[];
+}
+
 /** `test/fixtures/dedup/label-sample.json`. */
 export interface LabelSample {
   readonly card: string;
@@ -352,18 +395,23 @@ export interface LabelSample {
   readonly size: number;
   readonly method: string;
   /** Per stratum: label-set pairs at the draw, and how many were drawn. */
-  readonly strata: Readonly<
-    Record<
-      Prediction,
-      { readonly population: number; readonly sampled: number }
-    >
-  >;
+  readonly strata: DrawStrata;
   /** Every label-set pair at the draw with its stratum, by pair id. */
   readonly population: readonly StratifiedPair[];
   /** The drawn pairs, by stratum in {@link PREDICTIONS} order, then by rank. */
   readonly sample: readonly StratifiedPair[];
   /** The drawn pair ids in the order the labelling page shows them. */
   readonly displayOrder: readonly string[];
+  /**
+   * The ten-pair top-up, when drawn. Added 2026-11-11 (`plan/00` §6 item
+   * 366(a)); a file without it is the first draw alone.
+   */
+  readonly topUp?: LabelSampleTopUp;
+}
+
+/** Every pair a sample file asks to be measured: the first draw, then the top-up. */
+export function sampledPairsOf(s: LabelSample): readonly StratifiedPair[] {
+  return [...s.sample, ...(s.topUp?.sample ?? [])];
 }
 
 function isPrediction(v: unknown): v is Prediction {
@@ -388,29 +436,42 @@ function stratifiedPairsOf(v: unknown, what: string): StratifiedPair[] {
   });
 }
 
-/**
- * Read a sample file, checking its shape: unique pair ids, the sample inside
- * the population with the same strata, `size` pairs, and a display order that
- * is a permutation of the sample.
- *
- * @throws Error naming the first defect
- */
-export function parseLabelSample(text: string): LabelSample {
-  const raw = JSON.parse(text) as Record<string, unknown>;
-  for (const k of ["card", "decision", "seed", "method"] as const) {
-    if (typeof raw[k] !== "string") throw new Error(`"${k}" is not a string`);
-  }
-  if (typeof raw.size !== "number") throw new Error(`"size" is not a number`);
-  const population = stratifiedPairsOf(raw.population, "population");
-  const sample = stratifiedPairsOf(raw.sample, "sample");
-  if (!Array.isArray(raw.displayOrder)) {
-    throw new Error(`"displayOrder" is not an array`);
-  }
-  const displayOrder = raw.displayOrder.map((x: unknown) => {
-    if (typeof x !== "string")
-      throw new Error(`displayOrder holds a non-string`);
+function stringsOf(v: unknown, what: string): string[] {
+  if (!Array.isArray(v)) throw new Error(`"${what}" is not an array`);
+  return v.map((x: unknown) => {
+    if (typeof x !== "string") throw new Error(`${what} holds a non-string`);
     return x;
   });
+}
+
+/** One draw's checked fields: shared by the first draw and the top-up. */
+interface ParsedDraw {
+  readonly seed: string;
+  readonly size: number;
+  readonly method: string;
+  readonly strata: DrawStrata;
+  readonly population: readonly StratifiedPair[];
+  readonly sample: readonly StratifiedPair[];
+  readonly displayOrder: readonly string[];
+}
+
+/**
+ * Check one draw: unique pair ids, the sample inside the population with the
+ * same strata, `size` pairs, a display order that is a permutation of the
+ * sample, and per-stratum counts that agree. `where` prefixes each message.
+ */
+function parseDraw(raw: Record<string, unknown>, where: string): ParsedDraw {
+  for (const k of ["seed", "method"] as const) {
+    if (typeof raw[k] !== "string") {
+      throw new Error(`${where}"${k}" is not a string`);
+    }
+  }
+  if (typeof raw.size !== "number") {
+    throw new Error(`${where}"size" is not a number`);
+  }
+  const population = stratifiedPairsOf(raw.population, `${where}population`);
+  const sample = stratifiedPairsOf(raw.sample, `${where}sample`);
+  const displayOrder = stringsOf(raw.displayOrder, `${where}displayOrder`);
   const strataRaw = raw.strata as
     Record<string, { population?: unknown; sampled?: unknown }> | undefined;
   const strata = Object.fromEntries(
@@ -421,7 +482,7 @@ export function parseLabelSample(text: string): LabelSample {
         typeof s.population !== "number" ||
         typeof s.sampled !== "number"
       ) {
-        throw new Error(`strata.${p} is not {population, sampled}`);
+        throw new Error(`${where}strata.${p} is not {population, sampled}`);
       }
       return [p, { population: s.population, sampled: s.sampled }];
     }),
@@ -429,22 +490,26 @@ export function parseLabelSample(text: string): LabelSample {
 
   const byId = new Map<string, Prediction>();
   for (const p of population) {
-    if (byId.has(p.pairId)) throw new Error(`population repeats ${p.pairId}`);
+    if (byId.has(p.pairId)) {
+      throw new Error(`${where}population repeats ${p.pairId}`);
+    }
     byId.set(p.pairId, p.stratum);
   }
   const seen = new Set<string>();
   for (const s of sample) {
-    if (seen.has(s.pairId)) throw new Error(`sample repeats ${s.pairId}`);
+    if (seen.has(s.pairId)) {
+      throw new Error(`${where}sample repeats ${s.pairId}`);
+    }
     seen.add(s.pairId);
     if (byId.get(s.pairId) !== s.stratum) {
       throw new Error(
-        `sample pair ${s.pairId} is not in the population as ${s.stratum}`,
+        `${where}sample pair ${s.pairId} is not in the population as ${s.stratum}`,
       );
     }
   }
   if (sample.length !== raw.size) {
     throw new Error(
-      `sample holds ${String(sample.length)} pairs, size says ${String(raw.size)}`,
+      `${where}sample holds ${String(sample.length)} pairs, size says ${String(raw.size)}`,
     );
   }
   if (
@@ -452,20 +517,18 @@ export function parseLabelSample(text: string): LabelSample {
     new Set(displayOrder).size !== displayOrder.length ||
     !displayOrder.every((id) => seen.has(id))
   ) {
-    throw new Error("displayOrder is not a permutation of the sample");
+    throw new Error(`${where}displayOrder is not a permutation of the sample`);
   }
   for (const p of PREDICTIONS) {
     const pop = population.filter((x) => x.stratum === p).length;
     const smp = sample.filter((x) => x.stratum === p).length;
     if (strata[p].population !== pop || strata[p].sampled !== smp) {
       throw new Error(
-        `strata.${p} disagrees with the population or the sample`,
+        `${where}strata.${p} disagrees with the population or the sample`,
       );
     }
   }
   return {
-    card: raw.card as string,
-    decision: raw.decision as string,
     seed: raw.seed as string,
     size: raw.size,
     method: raw.method as string,
@@ -473,6 +536,71 @@ export function parseLabelSample(text: string): LabelSample {
     population,
     sample,
     displayOrder,
+  };
+}
+
+/**
+ * Read a sample file, checking its shape: for each draw, unique pair ids, the
+ * sample inside the population with the same strata, `size` pairs, and a
+ * display order that is a permutation of the sample; for a top-up, also a
+ * population and a list of left-out labelled pairs that share no pair with
+ * the first draw's sample or with each other.
+ *
+ * @throws Error naming the first defect
+ */
+export function parseLabelSample(text: string): LabelSample {
+  const raw = JSON.parse(text) as Record<string, unknown>;
+  for (const k of ["card", "decision"] as const) {
+    if (typeof raw[k] !== "string") throw new Error(`"${k}" is not a string`);
+  }
+  const first = parseDraw(raw, "");
+  const out: LabelSample = {
+    card: raw.card as string,
+    decision: raw.decision as string,
+    ...first,
+  };
+  if (raw.topUp === undefined) return out;
+  const t = raw.topUp as Record<string, unknown> | null;
+  if (t === null || typeof t !== "object") {
+    throw new Error(`"topUp" is not an object`);
+  }
+  for (const k of ["decision", "date"] as const) {
+    if (typeof t[k] !== "string") {
+      throw new Error(`topUp."${k}" is not a string`);
+    }
+  }
+  const draw = parseDraw(t, "topUp.");
+  const excludedLabelled = stringsOf(
+    t.excludedLabelled,
+    "topUp.excludedLabelled",
+  );
+  const firstSampled = new Set(first.sample.map((s) => s.pairId));
+  const topUpPopulation = new Set(draw.population.map((p) => p.pairId));
+  for (const p of draw.population) {
+    if (firstSampled.has(p.pairId)) {
+      throw new Error(
+        `topUp.population holds ${p.pairId}, which the first draw sampled`,
+      );
+    }
+  }
+  if (new Set(excludedLabelled).size !== excludedLabelled.length) {
+    throw new Error("topUp.excludedLabelled repeats a pair id");
+  }
+  for (const id of excludedLabelled) {
+    if (firstSampled.has(id) || topUpPopulation.has(id)) {
+      throw new Error(
+        `topUp.excludedLabelled holds ${id}, which is in a draw's sample or population`,
+      );
+    }
+  }
+  return {
+    ...out,
+    topUp: {
+      decision: t.decision as string,
+      date: t.date as string,
+      ...draw,
+      excludedLabelled,
+    },
   };
 }
 
@@ -493,11 +621,45 @@ export interface SampleContext {
       }
     >
   >;
-  /** Measured pairs whose outcome today differs from their stratum at the draw. */
+  /** Measured pairs whose outcome today differs from their stratum at their draw. */
   readonly movedSinceDraw: number;
   /** Labelled label-set pairs outside the sample: not measured in this mode. */
   readonly labelledOutside: number;
+  /**
+   * The top-up draw, when the file holds one (added 2026-11-11, `plan/00` §6
+   * item 366(a)): its seed, date, size, the size of its own population, and
+   * per stratum that population, drawn, and drawn and labelled.
+   */
+  readonly topUp?: {
+    readonly seed: string;
+    readonly date: string;
+    readonly size: number;
+    readonly population: number;
+    readonly strata: SampleContext["strata"];
+  };
 }
+
+/** The per-stratum table under a draw: population at that draw, drawn, labelled. */
+function strataTable(
+  strata: SampleContext["strata"],
+  populationHeading: string,
+): string[] {
+  const lines = [
+    `  ${"stratum".padEnd(10)}${populationHeading.padStart(11)}${"sampled".padStart(9)}${"labelled".padStart(10)}`,
+  ];
+  for (const p of PREDICTIONS) {
+    const s = strata[p];
+    lines.push(
+      `  ${p.padEnd(10)}${String(s.population).padStart(11)}${String(s.sampled).padStart(9)}${String(s.labelled).padStart(10)}`,
+    );
+  }
+  return lines;
+}
+
+const sumOf = (
+  strata: SampleContext["strata"],
+  key: "sampled" | "labelled",
+): number => PREDICTIONS.reduce((n, p) => n + strata[p][key], 0);
 
 function fmt(x: number | null): string {
   return x === null ? "n/a (no pair in the denominator)" : x.toFixed(4);
@@ -578,17 +740,31 @@ export function formatReport(
         `drawn from ${sample.file}, seed "${sample.seed}", stratified by the engine's ` +
         `outcome at the draw in proportion (docs/02 §11.3)`,
     );
-    out.push(
-      `  ${"stratum".padEnd(10)}${"label set".padStart(11)}${"sampled".padStart(9)}${"labelled".padStart(10)}`,
-    );
-    for (const p of PREDICTIONS) {
-      const s = sample.strata[p];
+    out.push(...strataTable(sample.strata, "label set"));
+    const topUp = sample.topUp;
+    if (topUp !== undefined) {
+      // The top-up and how the two draws are reported: docs/02 §11.3's note
+      // of 2026-11-11 (owner, plan/00 §6 item 366(a); the wording is a
+      // coordinator decision under item 313).
       out.push(
-        `  ${p.padEnd(10)}${String(s.population).padStart(11)}${String(s.sampled).padStart(9)}${String(s.labelled).padStart(10)}`,
+        `Top-up (owner, ${topUp.date}, plan/00 §6 item 366(a)): ${String(topUp.size)} more pairs, ` +
+          `seed "${topUp.seed}", drawn from the ${String(topUp.population)} label-set pairs that had ` +
+          `no label and were not in the first draw, stratified by the engine's outcome on ` +
+          `${topUp.date} in proportion`,
+      );
+      out.push(...strataTable(topUp.strata, "population"));
+      const total = sample.size + topUp.size;
+      out.push(
+        `The measured sample is the union of the two draws (${String(sample.size)} + ` +
+          `${String(topUp.size)} = ${String(total)} pairs). The top-up was drawn after the engine ` +
+          `changed (P2-T38, P2-T39) and from a different population, so the union is NOT one ` +
+          `stratified draw: its labelled pairs are pooled as they are, without weights, and the ` +
+          `intervals below describe those pooled pairs, not one random sample of the label set.`,
       );
     }
     out.push(
-      `Sampled pairs whose engine outcome has changed since the draw: ${String(sample.movedSinceDraw)}` +
+      `Sampled pairs whose engine outcome has changed since ${topUp === undefined ? "the" : "their"} draw: ` +
+        `${String(sample.movedSinceDraw)}` +
         (sample.movedSinceDraw > 0
           ? " (the sample is not redrawn; they are measured under today's outcome)"
           : ""),
@@ -611,7 +787,17 @@ export function formatReport(
       `MIN_FUZZY_TITLE_TOKENS ${String(MIN_FUZZY_TITLE_TOKENS)}, ` +
       `SIGNATURE_TOKEN_COUNT ${String(SIGNATURE_TOKEN_COUNT)}`,
   );
-  out.push(`Labelled pairs measured: ${String(metrics.scored.length)}`);
+  const topUpContext = sample?.topUp;
+  out.push(
+    `Labelled pairs measured: ${String(metrics.scored.length)}` +
+      (sample === undefined || topUpContext === undefined
+        ? ""
+        : ` (of the ${String(sample.size + topUpContext.size)} sampled pairs, ` +
+          `${String(sumOf(sample.strata, "labelled") + sumOf(topUpContext.strata, "labelled"))} ` +
+          `have labels: first draw ${String(sumOf(sample.strata, "labelled"))} of ` +
+          `${String(sample.size)}, top-up ${String(sumOf(topUpContext.strata, "labelled"))} of ` +
+          `${String(topUpContext.size)})`),
+  );
   out.push("");
   out.push("Confusion matrix (rows: human label; columns: engine outcome)");
   const w = 16;
@@ -813,9 +999,14 @@ async function mainSampled(
     return 2;
   }
   const byPair = new Map(rows.map((r) => [r.pairId, r]));
-  const stratumOf = new Map(sample.sample.map((s) => [s.pairId, s.stratum]));
+  // Since 2026-11-11 (plan/00 §6 item 366(a)) the measured sample is the
+  // union of the first draw and the top-up, when the file holds one; each
+  // pair keeps the stratum of its own draw.
+  const sampled = sampledPairsOf(sample);
+  const stratumOf = new Map(sampled.map((s) => [s.pairId, s.stratum]));
+  const inTopUp = new Set(sample.topUp?.sample.map((s) => s.pairId) ?? []);
   const sampledRows: PairRow[] = [];
-  for (const s of sample.sample) {
+  for (const s of sampled) {
     const row = byPair.get(s.pairId);
     if (row === undefined || !inLabelSet(row)) {
       process.stderr.write(
@@ -829,14 +1020,22 @@ async function mainSampled(
   }
   const labelled = sampledRows.filter((r) => r.label !== "");
   const unlabelled = sampledRows.length - labelled.length;
+  const labelledIn = (topUp: boolean): number =>
+    labelled.filter((r) => inTopUp.has(r.pairId) === topUp).length;
+  const byDraw =
+    sample.topUp === undefined
+      ? ""
+      : ` (first draw ${String(labelledIn(false))} of ${String(sample.size)} labelled, ` +
+        `top-up ${String(labelledIn(true))} of ${String(sample.topUp.size)} labelled)`;
   if (labelled.length === 0 || (unlabelled > 0 && !allowPartial)) {
     process.stderr.write(
       `${file} is ${labelled.length === 0 ? "unlabelled" : "not fully labelled"} ` +
         `on the owner's sample: ${String(unlabelled)} of ${String(sampledRows.length)} ` +
-        `sampled pairs have no label. No measurement is made on unlabelled pairs. ` +
-        `The owner labels the ${String(sample.size)} pairs of ${sampleFile} by hand ` +
+        `sampled pairs have no label${byDraw}. No measurement is made on unlabelled pairs. ` +
+        `The owner labels the ${String(sampledRows.length)} pairs of ${sampleFile} by hand ` +
         `(${PAIR_LABELS.join(" / ")}); merge them with ` +
-        `npx tsx scripts/build-dedup-corpus.ts --merge-labels test/fixtures/dedup/pairs.csv.\n`,
+        `npx tsx scripts/build-dedup-corpus.ts --merge-labels test/fixtures/dedup/pairs.csv. ` +
+        `npm run dedup:report -- --allow-partial measures the labelled ones meanwhile.\n`,
     );
     return 1;
   }
@@ -857,33 +1056,50 @@ async function mainSampled(
     );
     return 1;
   }
-  const strata = Object.fromEntries(
-    PREDICTIONS.map((p) => [
-      p,
-      {
-        population: sample.strata[p].population,
-        sampled: sample.strata[p].sampled,
-        labelled: labelled.filter((r) => stratumOf.get(r.pairId) === p).length,
-      },
-    ]),
-  ) as SampleContext["strata"];
+  const strataOf = (
+    drawStrata: DrawStrata,
+    topUp: boolean,
+  ): SampleContext["strata"] =>
+    Object.fromEntries(
+      PREDICTIONS.map((p) => [
+        p,
+        {
+          population: drawStrata[p].population,
+          sampled: drawStrata[p].sampled,
+          labelled: labelled.filter(
+            (r) =>
+              inTopUp.has(r.pairId) === topUp && stratumOf.get(r.pairId) === p,
+          ).length,
+        },
+      ]),
+    ) as SampleContext["strata"];
   const movedSinceDraw = metrics.scored.filter(
     (s) => stratumOf.get(s.row.pairId) !== s.predicted,
   ).length;
+  const topUp = sample.topUp;
   process.stdout.write(
     `${formatReport(metrics, {
       file,
       partial:
         unlabelled > 0
-          ? `${String(unlabelled)} of ${String(sampledRows.length)} sampled pairs are unlabelled and not measured`
+          ? `${String(unlabelled)} of ${String(sampledRows.length)} sampled pairs are unlabelled and not measured${byDraw}`
           : undefined,
       sample: {
         file: sampleFile,
         seed: sample.seed,
         size: sample.size,
-        strata,
+        strata: strataOf(sample.strata, false),
         movedSinceDraw,
         labelledOutside,
+        ...(topUp !== undefined && {
+          topUp: {
+            seed: topUp.seed,
+            date: topUp.date,
+            size: topUp.size,
+            population: topUp.population.length,
+            strata: strataOf(topUp.strata, true),
+          },
+        }),
       },
     })}\n`,
   );

@@ -2832,6 +2832,46 @@ Korean titles, so the non-Latin path §11.3.2 now preserves is measured rather t
 > [0.700, 0.958], width 0.258. Labelling all 267 would not have confirmed 0.99 either: 103 merged
 > pairs with no false merge give a low end of 0.964.
 
+> **Decided 2026-11-11 (owner, `plan/00` §6 item 366(a)): a ten-pair top-up.** At 34 true
+> duplicates the recall target cannot be decided (the note above: 35 are needed with no error), so
+> **ten more pairs** are drawn and the owner labels them in chat, four at a time, with no engine
+> outcome and no stratum shown. **How the ten are drawn** (`scripts/dedup-label-sample.ts
+> --extend=10`, `buildTopUp`): the **population** is today's label-set pairs (`inLabelSet`) that
+> carry no label and are not among the 60 of the first draw — the label set has grown since
+> 2026-10-25 (`P2-T39` added 18 unlabelled pairs found by the DOI-family pass), and those new pairs
+> are in it. The first draw has no cluster rule (it never excluded a pair for sharing a record or a
+> `sampleCluster` with a drawn pair), so none is applied here either. The **strata** are the
+> engine's outcomes for those pairs **today**, read by `outcomeIndex` from one `dedupeRecords` run
+> over the whole pool, exactly as for the first draw. The ten are split across the strata by the
+> same `allocateProportional` (largest remainder, at least one per non-empty stratum); within a
+> stratum the pairs with the smallest SHA-256 of `seed + "\n" + pairId` are kept, ties by pair id;
+> the display order is the ten sorted by SHA-256 of `seed + "\ndisplay\n" + pairId` (`displayRank`)
+> — all under the new fixed seed **`P2-T13 label sample top-up 2026-11-11`**. The draw is appended
+> to `test/fixtures/dedup/label-sample.json` as a second block (`topUp`) holding its decision,
+> date, seed, size, method, per-stratum counts, every pair of its population with its stratum, the
+> label-set pairs outside the first draw it left out because they carried a label, the ten, and
+> their display order; the first block is not touched. The script refuses to draw a second
+> top-up and never writes a label. `--check` re-derives each draw from its own recorded population
+> and seed, and checks that today's label set is exactly what the top-up saw: the first draw's 60,
+> the top-up's population, and the labelled pairs it left out.
+> **DECIDED 2026-11-11 (coordinator, under item 313): how the two draws are reported.** The
+> measured sample is the **union of the 60 and the 10**. The top-up was drawn **after the engine
+> changed** (`P2-T38`, `P2-T39`) and from a different population (the unlabelled remainder of a
+> larger label set), so **the union is not one stratified draw**: it is not self-weighting, and
+> `npm run dedup:report` pools the labelled pairs of both draws as they are, without weights, so its
+> Wilson intervals describe the pooled pairs rather than a single random sample of the label set.
+> The report says this in its own output, prints each draw's strata separately (population at that
+> draw, drawn, labelled), and states how many of the 70 carry a label. As before, it measures
+> nothing while a sampled pair is unlabelled unless `--allow-partial` is given.
+> *Measured the same day* (`--extend=10`, run once): the label set holds 285 pairs; less the first
+> draw's 60, and with no other pair labelled, the top-up's population is **225** (0 labelled pairs
+> left out), of which 18 are the `P2-T39` pairs and 27 others are pairs whose outcome moved since
+> 2026-10-25. Today's outcomes split it merged 125, linked 28, flagged 12, distinct 60, and the ten
+> drawn are **merged 5, linked 1, flagged 1, distinct 3** (exact shares 5.56, 1.24, 0.53, 2.67).
+> Two of the ten are `P2-T39` pairs. `--check` passes again. Until the owner labels the ten,
+> `npm run dedup:report` refuses with "10 of 70 sampled pairs have no label" and exits 1;
+> `--allow-partial` measures the 60 as before (precision and recall 1.0000, both undecided at 34).
+
 ### 11.4 Preprint ↔ published-version linking
 
 These are **different works** with different DOIs, and a user may legitimately want both. **Link

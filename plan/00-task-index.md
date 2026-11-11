@@ -3238,6 +3238,8 @@ the caller of what the card builds; if it does not, the caller is added with a d
 
 368. **The theme contrast test waits for the switch, 2026-11-11** (`plan/reports/test-theme-wait-367.md`), building item 367(c). The search dialog's light-and-dark contrast test now waits, for at most 5 seconds, until the window reports the colour scheme it set (and, in the dark step, until the measured cell reads differently from its light reading) instead of a fixed 250 milliseconds; the 4.5 to 1 bar and both readings are unchanged and no product code changed. No other test switches the theme. Three consecutive integration runs on commit a9ea442 plus this change were clean (355 passed, 0 failed, 2 pending each), which closes the integration condition of `P2-T39` under item 367(c).
 
+369. **The ten-pair top-up drawn, 2026-11-11** (`plan/reports/dedup-topup-366a.md`), building item 366(a). Drawn once with seed "P2-T13 label sample top-up 2026-11-11" from the 225 label-set pairs that have no label and are not in the first draw, by the first draw's stratified method (`docs/02` §11.3's note of the day), and stored as the block `topUp` in `label-sample.json`; the first block, every label and every reason are unchanged. `dedup-label-sample.ts --check` passes again. `npm run dedup:report` measures the 60 and the 10 together, says they are not one stratified draw, and, as designed, exits 1 until the ten have labels. The owner labels them in chat next, four at a time, with no engine outcome shown.
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4
