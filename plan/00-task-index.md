@@ -3236,6 +3236,8 @@ the caller of what the card builds; if it does not, the caller is added with a d
     - (b) The sample measures as before: precision and recall 1.0000, both undecided at 34 true duplicates. `dedup-label-sample.ts --check` now reports the label set (285) differs from the sample's population (267), as expected until item 366(a)'s draw.
     - (c) Checks passed. Integration gave one clean run in four; the three failures are all the search dialog's light-and-dark contrast test (card `P5-T16`), which waits a fixed 250 milliseconds for the theme to switch, and the same test failed on the committed source with this card's files swapped out, so it predates the card. **DECIDED 2026-11-10 (coordinator, under item 313):** the test waits for the colour to change instead of a fixed time, as a test-only repair, and the three clean runs are taken after it for both cards.
 
+368. **The theme contrast test waits for the switch, 2026-11-11** (`plan/reports/test-theme-wait-367.md`), building item 367(c). The search dialog's light-and-dark contrast test now waits, for at most 5 seconds, until the window reports the colour scheme it set (and, in the dark step, until the measured cell reads differently from its light reading) instead of a fixed 250 milliseconds; the 4.5 to 1 bar and both readings are unchanged and no product code changed. No other test switches the theme. Three consecutive integration runs on commit a9ea442 plus this change were clean (355 passed, 0 failed, 2 pending each), which closes the integration condition of `P2-T39` under item 367(c).
+
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4

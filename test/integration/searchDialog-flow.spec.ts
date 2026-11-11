@@ -5159,13 +5159,17 @@ describe("P5-T16: a related run on stub sources reaches a populated table", () =
       }) as [number, number, number];
       return 0.2126 * r + 0.7152 * g + 0.0722 * b;
     };
-    const contrast = (): { readonly words: string; readonly ratio: number } => {
-      const view = doc.defaultView as unknown as {
-        getComputedStyle(element: Element): {
-          color: string;
-          backgroundColor: string;
-        };
+    const view = doc.defaultView as unknown as {
+      getComputedStyle(element: Element): {
+        color: string;
+        backgroundColor: string;
       };
+      matchMedia(query: string): { readonly matches: boolean };
+    };
+    /** Whether the window's own documents are drawn in the dark theme now. */
+    const drawnDark = (): boolean =>
+      view.matchMedia("(prefers-color-scheme: dark)").matches;
+    const contrast = (): { readonly words: string; readonly ratio: number } => {
       const color = view.getComputedStyle(cell).color;
       let backing = "";
       for (
@@ -5191,6 +5195,7 @@ describe("P5-T16: a related run on stub sources reaches a populated table", () =
       };
     };
     const dark = "ui.systemUsesDarkTheme";
+    const systemDark = drawnDark();
     const measured: Record<string, string> = {};
     try {
       for (const [theme, value] of [
@@ -5198,7 +5203,19 @@ describe("P5-T16: a related run on stub sources reaches a populated table", () =
         ["dark", 1],
       ] as const) {
         Services.prefs.setIntPref(dark, value);
-        await Zotero.Promise.delay(250);
+        // The switch lands some time after the preference is set, so wait for
+        // it rather than a fixed time (plan/00 §6 item 367(c)): the window's
+        // colour scheme must match, and in the dark theme the measured cell
+        // must read differently from its light reading.
+        await waitUntil(
+          () =>
+            drawnDark() === (value === 1) &&
+            (theme === "light" || contrast().words !== measured["light"]),
+          theme === "light"
+            ? "the window's colour scheme to turn light after ui.systemUsesDarkTheme = 0"
+            : `the window's colour scheme to turn dark and the greyed cell's colours to change from the light reading (${String(measured["light"])}) after ui.systemUsesDarkTheme = 1`,
+          5_000,
+        );
         const { words, ratio } = contrast();
         measured[theme] = words;
         log(`[P5-T16] greyed row, ${theme}: ${words}, ${ratio.toFixed(2)}:1`);
@@ -5206,7 +5223,18 @@ describe("P5-T16: a related run on stub sources reaches a populated table", () =
       }
     } finally {
       Services.prefs.clearUserPref(dark);
-      await Zotero.Promise.delay(100);
+      // Wait, bounded, for the system's own scheme to come back. It does not
+      // fail here, so a failure above is not hidden by this one; a later test
+      // that needs the theme waits for it itself.
+      const restored = Date.now() + 5_000;
+      while (drawnDark() !== systemDark && Date.now() < restored) {
+        await Zotero.Promise.delay(25);
+      }
+      if (drawnDark() !== systemDark) {
+        log(
+          "[P5-T16] the window's colour scheme did not return to the system's within 5,000 ms",
+        );
+      }
     }
     assert.isTrue(
       measured["light"] !== measured["dark"],
