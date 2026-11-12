@@ -2994,6 +2994,18 @@ Korean titles, so the non-Latin path §11.3.2 now preserves is measured rather t
 > `npm run dedup:report` measures the union of all the draws, prints each block's strata, and says plainly
 > that the union is not one stratified draw, as the coordinator decided on 2026-11-11.
 
+> **Measured 2026-11-12, and decided by the owner the same day (`plan/00` §6 items 372 and 373): the
+> sample's figures settle the Phase 2 dedup condition.** On the 90 labelled pairs (the three draws
+> pooled): **no false merge**, precision 1.0000, 95 % Wilson interval [0.8957, 1.0000] over 33 merged
+> pairs; recall **0.9429**, [0.8139, 0.9842] over 35 true duplicates, so the interval does not by itself
+> clear 0.90. Both misses are one kind of pair: the *Focal Loss* conference paper (ICCV 2017) against its
+> journal version (IEEE TPAMI), same title and authors, which the owner labels "same paper" (one comes out
+> linked; the other is never compared, its records' years falling outside `MAX_YEAR_DELTA`). Asked how
+> to close, the owner chose to **accept the measured recall as meeting the target** and to record the
+> conference-paper-and-journal-version case as a **known limit**, with the engine unchanged; together
+> with `plan/06` `G-17`'s corrected wording (Phase 2 may close on no false merge in the sample) this
+> settles the measurement. Only the owner marks the gate done.
+
 ### 11.4 Preprint ↔ published-version linking
 
 These are **different works** with different DOIs, and a user may legitimately want both. **Link
