@@ -1,0 +1,344 @@
+PEDAL: Open Infrastructure for Citable AI
+Prompts in STEM Education and Research
+Murat Kahveci∗
+Kahveci Nexus Research Group
+Chicago, IL, USA
+ORCID: 0000-0001-5155-7755
+May 2026
+Abstract
+The rapid integration of Large Language Models (LLMs) into educational practice has created an urgent need for infrastructure that treats AI prompts not as disposable instructions but as reproducible scholarly artifacts. This paper presents PEDAL (Pedagogical Evaluation, Design, & Analysis Lab), an open-research platform that implements a three-tierLaboratory-to-Archivepipeline for prompt engineering: (1) an Orchestration Layerwith AI-assisted prompt generation and a Scholarly Inject toolkit for automated metadata extraction; (2) aLaboratory Layersupporting Gitstyle version control, LLM-as-a-Judge evaluation, and Mann–Whitney U statistical testing for champion variant identification; and (3) aPublic Archive Layer providing scholarly publication with per-version DOI minting via Zenodo, multiformat data exports (JSON, CSV, LATEX), and SEO-optimized discoverability through JSON-LD and HighWire Press metadata. PEDAL’s Scholarly Sync 2 (SS2) framework attaches a 24+ field metadata envelope to every artifact, encoding Bloom’s Revised Taxonomy, Webb’s Depth of Knowledge, SAMR integration levels, 5E instructional phases, and NGSS standards alignment. A chemistry education exemplar demonstrates the full pipeline from Socratic inquiry scaffolding through statistical evaluation to public DOI-minted archival. We further present the NExAIE (Nexus AI & Education) extension, which applies PEDAL’s infrastructure to AIaugmented peer review through a 42-prompt evaluation matrix spanning six quality dimensions across seven publication types, introducingRadical Transparencyby publicly archiving all review rubrics with DOIs. Initial deployment data—4,684 artifact views from 1,810 unique researchers within one month of launch—indicates strong community demand for citable, quality-assured AI scaffolding in STEM education and research. The complete platform is released under CC-BY-4.0 (DOI: 10.5281/zenodo.19474709).
+Keywords:prompt engineering; large language models; AI in education; STEM education; open science; FAIR principles; reproducibility; Bloom’s taxonomy; AI-augmented peer review
+∗Correspondence:murat@kahveci.pw
+1
+arXiv:2610.00001v1 [cs.DL] 8 May 2026
+
+
+1 Introduction
+The emergence of Large Language Models (LLMs) as instructional tools has fundamentally altered the landscape of educational technology (Kasneci et al.,2023;Holmes and Tuomi, 2022). Educators, researchers, and curriculum designers now routinely craft sophisticated prompts—structured natural-language instructions—to generate lesson plans, assessment items, feedback scaffolds, and inquiry-based activities. Yet these prompts, despite embodying significant pedagogical reasoning and iterative refinement, remain largely ephemeral: shared informally, stored without version control, and discarded after use. The scholarly community lacks infrastructure for treating prompts as theresearch instrumentsthey have become. This gap is not merely administrative. The reproducibility crisis in computational social science (Baker,2016) and the growing recognition that methodological transparency is essential for credible AI-education research (Nosek et al.,2015) demand that every component of an AI-mediated educational intervention—including the prompts that drive it—be documented, versioned, and citable. The FAIR principles (Findable, Accessible, Interoperable, Reusable) (Wilkinson et al.,2016) provide a framework for scientific data stewardship, but to our knowledge, no existing platform operationalizes these principles specifically for AI prompt artifacts within an educational research context. Simultaneously, the integration of LLMs into scholarly publishing itself presents both opportunities and challenges. Peer review—the cornerstone of scientific quality assurance for over three centuries (Kronick,1990)—is under unprecedented strain. Reviewer fatigue, declining review quality, and documented biases in gender (Helmer et al.,2017), institutional prestige (Tomkins et al.,2017), and geography (Ross et al.,2006) have eroded confidence in the system. Early explorations of AI-assisted review show promising alignment with human evaluations (Liang et al.,2024;Checco et al.,2021), but existing implementations suffer from prompt opacity, monolithic evaluation, and conflation of AI and human reviewer roles. This paper presents two interconnected contributions addressing these challenges:
+1. PEDAL(Pedagogical Evaluation, Design, & Analysis Lab)—an open-research infrastructure that transforms transient AI prompts into citable, reproducible scientific artifacts through a three-tierLaboratory-to-Archivepipeline. PEDAL operationalizes the FAIR principles for prompt engineering by providing:
+• Git-style version control with branching, immutable snapshots, and dependency graphs;
+• A Scholarly Sync 2 (SS2) metadata framework encoding pedagogical taxonomies (Bloom’s, DOK, SAMR, 5E) and NGSS standards alignment;
+•Per-version DOI minting via Zenodo with multi-format citation export;
+• LLM-as-a-Judge evaluation with Mann–Whitney U statistical testing for rigorous variant comparison; and
+• A role-based access control (RBAC) collaboration system with PI-gated approval workflows.
+2. NExAIE(Nexus AI & Education)—an extension module that applies PEDAL’s scholarly artifact infrastructure to AI-augmented peer review, demonstrating the platform’s extensibility beyond prompt archiving. This paper presents the NExAIE
+
+
+architecture as animplementation exemplar; the full specification of the 42-prompt evaluation matrix, calibration methodology, and editorial workflow is detailed in a companion paper (Kahveci,2026b). NExAIE introduces:
+• A 42-prompt evaluation matrix decomposing manuscript assessment into six orthogonal quality dimensions, each calibrated against review criteria from top-tier journals (JRST, Computers & Education, BJET, IJSE);
+• ARadical Transparencyparadigm in which all evaluation rubrics are publicly archived with DOIs, enabling prospective authors to stress-test manuscripts against editorial standards; and
+• A privacy-preserving dual-view architecture employing AES-256-CBC encryption, permanent pseudocoding, and token-based editorial access.
+The central thesis of this work is thatthe prompts are the methodology. Just as a laboratory scientist documents reagent concentrations, instrument calibrations, and procedural steps, an AI-mediated educational intervention must document the exact instructions given to the model. By providing infrastructure that makes this documentation natural, versioned, and citable, PEDAL transforms prompt engineering from an ad hoc practice into a rigorous scholarly discipline. The remainder of this paper is organized as follows. Section2reviews related work on prompt engineering, open science in AI-education research, and peer review reform. Section3details the PEDAL platform architecture across its three tiers. Section4presents the Scholarly Sync 2 metadata framework and research classification grid. Section5 describes the statistical engine and Zenodo DOI integration. Section6outlines the collaborative role-based access control system. Section8presents the NExAIE AIaugmented peer review extension. Section9describes the Radical Transparency model and dual-view architecture. Section10specifies the data model and security implementation. Section11discusses implications, limitations, and future work. Section12concludes.
+2 Background and Related Work
+2.1 Prompt Engineering as Scholarly Practice
+The term “prompt engineering” has evolved rapidly from informal trial-and-error experimentation to a recognized subdiscipline within AI research (Liu et al.,2023). White et al. introduced a catalog of reusable prompt patterns—persona, template, chain-ofthought, and metacognitive scaffolding—demonstrating that structured prompt design significantly improves LLM output quality (White et al.,2023). However, the transition from professional practice to end-user accessibility remains fraught with challenges. Zamfirescu-Pereira et al.(2023, p. 1) demonstrated that non-expert users struggle systematically with prompt construction, often failing because they rely onhuman-to-human instructional experiencesand expectations (Zamfirescu-Pereira et al.,2023, pp. 1, 14). Instead of adopting the rigorous methodologies seen in traditional software engineering, these users exhibitopportunistic rather than systematicdesign and testing behaviors (Zamfirescu-Pereira et al.,2023, p. 2). Specifically, failure modes include a tendency to over-generalize from single observations and an inclination to use socially appropriate, polite language that lacks the technical precision required for robust model steering (Zamfirescu-Pereira et al.,2023, pp. 10, 11). These findings explicitly underscore the
+
+
+need for documented best practices and reusable templates, validating the necessity of a structured orchestration layer to bridge the gap between intuitive human conversation and effective machine instruction (Zamfirescu-Pereira et al.,2023, p. 13). Despite this growing sophistication, prompt engineering lacks the infrastructure norms that other research methodologies take for granted. A chemist publishes reagent specifications; a psychologist publishes survey instruments; a computational scientist publishes source code. Yet an educator who develops a multi-turn scaffolding prompt—potentially representing weeks of iterative refinement across multiple LLM providers—has no standard mechanism for versioning, citing, or reproducing that work. Existing prompt-sharing platforms (GitHub repositories, Hugging Face model cards, community forums) treat prompts as interchangeable code snippets rather than as scholarly instruments whose evaluative context justifies their deployment. PEDAL addresses this gap by applying the norms of laboratory science to prompt engineering: every prompt receives a permanent identifier (DOI), version history, pedagogical metadata, and statistical evaluation evidence before it enters the public archive.
+2.2 Open Science and the FAIR Principles
+The open science movement has established that research artifacts must be Findable, Accessible, Interoperable, and Reusable (FAIR) to support reproducibility and cumulative knowledge building (Wilkinson et al.,2016). The reproducibility crisis—in which 70% of researchers reported failing to reproduce another scientist’s experiments (Baker,2016)— has prompted sweeping reforms in data sharing, pre-registration, and methodological transparency (Nosek et al.,2015). These principles have been operationalized for datasets (Zenodo, Figshare), software (Software Heritage, JOSS), and protocols (protocols.io). However, AI prompts occupy an awkward intermediate space: they are neither raw data nor executable code, but structured natural-language instructions whose effectiveness depends on context (model version, system prompt, parameter settings, input data). No existing FAIR-compliant infrastructure addresses this artifact type within an educational research context. PEDAL’s contribution is to operationalize FAIR specifically for pedagogical prompt artifacts. Each prompt isFindablethrough public slugs, JSON-LD structured data, and Google Dataset Search indexing;Accessiblethrough a public archive with no authentication barriers;Interoperablethrough machine-readable JSON metadata exports with standardized taxonomy encodings; andReusablethrough version-controlled snapshots with DOIs, citation exports, and CC-BY-4.0 licensing.
+2.3 The Crisis of Traditional Peer Review
+The limitations of conventional peer review are well-documented. Inter-reviewer agreement is consistently low, with studies reporting κ values between 0.17 and 0.34—barely above chance (Bornmann et al.,2010). Reproducibility of reviewer decisions is poor: when the same manuscripts are re-submitted to the same journal, acceptance rates diverge substantially (Peters and Ceci,1982;Rothwell and Martyn,2000). The process is slow, with median review times exceeding 100 days in many fields (Huisman and Smits,2017), and it is expensive, with estimated costs of $1.5–2.5 billion annually in donated reviewer labor (Aczel et al.,2021).
+
+
+In education research specifically, these challenges are compounded by the interdisciplinary nature of the field. Journals at the intersection of AI and education—such as Computers & Education, the British Journal of Educational Technology (BJET), and the International Journal of Science Education (IJSE)—must evaluate manuscripts spanning computer science, cognitive science, pedagogy, and domain-specific disciplinary knowledge. Finding reviewers with expertise across all relevant dimensions is increasingly difficult (Zawacki-Richter et al.,2019).
+2.4 AI-Assisted Evaluation in Scholarly Publishing
+Early applications of automated review focused on surface-level quality indicators: plagiarism detection (Foltýnek et al.,2019), statistical reporting verification (Nuijten et al., 2016), and reference formatting checks (Priem et al.,2022). More recent work has explored LLMs for substantive evaluation. Liang et al. demonstrated that GPT-4 reviews overlapped substantially with human reviews, though AI reviews were more likely to identify novel weaknesses than to validate strengths (Liang et al.,2024). Checco et al. developed AI-based tools for predicting review outcomes, reporting moderate accuracy but noting significant domain-dependency (Checco et al.,2021). The LLM-as-a-Judge paradigm, formalized by Zheng et al. through MT-Bench and Chatbot Arena, established that LLMs can serve as reliable evaluators when given structured rubrics and calibration instructions (Zheng et al.,2023). However, the field lacks asystematic frameworkfor deploying AI evaluation at production scale with verifiable rigor. Existing approaches share several deficiencies:
+• Prompt opacity:The evaluation instructions given to LLMs are not disclosed, making it impossible for the scholarly community to audit, reproduce, or improve upon the review process.
+• Holistic scoring:Most AI-review systems produce a single quality score or accept/reject recommendation, offering little diagnostic value to authors seeking to improve specific aspects of their work.
+• Genre blindness:Evaluation criteria are applied uniformly regardless of publication type, despite the fundamentally different expectations for research articles, review papers, technology reports, and commentaries.
+• Confidentiality trade-offs:Systems that achieve transparency in their evaluation process often compromise manuscript confidentiality, while those preserving confidentiality offer no insight into their methods.
+2.5 Transparency and Reproducibility in Review
+The open science movement has increasingly scrutinized the opacity of peer review itself. Open peer review initiatives—such as those at eLife (Eisen et al.,2022) and journals adopting the Publons framework—have demonstrated that publishing reviewer reports alongside articles can improve review quality and accountability (Ross-Hellauer,2017). However, these initiatives apply tohumanreviews where the reviewer’s reasoning is inherently embedded in their written feedback. AI-augmented review introduces a new transparency challenge: the evaluation is only as rigorous as theprompt engineeringthat drives it. Unlike a human reviewer whose
+
+
+expertise and reasoning are assumed, an LLM’s evaluation is entirely determined by its instructions. This observation motivates the central design principle of the NExAIE framework:the prompts themselves are the methodology, and like any methodology, they must be documented, versioned, peer-reviewed, and publicly accessible. The PEDAL Archive (Kahveci,2026c) provides the ideal infrastructure for this requirement, treating review prompts as citable scholarly artifacts.
+3 PEDAL Platform Architecture
+PEDAL operates as a production web application built on PHP 8.x and MySQL/MariaDB 11.8, with a vanilla JavaScript frontend using Bootstrap 5. Evolving beyond its initial “True Dark” industrial aesthetic, the platform now defaults to a refined light theme (#F4F6F8 background, #FFFFFF cards). The visual language utilizes deep slate black text alongside rich gold and muted pastel accents (e.g., sage green, slate blue) to denote semantic meaning and enhance readability. Typography relies on Open Sans for headings and body text, with JetBrains Mono reserved for code and data elements. This section details the three architectural layers that implement the Laboratory-to-Archive pipeline (see Figure1).
+ORCHESTRATION LAYER LABORATORY LAYER ARCHIVE LAYER
+Generative Architect
+Scholarly Inject
+Artifact Ingest
+Version Control
+LLM-as-a-Judge
+Research Lab
+PubliView
+Zenodo DOI Minting
+SEO & Indexing
+SCHOLARLY SYNC 2 (SS2) METADATA ENGINE NExAIE EXTENSION
+Figure 1: The PEDAL three-tier Laboratory-to-Archive architecture showing the pipeline from prompt creation to DOI-minted publication, anchored by the SS2 metadata framework.
+3.1 Design Philosophy
+Three principles govern PEDAL’s architecture:
+D1. Prompts as Laboratory Instruments.Every prompt is treated with the same rigor as a laboratory protocol: it must be documented, versioned, evaluated against
+
+
+explicit criteria, and archived with a permanent identifier before it is considered ready for public use.
+D2. Metadata-First Design.Pedagogical context (Bloom’s level, DOK, SAMR, 5E phase, NGSS alignment) is not optional annotation but structural metadata that shapes how artifacts are classified, discovered, and cited.
+D3. Separation of Orchestration, Evaluation, and Publication.The three tiers operate independently: an artifact can be created in the Orchestration layer, refined through multiple evaluation cycles in the Laboratory layer, and published to the Archive layer only when it meets explicit quality thresholds.
+3.2 Layer 1: Orchestration
+The Orchestration layer (dossier/prompt_new.php) provides three mechanisms for artifact creation:
+1. AI Generative Architect.An intent-aware prompt generation system that supports persona switching across multiple large language model (LLM) providers. The architect interprets the user’s pedagogical intent and generates a structured prompt with embedded [[variable_name]] parameter syntax—using double brackets to avoid collision with LaTeX’s single-bracket commands.
+2. Scholarly Inject Toolkit.A paste-and-parse interface where raw AI output is injected into PEDAL, triggering automated extraction of 24+ metadata fields. The toolkit parses the output to identify Bloom’s level, prompting strategy, audience level, subject domain, and evaluation metrics, populating the SS2 metadata envelope automatically.
+3. Artifact Ingest.A “PDF-to-prompt bootstrap” workflow designed to process existing educational materials (e.g., textbook chapters, lab protocols). The interface features a PDF export button that copies a tailored meta-prompt, dynamically generated based on the current SS2 metadata parameters configured via the UI (such as switching Bloom’s Level fromAnalyzetoApplyusing dropdowns). The researcher pastes this tailored meta-prompt alongside the source PDF document into an external LLM. The resulting generated prompt is ingested back into PEDAL as a new, immutable Git-style version (e.g., v2). This variant is then queued for Laboratory evaluation, where the LAB PREFERRED statistical engine seamlessly compares prompt effectiveness across both vertical version histories and horizontal branches.
+The output of Layer 1 is aMaster Artifact: a prompt record with an initial version (v1), a populated metadata envelope, and a status ofdraft.
+3.3 Layer 2: Laboratory
+The Laboratory layer (dossier/prompt_edit.php, dossier/prompt_test.php) supports iterative refinement through three capabilities:
+
+
+Figure 2: PEDAL Orchestration Layer: The Editor View showing the 32-field metadata entry system, the versioning branch selector, and the prompt narrative construction area.
+
+
+1. Git-Style Version Control.Every prompt maintains a tree structure with named branches. New versions are created as commits on a branch, with each version receiving an immutable snapshot. The system tracks parent–child relationships, enabling dependency graph visualization and merge operations between branches. Historical versions are read-only once committed, ensuring audit trail integrity.
+2. LLM-as-a-Judge Evaluation.A standardized testing environment utilizing a pure AI evaluation model, with no human scoring involved. After a research artifact is generated, the researcher copies a custom evaluation prompt dynamically constructed by PEDAL and pastes it into an external LLM alongside the artifact’s output. The LLM acts as the sole judge, evaluating the output across five dimensions (Bloom’s Alignment, Socratic Integrity, Subject Precision, Persona Consistency, and Actionability) and returning the results as structured JSON. The researcher injects this JSON back into PEDAL, which parses the data, calculates an aggregate quality score out of 5.0, and flags the “Lab Preferred” variant.
+3. Research Lab.A single-architecture testing view ( prompt_test.php) where prompt variants are executed with [[variable]] parameter injection. Because these [[variable]] parameters often encompass complex datasets—where extreme detail yields superior AI scaffolding for the learner—researchers currently use an external prompt to generate meaningful inputs and update these fields manually. A future software update is scheduled to embed this variable-generation pipeline directly into the PEDAL framework. A highly detailed example of an [[Execution_Protocol]] variable is as follows:
+[[Execution_Protocol]]
+Phase 1: Real-World Hook. Present a scenario: “A forensic tech finds an unlabeled bottle of vinegar. Titration shows it’s 0.8M Acetic Acid. If the legal standard is 5% mass/volume, is this batch legal?” Phase 2: Variable Audit. Ask: “Before we calculate, what is the ‘target unit’ for the legal standard vs. our lab result? What bridge (conversion factor) connects them?” Phase 3: The ‘Mole’ Bridge. Scaffolding: “We have 0.8 moles in 1 Liter. What is the mass of 0.8 moles of CH3COOH?” (Provide Atomic Weights: C = 12.01, H = 1.008, O = 16.00). Phase 4: Volume/Density Check. Ask: “If the density is approximately1 .00 g/mL, how does that change our perception of the 1 Liter of solution’s total mass?” Phase 5: Evaluation. Ask the student to compare the calculated mass % to the 5% legal limit. (Kahveci,2026a)
+The Research Lab relies on a manual “Copy & Log” workflow: the user copies the fully resolved prompt, executes it in an external LLM interface, and logs the structured result back into PEDAL. This deliberate human-in-the-loop design ensures that PEDAL never makes unsupervised API calls to LLM providers, preserving editorial control and model-agnosticism.
+The output of Layer 2 is a set of evaluated versions with quality scores, rubric breakdowns, and statistical comparisons. The highest-scoring variant is automatically identified asLAB PREFERRED(see §5).
+
+
+Figure 3: PEDAL Laboratory Layer: The Research Lab interface showing a prompt execution session, multi-dimensional rubric scoring, and future research direction logging.
+
+
+3.4 Layer 3: Public Archive
+The Public Archive layer (pub/prompt.php, pub/prompts.php) transforms laboratoryvalidated prompts into discoverable scholarly artifacts:
+1. PubliView.A scholarly public interface that displays the artifact with full metadata, version navigation, statistical summaries, and citation information. The system autoloads the highest-scoring version by default (“statistics-first selection”), ensuring that visitors see the most rigorously validated variant.
+2. Citation Engine.One-click citation export in formats optimized for scholarly use, including APA and BibTeX. Each citation carries the immutable per-version DOI, ensuring that prompt references remain persistent and verifiable.
+3. Multi-Format Data Export.Machine-readable download of the complete SS2 metadata envelope and pedagogical specifications. The system supports three primary export formats: (a)JSONfor programmatic consumption and archival integrity; (b)CSVfor large-scale systematic reviews and spreadsheet-based analysis; and (c)LATEXsnippets for direct inclusion in technical manuscripts.
+4. SEO and Discoverability.The archive implements three discoverability strategies: (a) JSON-LD Dataset schema for Google Dataset Search indexing; (b) HighWire Press meta headers for Google Scholar visibility; and (c) a dynamic XML sitemap using the pub_slugs registry as the single source of truth, with per-artifact lastmodified timestamps to trigger crawler re-indexing.
+3.5 Technology Stack Summary
+Table1summarizes the platform’s technology stack.
+Table 1: PEDAL technology stack (v1.5.0)
+Layer Technology
+Backend PHP 8.x, MySQL/MariaDB 11.8 Frontend Vanilla PHP/JS, Bootstrap 5 Design system True Dark Industrial (#0D0D0Dbg,#141414cards,#1F1F1Fborders) Typography Outfit (headings), Inter (body), JetBrains Mono (code) DOI minting Zenodo REST API (ZenodoServiceclass) SEO JSON-LD Dataset schema, HighWire Press meta,pub_slugssitemap Rendering KaTeX (LaTeX), Mermaid (diagrams), Markdown Version Dossier v3.5.0, PEDAL v1.5.0
+4 Scholarly Sync 2 and Research Classification
+4.1 The SS2 Metadata Framework
+Scholarly Sync 2 (SS2) is PEDAL’s coordination protocol for ensuring that every prompt artifact carries a comprehensive, machine-readable metadata envelope. The framework operates on three core principles: (1)automated propagation—status changes cascade to public DOI records automatically; (2)audit trail integrity—every sync event is logged
+
+
+with a timestamp and author UUID; and (3)machine-readable exports—auto-generated JSON research snapshots, .csv datasets, and LATEX source code accompany every public artifact. Each artifact’s SS2 metadata JSON block encodes the key sections detailed in Table2.
+Table 2: Core SS2 metadata JSON payload structure
+JSON Key Description
+artifact_metadata_versionSchema version control for the metadata envelope. pedagogical_intentPrimary educational purpose of the prompt. cognitive_taxonomyBloom’s Revised Taxonomy and Webb’s DOK mappings. pedagogical_frameworks5E Instructional Model and SAMR integration levels. standards_alignmentNGSS standards, including SEP, CCC, and DCI codes. misconception_targetsAnticipated student misconceptions addressed. prompt_specificationsTarget model, system prompt, and execution parameters. evaluation_metricsFive-dimension rubric scoring data. modality_specificationsModality constraints (e.g., text, image, code). evaluation_statusCurrent validation state (e.g., LAB PREFERRED). licensing_and_attributionCC-BY-4.0 licensing and author attribution. archival_metadataZenodo DOI, timestamps, and platform citation data.
+Platform citation metadata is centrally maintained indata/pedal_citation.json.
+4.2 Cognitive Taxonomy Integration
+PEDAL classifies every artifact along two cognitive dimensions:
+1. Bloom’s Revised Taxonomy(Anderson and Krathwohl,2001): Six levels from RememberthroughCreate, based on the seminal work of Bloom et al. (Bloom et al., 1964). Each prompt is tagged with the highest cognitive level it is designed to elicit from the learner.
+2. Webb’s Depth of Knowledge (DOK)(Webb,1997): Four levels fromRecall & Reproduction(Level 1) throughExtended Thinking(Level 4). DOK captures the complexity of thinking required rather than the verb taxonomy of Bloom’s, providing a complementary classification axis.
+4.3 Pedagogical Framework Mapping
+Two instructional design frameworks are encoded per artifact:
+1. SAMR Model(Puentedura,2006): Classifies the technology integration level as Substitution, Augmentation, Modification, or Redefinition. This enables researchers to filter the archive by the degree of pedagogical transformation a prompt facilitates.
+2. 5E Instructional Model(Bybee et al.,2006): Maps each prompt to one or more phases of the BSCS inquiry cycle: Engage, Explore, Explain, Elaborate, or Evaluate. This classification supports curriculum-aligned prompt sequencing.
+
+
+4.4 NGSS Standards Alignment
+For science education prompts, PEDAL maintains a dedicated prompt_standards_ alignment table linking artifacts to NGSS standards (NGSS Lead States,2013). Each alignment record encodes: the standard code, description, Science & Engineering Practice (SEP), Crosscutting Concept (CCC), and Disciplinary Core Idea (DCI) code with description. A master registry (ngss_master) provides the authoritative standards catalog against which alignments are validated.
+4.5 Dual-Track Classification
+PEDAL implements a dual-track classification system that distinguishes between promptlevel and version-level metadata:
+• Prompt-level classification(stored on the prompts table): Captures invariant properties of the artifact—subject domain, audience level, pedagogical intent, textbook alignment, and NGSS standards. These properties persist across all versions.
+• Version-level classification(stored on prompt_versions): Captures properties that may change between iterations—Bloom’s level, prompting strategy, default model, and system prompt. This enables researchers to track how cognitive level or prompting approach evolves across refinement cycles.
+Table3summarizes the complete classification grid.
+Table 3: Research classification grid with enumerated values
+Dimension Track Values
+Bloom’s level Version remember, understand, apply, analyze, evaluate, create DOK level Prompt 1_recall, 2_skill_concept, 3_strategic_thinking, 4_extended_thinking Pedagogical intent Prompt lesson_planning, assessment_generation, feedback_scaffolding, inquiry_facilitation, content_explanation, differentiation, metacognition, lab_design, discussion_facilitation, rubric_generation, misconception_diagnosis, other Audience level Prompt k5, middle_school, high_school, undergraduate, graduate, professional, general Prompting strategy Version zero_shot, few_shot, chain_of_thought, role_based, constrained, scaffolded, socratic, tree_of_thought, iterative, rag_augmented, multi_turn, other SAMR level Prompt substitution, augmentation, modification, redefinition 5E phase Prompt engage, explore, explain, elaborate, evaluate Output format Prompt free_text, rubric, quiz, lesson_plan, lab_protocol, discussion_questions, code, data_table, cer_format, worked_example, case_study, other
+5 Statistical Engine and DOI Integration
+5.1 Mann–WhitneyUTest Implementation
+PEDAL employs the Mann–Whitney U test (Mann and Whitney,1947)—a non-parametric rank-sum test—as its primary statistical engine for comparing prompt variant performance.
+
+
+This choice is deliberate: prompt evaluation scores are ordinal (1–5 Likert scale), sample sizes per variant are typically small (n < 30), and the distribution of quality scores is rarely normal. The implementation (ResearchStats::mannWhitneyU in includes/ ResearchStats.php) includes tie correction via average rank assignment, a variance correction factor, and Z-score computation using normal approximation with the Abramowitz & Stegun cumulative distribution function. The significance threshold is set at p < 0.1(relaxed from the conventional 0.05) to accommodate the small sample sizes inherent in iterative prompt engineering. This methodological choice is documented explicitly in the platform and in all statistical outputs.
+5.2 LAB PREFERRED Criteria
+The LAB PREFERRED designation identifies the highest-performing variant in each prompt’s version tree. A version earns this badge when it satisfies two criteria simultaneously:
+1. Highest average quality scoreacross all versions in the lineage (computed from the five rubric dimensions).
+2. Statistical significance( p < 0.1via Mann–Whitney U ) against the baseline version (v1 or the earliest version with empirical evaluation data).
+The LAB PREFERRED badge is displayed in the Laboratory view, propagated to the PubliView, and included in the artifact’s citation metadata. When a new version surpasses the current LAB PREFERRED variant, the badge transfers automatically.
+5.3 Rubric Scoring System
+Each prompt execution is evaluated across five default rubric dimensions, stored in the prompt_quality_rubrictable:
+1. Bloom’s Alignment( blooms_alignment): Does the prompt elicit the targeted cognitive level?
+2. Socratic Integrity( socratic_integrity): Does the prompt scaffold learning without providing direct answers?
+3. Subject Precision( subject_precision): Is the domain-specific content accurate?
+4. Persona Consistency( persona_consistency): Does the prompt maintain its instructional tone and pedagogical intent?
+5. Actionability( actionability): Can a practitioner implement the prompt output in a real classroom setting?
+Each dimension is scored on a 1–5 scale (Insufficient to Exceptional). The aggregate quality score is the unweighted mean across all five dimensions. Scores, rater identity, rater role, and free-text notes are stored per execution, enabling inter-rater reliability analysis.
+
+
+5.4 Zenodo Integration Architecture
+PEDAL’s DOI minting is implemented through the ZenodoService class (includes/ zenodo_service.php), which interfaces with the Zenodo REST API (European Organization for Nuclear Research and OpenAIRE,2013). The deposit workflow proceeds in five steps:
+1.Create deposition(or a new version of an existing concept DOI).
+2.Upload prompt textas a.txtfile.
+3.Upload JSON metadata sidecarcontaining the full SS2 envelope.
+4.Set Zenodo metadata(creators, description, license, keywords).
+5.Publishand receive the version-specific DOI.
+Three DOI fields are stored per artifact: doi (version-specific), zenodo_id (deposition ID for updates), and zenodo_concept_doi (version-agnostic concept DOI that always resolves to the latest version).
+5.5 Multi-Author DOI Support
+The Zenodo deposit system queries the prompt_authors table for ordered author lists. For collaborative prompts, the first author (collaborator) appears as Creator 1, the PI as Creator 2, with ORCID and institutional affiliations included when available. Only prompts with approval_status = ’approved’ can be deposited to Zenodo, ensuring that all DOI-minted artifacts have passed the PI quality gate.
+6 Collaborative Access Control
+6.1 Role Architecture
+PEDAL implements a two-role access control system designed for research group hierarchies:
+• Principal Investigator (PI):Full platform access including all CRUD operations, Zenodo DOI deposits, system settings, collaborator account management, and approval authority. The PI gate ensures that no artifact reaches public visibility or DOI status without senior researcher endorsement.
+• Collaborator:Scoped exclusively to the PEDAL Archive. Collaborators can create and edit their own prompts, execute evaluations, and submit prompts for PI review. They cannot access other platform modules, manage settings, or directly publish artifacts.
+Role enforcement is implemented through helper functions in includes/bootstrap.php: is_pi(), is_collaborator(), and require_pi() (which blocks non-PI access with a redirect or HTTP 403).
+
+
+6.2 Approval Workflow
+The approval pipeline ensures quality control over collaborative artifacts within the PEDAL framework:
+1.Creation:Collaborator creates a prompt:approval_status = ’not_submitted’
+2.Submission:Collaborator submits for review:approval_status = ’pending_
+review’
+3. PI Review:PI evaluates the artifact and either approves ( ’approved’) or rejects with notes (’rejected’). Revision requests are also supported.
+4. Publication Gate:Only prompts with approval_status = ’approved’ can be set toproductionstatus or deposited to Zenodo for DOI minting.
+All approval actions are logged in the prompt_approvals table with timestamps, reviewer identity, and PI notes for audit trail purposes.
+6.3 Multi-Author Attribution
+The prompt_authors table supports ordered multi-author attribution with explicit roles: first_author, pi, and co_author. Author order is preserved in all citation exports and Zenodo deposits. Each author record includes user_id, author_order, and role, enabling accurate academic credit allocation.
+7 Implementation Exemplar 1: Chemistry Education
+Domain
+While the PEDAL architecture supports broad applications, the “Chemistry Education Domain Exemplar” serves as a foundational application of the Scholarly Sync 2 (SS2) framework within Chemistry Education—specifically focusing on Solution Chemistry, Molarity, and Dilution.
+7.1 Technical Mapping and SS2 Injection
+This exemplar utilizes the platform’s Scholarly Inject toolkit to automatically parse over 24 distinct metadata fields from raw chemistry problem outputs. When the prompt is evaluated against an LLM to generate inquiry-based scaffolding scenarios, the resulting output is systematically processed to populate the multidimensional SS2 metadata envelope. Crucially, the system automatically classifies the artifact’s pedagogical parameters:
+•Cognitive Domain:Mapped to Bloom’s Taxonomy at theCreatelevel.
+• Rigor Level:Classified as Depth of Knowledge (DOK) Level 4 (Extended Thinking).
+• Standards Alignment:Formally anchored to NGSS Performance Expectation HS-PS1-7(Use mathematical representations to support the claim that atoms, and therefore mass, are conserved during a chemical reaction).
+
+
+7.2 Research Scaffolding
+By structuring the artifact with formal metadata, the prompt transcends its origin as a “disposable instruction” and becomes a “citable research instrument” suitable for rigorous academic inquiry, such as a Master’s Thesis. While PEDAL is foundational for educational scaffolding, it is equally designed as a robust infrastructure for STEM researchers. This is best evidenced by the platform’s research generation capabilities: the future_directions segment actively drives scholarly output by proposing novel research ideas, formulating three specific research questions on the target topic, and positing three testable hypotheses for empirical validation. The system scaffolds this research intent through dedicated metadata fields, representing the core data tracked in the platform’s research log (Table4). A full visual rendering of this chemistry exemplar within the platform’s PubliView interface is provided in Figure7 (AppendixA). The complete prompt artifact, including its system parameters and version history, is persistently archived and formally citable via its DOI (Kahveci,2026a).
+Table 4: Research scaffolding for the Chemistry Education Domain Exemplar
+SS2 Field Chemistry Exemplar Content
+research_questions How do variations in prompt structure impact the ability of AI to model inquiry-based learning conversations about solution chemistry? misconception_targetsConfusing Molarity (M) with Molality (m); incorrectly applying the dilution equation (M1V1 = M2V2); misinterpreting moles of solute vs. volume of solution. future_directions Evaluate the prompt’s efficacy across diverse undergraduate cohorts to assess its impact on mitigating persistent molarity misconceptions.
+8 Implementation Exemplar 2: The NExAIE Exten
+sion
+To demonstrate the extensibility and production-readiness of the PEDAL infrastructure, we present NExAIE (Nexus AI & Education)—a specialized module that applies the Laboratory-to-Archive pipeline to the challenge of AI-augmented peer review. NExAIE is not a standalone application but a conceptual and technical extension of the PEDAL core, inheriting its versioning, metadata, and security protocols. This section details how NExAIE utilizes the platform’s architectural layers; a comprehensive methodology and empirical evaluation of the NExAIE review framework are provided in a companion paper (Kahveci,2026b).
+8.1 Design Principles
+Five non-negotiable architectural principles govern the NExAIE design:
+P1. OJS-First Management.The Open Journal Systems (OJS) installation (Willinsky,2005) retains exclusive authority over manuscript submission, author–editor
+
+
+communication, and formal Accept/Reject decisions. PEDAL never receives, stores, or processes submitted manuscripts directly.
+P2. Copy & Log Orchestration.PEDAL does not make direct API calls to any LLM provider. The Editor-in-Chief (EiC) manually copies a version-controlled review prompt from PEDAL, executes it against the manuscript using a professionalgrade LLM, and injects the structured JSON response back into PEDAL. This human-in-the-loop design ensures editorial judgment at every step and maintains model-agnosticism.
+P3. Confidentiality by Default.All identifying metadata—manuscript title, author names, and institutional affiliations—is encrypted at rest using AES-256-CBC (National Institute of Standards and Technology,2001). The public-facing view displays only a permanent pseudocode identifier (e.g.,NXR-2026-0042).
+P4. Dual-View Rendering.Every Paper Review record has exactly two renderings: theEditor View(full detail, authenticated) and thePublic View(pseudocoded, dimension scores only, accessible to anyone).
+P5. Citable Provenance.Every review record and the protocol prompts used to generate it receives a DOI via Zenodo, ensuring that published articles can cite their exact review methodology.
+8.2 System Boundary: OJS–PEDAL Integration
+Table5specifies the strict separation of concerns.
+Table 5: System boundary between OJS and PEDAL
+Function OJS PEDAL Archive
+Manuscript submission✓— Author–Editor communication✓— Final Accept/Reject decision✓— Published article hosting✓— Review protocol prompts (v/c, DOI) —✓ Paper review records (pseudocoded) —✓ AI review execution logging —✓ DOI minting for review artifacts —✓
+The bidirectional link between systems is established through theArticle AI Artifact citation: the OJS article includes an “AI-Human Review Disclosure” block referencing the PEDAL protocol slug and version, while the PEDAL record stores the published article’s DOI.
+8.3 The 42-Prompt Evaluation Matrix
+The NExAIE methodology decomposes manuscript evaluation into six orthogonal dimensions, each assessed by a dedicated, publication-type-specific prompt. Rather than relying on holistic evaluation, the framework produces six independent scores with structured
+
+
+evidence. The rubrics were calibrated through systematic synthesis of reviewer guidelines from four top-tier journals:
+• Journal of Research in Science Teaching(JRST): “Extend current knowledge or provide new perspectives”
+• Computers & Education: “Significant contribution to current knowledge”; measurable learning outcomes mandatory
+• British Journal of Educational Technology(BJET): “Novel perspective, new theoretical insights”
+• International Journal of Science Education(IJSE): “Contribute new knowledge to the field”
+8.4 Six Core Dimensions
+All manuscripts are evaluated on a 1–5 scale across six dimensions:
+1. Academic Merit & Originality( academic_merit): Novelty, theoretical framing, significance. Key differentiator: “adding another brick” (3) vs. “showing the wall could be built differently” (4).
+2. Methodological & Statistical Rigor( methodological_rigor): Study design, reproducibility, validity. Key differentiator: proactive validity threats with effect sizes (4) vs. standard methods (3).
+3. Data Integrity & Interpretation( data_integrity): Evidence-to-conclusion alignment, limitation honesty. Key differentiator: dismissing alternatives with evidence (4) vs. reasonable conclusions without exploration (3).
+4. Pedagogical Alignment( pedagogical_alignment): Learning theory grounding, equity considerations. Key differentiator: theoryoperationalized(4) vs. theorycited (3).
+5. Structural Quality( structural_quality): Logical flow, writing clarity. Key differentiator: effortless reading (4) vs. reader effort required (3).
+6. Citation Compliance( citation_compliance): Coverage, currency (≥60% from last 5 years), critical engagement. Key differentiator:engagingwith sources (4) vs. listingthem (3).
+The universal scoring rubric defines five levels: Exemplary (5), Strong (4), Adequate (3), Weak (2), and Insufficient (1). Score 5 is calibrated as genuinely rare (<10% of reviews), while Score 3 represents competent, publishable-with-revisions work.
+8.5 Publication Type Adaptation
+The universal rubrics are adapted for seven publication types. Table6summarizes the key reframings.
+
+
+Table 6: Publication type adaptation matrix
+Type Methodology Reframing
+Primary Emphasis Special Rule
+Research Standard (IMRaD, effect sizes)
+All dimensions equal No descriptive reports
+Review Search strategy, PRISMA Citations: exhaustive Not a literature dump STEM Ed STEM instruments, pre/post
+Pedagogical: NGSS Must address equity
+Tech Report Technical validation, WCAG
+Methodology: benchmarks
+Not a product brochure
+Communication Single method, robust Merit: urgency Brevity is a virtue Lab Experiment Pre/post assessment Pedagogical: materials Must be implementable Commentary Argumentative rigor Merit & Structure Opinion̸=evidence
+8.6 Prompt Architecture and JSON Schema
+Each of the 42 dimension-specific prompts follows a standardized internal structure: (1) system identity and journal context; (2) single-dimension focus instruction; (3) antiinflation calibration directives; (4) publication-type-specific 5-level rubric; (5) red flag triggers; (6) JSON output schema; and (7) Socratic public note instructions. Every dimension evaluation must return a valid JSON object containing: dimension, score (integer 1–5), confidence (float 0.0–1.0), summary (3–5 sentences), strengths and weaknesses (arrays, minimum 20 characters per item), specific_evidence (array of claim/quote/section triples),recommendations,red_flags, andpublic_note.
+8.7 Synthesis Engine
+After all six dimension JSONs are injected, a universal Synthesis prompt consumes the aggregate data to produce a holistic assessment. The synthesis output is structured into the following metadata fields: overall_quality_noteHolistic pedagogical assessment. scope_fit_noteAlignment with journal/repository scope. suggested_verdictAutomated recommendation (Accept/Reject). key_strengths/concernsBulleted highlights of the artifact. revision_guidanceActionable Socratic feedback for authors. Verdict calibration follows explicit thresholds: aggregate ≥ 4.5with no dimension below 3 suggests “accept”; ≥2 dimensions scoring ≤2 suggests “reject.” Override conditions ensure that a score of 1 in either Academic Merit or Methodological Rigor triggers a “reject” advisory regardless of aggregate performance.
+8.8 Code and Security Integration
+Because NExAIE represents a complete, auditable peer review record, author anonymity and data integrity are paramount. Confidential metadata for a reviewed manuscript—such as the principal investigator’s identity and institutional affiliation—is processed using the platform’s AES-256-CBC encryption logic before being stored in VARBINARY columns, as defined in Section10. When a review protocol prompt is executed in the Research Lab, dynamic variables are safely substituted without exposing sensitive state to external observers. For example,
+
+
+the system parses syntax such as [[manuscript_title]] and [[abstract]] within the prompt narrative. It executes the injection, evaluates the output, and securely encrypts the resulting author_notes and pi_feedback fields. This dual-layer architecture ensures that the peer review protocol can be openly cited and replicated via its DOI, while the underlying researcher identities remain fully protected from unauthorized access.
+9 Radical Transparency and Dual-View Architecture
+9.1 The Radical Transparency Paradigm
+NExAIE introducesRadical Transparency: the complete public disclosure of the evaluation methodology, including the exact prompts, rubrics, and scoring criteria used to assess manuscripts. All 42 dimension-specific prompts and the synthesis prompt are published as version-controlled PEDAL artifacts, each minted with a DOI via Zenodo. A dedicated public-facing portal allows anyone—including prospective authors—to browse, copy, and use these prompts for pre-submission self-review. This design serves three purposes: (1)author empowerment—authors can identify and address weaknesses before submission; (2)evaluation reproducibility—any researcher can independently verify the rigor of NExAIE’s review process; and (3)scholarly contribution— the rubrics themselves become citable research instruments that other journals may adopt or adapt.
+9.2 Socratic Public Notes
+Each dimension evaluation produces a public_note: a 3–5 sentence passage written in the voice of a Socratic graduate mentor. These notes are carefully constrained: they must not reference the paper’s title, authors, or specific findings; they address thedimension broadly rather than critiquing the specific manuscript; and they use forward-looking framing (“One might consider how. . . ”) rather than criticism. These notes appear on the Public View alongside dimension scores, providing intellectual context without compromising confidential review details.
+9.3 Dual-View Data Visibility
+Table7specifies which data elements are visible in each rendering mode.
+10 Data Model and Security
+10.1 Database Schema Extensions
+The NExAIE extension adds 13 columns to the existing PEDAL prompts table rather than creating separate review tables, preserving compatibility with PEDAL’s existing version control, DOI minting, and rendering infrastructure. Key additions include: is_ nexaie_review (boolean flag), review_pseudocode (VARCHAR(20), unique), review_ publication_type (ENUM of seven types), review_data (LONGTEXT JSON), review_
+aggregate_score (DECIMAL(3,2)), review_verdict (ENUM), review_synthesis (LONGTEXT JSON), editor_notes_public, three VARBINARY columns for encrypted confiden
+
+
+Table 7: Data visibility: Editor View vs. Public View
+Data Element Editor View Public View
+Real paper title✓— (pseudocode) Author names / Institution✓— All 6 dimension scores✓ ✓(scores only) Dimension narratives✓— Strengths / Weaknesses✓— Specific evidence (quotes)✓— Recommendations✓— Red flags✓— Socratic public notes✓ ✓ Aggregate score & Verdict✓ ✓ Synthesis quality & scope notes✓ ✓ Protocol reference (PEDAL slug)✓ ✓ Model used & review date✓ ✓ Review DOI & citation export✓ ✓ Article DOI (if accepted)✓ ✓
+tial metadata, article_doi, and share_token. A separate nexaie_review_sequence table maintains auto-incrementing counters per year for pseudocode uniqueness.
+10.2 Pseudocode System
+Each Paper Review record receives a permanent pseudocode in the format NXR-YYYY-NNNN, where NXR denotes “NExAIE Review,” YYYY is the submission year, and NNNN is a zeropadded sequential number. This pseudocode serves as the public-facing identifier, URL slug, and citable reference. Once assigned, a pseudocode is never changed or reused.
+10.3 Encryption at Rest
+Confidential metadata is encrypted using AES-256-CBC (National Institute of Standards and Technology,2001) with a server-side key stored outside the web root. The encryption workflow: (1) the EiC provides real title, author names, and institution at record creation; (2) values are encrypted using openssl_encrypt() with a random initialization vector (IV); (3) the IV is prepended to the ciphertext and stored in VARBINARY columns; (4) decryption occurs only during authenticated Editor View rendering; (5) the Public View rendering path never calls the decryption function.
+10.4 Share Token Access
+Section Editors receive read-only access via a URL containing a 64-character cryptographic token generated using bin2hex(random_bytes(32)). Token validation follows constanttime comparison to prevent timing attacks. Share tokens grant access to the full Editor View (including decrypted metadata) but permit no write operations.
+10.5 LLM Data Privacy
+The framework specifies Gemini Pro via Google AI Studio’s professional API as the primary evaluation model. Under Google’s API Terms of Service, data submitted via the
+
+
+paid API tier is not used for model training, not retained beyond the session, and not accessible to Google employees. PEDAL never stores complete manuscript texts—only the structured JSON evaluation output is retained, minimizing the risk surface for data breaches involving unpublished research.
+11 Discussion
+11.1 Contributions to Open AI Research Infrastructure
+PEDAL introduces two infrastructure contributions that have no direct precedent. First, it operationalizes the FAIR principles (Wilkinson et al.,2016) for a previously unaddressed artifact type—pedagogical AI prompts—providing the same documentation, versioning, and citability infrastructure that datasets, software, and protocols already enjoy. Second, through the SS2 framework, it embeds pedagogical classification directly into the artifact’s metadata, enabling taxonomy-filtered discovery, curriculum-aligned prompt sequencing, and cross-study comparison of prompt engineering approaches. The NExAIE extension demonstrates that this same infrastructure can serve a qualitatively different purpose: transparent, reproducible AI-augmented peer review. The fact that review prompts, review records, and published articles all exist within a single DOI-minted ecosystem creates a provenance chain that traditional peer review cannot match.
+11.2 Implications for Scholarly Publishing
+The 42-prompt evaluation matrix providesdiagnostic precisionthat holistic reviews lack. An author receiving a score of 4 in Academic Merit but 2 in Methodological Rigor knows exactly where revision effort should focus. The public availability of all evaluation prompts establishes a new standard ofmethodological transparencyfor AI-augmented review. The Socratic public notes introduce a novel form ofpost-publication scholarly guidance, selectively disclosing conceptual commentary while protecting detailed critique.
+11.3 Limitations
+Several limitations must be acknowledged:
+1. LLM reliability.Large Language Models are stochastic systems. The same manuscript evaluated twice with the same prompt may produce different scores. While the multi-dimensional approach mitigates variance, inter-run consistency has not yet been formally validated for this framework.
+2. Training data bias.LLMs encode biases present in their training corpora. The explicit rubrics and anti-inflation instructions constrain but cannot eliminate systematic bias toward certain research traditions or methodological paradigms.
+3. Human bottleneck.The Copy & Log workflow deliberately requires human mediation at every step. While this preserves editorial judgment, the system’s throughput is limited by the EiC’s availability.
+
+
+4. Prompt gaming.Public prompts could theoretically enable authors to “game” the system. We mitigate this by designing rubrics that evaluate substance (“creative extension,” “operationalized theory”) rather than surface features, and by maintaining human editorial authority.
+5. Single-model dependency.The current implementation uses a single LLM. Multimodel consensus would strengthen reliability but introduces cost and complexity trade-offs.
+6. Limited empirical validation.As a newly deployed system, PEDAL’s statistical engine and NExAIE’s review framework have been validated through internal testing but lack large-scale empirical studies comparing AI-generated scores against independent human reviewer assessments.
+11.4 Ethical Considerations
+The framework addresses ethical dimensions explicitly: (1)Transparency over opacity—all evaluation criteria are public and citable; (2)Advisory, not authoritative—the AI-generated verdict is explicitly labeled “suggested,” with Section Editors retaining complete override authority; (3)Data minimization—PEDAL never stores complete manuscript texts; and (4)Author consent—the submission process informs authors that AI-augmented review will be used, with the methodology publicly accessible prior to submission.
+11.5 Future Work
+Several research directions emerge from this framework:
+1. NExAIE companion paper:A dedicated companion paper (Kahveci,2026b) presents the full NExAIE specification, including the complete text of all 42 evaluation prompts, the calibration methodology against JRST, Computers & Education, BJET, and IJSE review standards, the 10-step editorial workflow with OJS integration, and the privacy-preserving dual-view rendering implementation. That paper provides the depth necessary for other journals to adopt or adapt the framework.
+2. Inter-run consistency validation:Systematic studies evaluating the same manuscripts multiple times to quantify score variance and identify dimensions with low reliability.
+3. Multi-model consensus:Implementing parallel evaluation across 2–3 LLMs and developing aggregation strategies for divergent assessments.
+4. Human–AI agreement studies:Comparing NExAIE dimension scores against independent human reviewer scores to calibrate rubric accuracy.
+5. Longitudinal prompt evolution:Tracking how rubric refinements (versioncontrolled in PEDAL) correlate with changes in manuscript quality over time.
+6. Cross-journal adoption:Developing adapter mechanisms that allow other journals to adopt the framework with discipline-specific rubric customization.
+
+
+7. Automated API integration:Exploring direct LLM calls within PEDAL while maintaining the editorial oversight and audit trail guarantees of the current Copy & Log workflow.
+12 Conclusion
+This paper has presented PEDAL (Pedagogical Evaluation, Design, & Analysis Lab), an open-research infrastructure that transforms transient AI prompts into citable, reproducible scholarly artifacts, and NExAIE (Nexus AI & Education), an extension that applies this infrastructure to AI-augmented peer review. Together, these contributions address a critical gap at the intersection of artificial intelligence and educational technology: the absence of FAIR-compliant infrastructure for the prompt artifacts that increasingly mediate instructional practice and scholarly inquiry.
+12.1 Summary of Contributions
+PEDAL’s three-tier Laboratory-to-Archive pipeline provides, to our knowledge, the first platform that operationalizes the FAIR principles (Wilkinson et al.,2016) specifically for pedagogical AI prompt artifacts. The Orchestration Layer supports structured prompt creation through the AI Generative Architect, the Scholarly Inject Toolkit for automated metadata extraction of 24+ fields, and the Artifact Ingest workflow for bootstrapping prompts from existing educational materials. The Laboratory Layer implements Git-style immutable version control, a pure LLM-as-a-Judge evaluation engine that scores artifacts across five pedagogical dimensions on a 5.0-point scale, and Mann–Whitney U statistical testing for rigorous champion variant identification. The Public Archive Layer completes the pipeline by providing per-version DOI minting via Zenodo, multi-format data exports (JSON, CSV, LATEX), SEO-optimized discoverability through JSON-LD and HighWire Press metadata, and one-click citation generation. The Scholarly Sync 2 (SS2) metadata framework attaches a 24+ field envelope to every artifact, encoding Bloom’s Revised Taxonomy, Webb’s Depth of Knowledge, SAMR integration levels, 5E instructional phases, and NGSS standards alignment. This metadata infrastructure enables taxonomy-filtered discovery, curriculum-aligned prompt sequencing, and cross-study comparison of prompt engineering approaches—capabilities that no existing prompt-sharing platform provides. The NExAIE extension demonstrates the platform’s extensibility by deploying PEDAL’s artifact infrastructure for AI-augmented peer review. Its 42-prompt evaluation matrix, calibrated against review criteria from top-tier journals including Computers & Education, JRST, BJET, and IJSE, decomposes manuscript assessment into six orthogonal quality dimensions across seven publication types. The Radical Transparency paradigm—publicly archiving all evaluation rubrics with DOIs—and the privacy-preserving dual-view architecture employing AES-256-CBC encryption establish a foundation for AI peer review that is simultaneously rigorous, reproducible, and ethically grounded.
+12.2 Implications for STEM Education and Research
+The chemistry education domain exemplar presented in this paper (Section7) illustrates how PEDAL’s infrastructure serves both pedagogical and research communities. A single prompt artifact—scaffolding solution chemistry through Socratic inquiry (Kahveci,
+
+
+2026a)—encodes not only the instructional strategy but also its cognitive taxonomy alignment, misconception targets, and detailed execution protocols. The platform’s Future Research Directions module further extends each artifact’s value by generating research ideas, formulating research questions, and proposing testable hypotheses grounded in the prompt’s disciplinary content, thereby bridging the gap between instructional design and empirical investigation. For educators, PEDAL provides a mechanism to document, share, and iteratively refine instructional prompts with the same rigor applied to other scholarly instruments. For researchers, the version-controlled metadata envelope and statistical evaluation engine transform prompt engineering from an ad hoc craft into a systematic methodology amenable to comparative study. The platform’s machine-readable exports (JSON, CSV, LATEX) ensure that prompt metadata can be readily integrated into secondary analyses, systematic reviews, and meta-analytic frameworks—a capability increasingly important as AI-mediated instruction becomes a subject of empirical inquiry in its own right.
+12.3 Evidence of Community Interest
+Initial deployment data provides encouraging evidence of demand for open prompt engineering infrastructure. As of May 6, 2026—approximately one month following the publication of the first pedagogical artifacts—the platform’s internal analytics recorded 4,684 lifetime artifact views originating from 1,810 unique researchers across the global STEM community (Figure6b). This rapid uptake, achieved without formal announcement beyond the platform’s own discoverability mechanisms, underscores a latent need within the educational technology community for citable, quality-assured AI scaffolding resources.
+12.4 Broader Impact and Vision
+By treating AI prompts as version-controlled scholarly artifacts rather than disposable instructions, the PEDAL–NExAIE framework transforms the relationship between AI systems and scholarly practice at two levels. At the level of instructional design, the prompts become the methodology: their public availability becomes the reproducibility guarantee, their metadata becomes the pedagogical rationale, and their version history becomes a record of how instructional strategies evolve through empirical testing. At the level of scholarly publishing, NExAIE demonstrates that evaluation criteria themselves can be treated as transparent, citable, and improvable research instruments—a paradigm shift from the opacity that has characterized peer review for centuries (Kronick,1990). The framework’s deliberate human-in-the-loop design—requiring researchers to mediate every LLM interaction through the Copy & Log workflow—ensures that PEDAL never makes unsupervised API calls, preserving editorial control, model-agnosticism, and the intellectual authority of the researcher. This architectural decision reflects a conviction that AI should augment, not replace, scholarly judgment. The complete platform, including all 42 NExAIE evaluation prompts, the synthesis protocol, the statistical engine, and the public archive infrastructure, is released under CC-BY-4.0 (DOI: 10.5281/zenodo.19474709). We invite the educational technology community to adopt, adapt, and extend this infrastructure for their own disciplinary contexts, contributing to a future in which every AI-mediated educational intervention is as transparent, reproducible, and citable as the scientific methods it seeks to support.
+
+
+A Platform Interface Gallery
+This appendix provides additional views of the PEDAL production environment, demonstrating the end-to-end Laboratory-to-Archive workflow.
+Data Availability:The PEDAL Archive is publicly accessible at https://kahveci.pw/ pedal. All review protocol prompts are available in the PEDAL public archive. The platform source specifications and version history are maintained under version control with DOI provenance via Zenodo.
+Declaration of Generative AI Usage.During the preparation of this manuscript, the author used large language models (Gemini, Google; Claude, Anthropic) via an agentic coding assistant as a drafting and formatting aid to transform the author’s technical specifications into structured LATEX prose. The author reviewed, verified against the production codebase, and editorially refined all generated content. The author takes full responsibility for the content of the publication.
+Conflict of Interest.The author declares no competing financial interests. The author is the sole developer and maintainer of the PEDAL Archive platform described in this paper.

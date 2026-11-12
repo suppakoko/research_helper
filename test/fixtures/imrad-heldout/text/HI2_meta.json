@@ -1,0 +1,68 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "HI2",
+  "title": "An Improved Beta Burst Extraction for Chip-Based Deep Brain Stimulation With Real-Time Model Updating",
+  "venue": "IEEE Open Journal of Engineering in Medicine and Biology 7, 214–222 (2026)",
+  "publisher": "ieee",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "expected, not seen: first-set OJEMB paper I1 was 2 columns",
+    "headingNumbering": "unknown",
+    "webHeadings": "not checked",
+    "notes": [
+      "headings and layout not checked in advance: the candidate list was drawn without opening any paper"
+    ]
+  },
+  "doi": "10.1109/OJEMB.2026.3695567",
+  "otherId": "PMC13278738",
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "page 1 of the extracted text states: \"This work is licensed under a Creative Commons Attribution 4.0 License\" (creativecommons.org/licenses/by/4.0), 2026-11-12. Before that: IEEE Xplore not readable (bot defence). IEEE Crossref record CC BY 4.0 (version of record); Europe PMC PMC13278738 \"cc by\".",
+  "sourceUrl": "owner's browser download, 2026-11-12, from https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=11534946 or its alternative https://europepmc.org/articles/PMC13278738?pdf=render (which address was used is not recorded)",
+  "landingUrl": "https://ieeexplore.ieee.org/document/11534946",
+  "recordedAt": "2026-11-12T09:30:10.494Z",
+  "extractedAt": "2026-11-12T09:30:10.494Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "HI2.pdf",
+    "bytes": 1517824,
+    "sha256": "5a6fa048688f78039875687807df182042313f9c8718eb95c3f98697163dc5a8"
+  },
+  "text": {
+    "file": "HI2.txt",
+    "bytes": 40900,
+    "chars": 40797,
+    "sha256": "9d290718ce65884e427a93a40c4056c01fef310638207d4037295a12ef683fd6",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 40797,
+      "truncated": false,
+      "pages": 9,
+      "runningHeadLinesRemoved": 0,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.14147429557458807,
+      "supplementaryCharsRemoved": 0,
+      "ocrWords": 4784,
+      "ocrSplits": 1,
+      "ocrSplitShare": 0.00020903010033444816,
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 8,
+      "twoColumnPages": 8
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

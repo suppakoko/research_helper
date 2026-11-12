@@ -1,0 +1,69 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "HO1",
+  "title": "GROMTools: scalable individual-level GReX imputation for mega-biobank-scale cohorts",
+  "venue": "Bioinformatics 42(10), btag719 (2026)",
+  "publisher": "oup",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "expected, not seen: first-set Bioinformatics paper O4 was 2 columns",
+    "headingNumbering": "unknown",
+    "webHeadings": "not checked",
+    "notes": [
+      "headings and layout not checked in advance: the candidate list was drawn without opening any paper",
+      "PMC lists it as a brief report (an Applications Note)"
+    ]
+  },
+  "doi": "10.1093/bioinformatics/btag719",
+  "otherId": "PMC13680095",
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "page 1 of the extracted text states: \"Open Access article distributed under the terms of the Creative Commons Attribution License (https://creativecommons.org/licenses/by/4.0/)\", 2026-11-12. Before that: academic.oup.com answered 403 (as for O1 in the first set), so not read. OUP Crossref record CC BY 4.0 (version of record); Europe PMC PMC13680095 \"cc by\". PMC lists it as a brief report (an Applications Note, likely two pages).",
+  "sourceUrl": "owner's browser download, 2026-11-12, from https://academic.oup.com/bioinformatics/article-pdf/42/10/btag719/71559977/btag719.pdf or its alternative https://europepmc.org/articles/PMC13680095?pdf=render (which address was used is not recorded)",
+  "landingUrl": "https://academic.oup.com/bioinformatics/article/doi/10.1093/bioinformatics/btag719",
+  "recordedAt": "2026-11-12T09:30:10.494Z",
+  "extractedAt": "2026-11-12T09:30:10.494Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "HO1.pdf",
+    "bytes": 1010768,
+    "sha256": "3b817fd77d1b0cfb0c4a2f352cdb2b2cd0fe34af6687f94c4d01c91ecf3beb59"
+  },
+  "text": {
+    "file": "HO1.txt",
+    "bytes": 24425,
+    "chars": 24392,
+    "sha256": "889084ff5020b6bbcefd965f1b4ca1bf698926a48b432321e715ba4841e940e7",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 24392,
+      "truncated": false,
+      "pages": 6,
+      "runningHeadLinesRemoved": 5,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.11717333705201506,
+      "supplementaryCharsRemoved": 930,
+      "ocrWords": 2936,
+      "ocrSplits": 0,
+      "ocrSplitShare": 0,
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 6,
+      "twoColumnPages": 5
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

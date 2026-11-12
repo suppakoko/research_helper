@@ -1,0 +1,426 @@
+NASA TECHNICAL NOTE NASA TN D-7813
+I
+N75-1 2 9 ) 7
+(NASA-TN-D-7 8 1 3 ) CALCULATION OF THE
+'JIST DISTRIBUTION OF WINGS DESIGN.S FOR
+CRUISE AT TRANSONIC SPEEDS (NAS A) 25 Unclasp
+BC$3.25 CSCL 01C Uclas
+Bc $3.25 H/05 05100
+CALCULATION OF
+THE TWIST DISTRIBUTION
+OF WINGS DESIGNED FOR
+CRUISE AT TRANSONIC SPEEDS
+by Michael J.Mann
+Langley Research Center
+Hampton, Va. 23665 i°
+NATIONAL AERONAUTICS AND SPACE ADMINISTRATION . WASHINGTON, D. C. • DECEMBER 1974
+
+
+1. Report No. 2. Government Accession No. 3. Recipient's Catalog No.
+NASA TN D-7813
+4. Title and Subtitle 5. Report Date
+CALCULATION OF THE TWIST DISTRIBUTION OF WINGS December 1974 DESIGNED FOR CRUISE AT TRANSONIC SPEEDS 6. Performing Organization Code
+7. Author(s) 8. Performing Organization Report No.
+Michael J. Mann L-9832
+10. Work Unit No. 9. Performing Organization Name and Address 505-06-14-01
+NASA Langley Research Center 11. Contract or Grant No.
+Hampton, Va. 23665
+13. Type of Report and Period Covered 12. Sponsoring Agency Name and Address Technical Note
+National Aeronautics and Space Administration 14. Sponsoring Agency Code Washington, D.C. 20546
+15. Supplementary Notes
+16. Abstract
+The use of linear theory in calculating the twist distribution of a wing designed for cruise at supercritical speeds is justified on the basis of the transonic equivalence rule. A modified version of Multhopp's subsonic lifting-surface theory has been used to calculate the twist distribution. The lifting-surface theory is compared with both slender-wing theory and experimental results. A study is also made of the effect of wing sweep on the twist distribution required to maintain an elliptic span load at cruise conditions. The important parameters used in establishing this twist distribution are identified.
+17. Key Words (Suggested by Author(s)) 18. Distribution Statement
+Wing twist Unclassified - Unlimited Sonic aircraft Aircraft design Transonic aircraft STAR Category 01
+19. Security Classif. (of this report) 20. Security Classif. (of this page) 21. No. of Pages 22. Price*
+Unclassified Unclassified 23 $3.25
+For sale by the National Technical Information Service, Springfield, Virginia 22151
+
+
+CALCULATION OF THE TWIST DISTRIBUTION OF WINGS
+DESIGNED FOR CRUISE AT TRANSONIC SPEEDS
+By Michael J. Mann
+Langley Research Center
+SUMMARY
+The use of linear theory in calculating the twist distribution of a wing designed for
+cruise at supercritical speeds is justified on the basis of the transonic equivalence rule.
+A modified version of Multhopp's subsonic lifting-surface theory has been used to calcu
+late the twist distribution. The lifting-surface theory is compared with both slender-wing
+theory and experimental results. A study is also made of the effect of wing sweep on the
+twist distribution required to maintain an elliptic span load at cruise conditions. The
+important parameters used in establishing this twist distribution are identified.
+INTRODUCTION
+Extensive aerodynamic research is currently being carried out in the area of tran
+sonic flight. The development of the National Aeronautics and Space Administration super
+critical airfoil (ref. 1) has opened the possibility of speed increases and weight reduction
+in transport aircraft. With this airfoil, it may also be possible to improve the maneuver
+ing capability of fighter aircraft operating at high lift in the transonic range, if proper account is taken of the low aspect ratio and high sweep of these aircraft.
+The transonic technology developments which have occurred to date have relied
+almost exclusively on wind tunnel and other experimental techniques. Theoretical methods
+of calculating a transonic inviscid flow have largely been limited to two-dimensional solu
+tions and to an endless variety of adaptations of three-dimensional linear solutions.
+Bailey and Steger (ref. 2) and Ballhaus and Bailey (ref. 3) have developed numerical
+methods for solving the transonic. small perturbation equation on three-dimensional lifting
+wings. The results of these methods show good agreement with other theoretical solutions
+and experimental data.
+Slender-body theory has been used by Spreiter and Stahara (ref. 4) to study transonic
+lifting wing bodies at angles of attack where the flow is thickness dominated. The form of
+the equivalence rule discussed relates the lifting wing-body flow to the axisymmetric flow
+on a body of revolution having the same longitudinal distribution of cross-sectional area.
+(See also chapters 6 and 12 of ref. 5.) Some experimental verification of the theory was
+obtained.
+
+
+Using the method of matched asymptotic expansions and approximations from
+slender-body and slender-wing theory, Barnwell (ref. 6) and Cheng and Hafez (ref. 7) have
+extended the theory of transonic lifting wing bodies to larger angles of attack. At larger
+angles of attack the effects of lift are comparable to, or dominate, the effects of thickness.
+The equivalence rule then relates the outer flow about a wing body to the axisymmetric
+flow about a body of revolution whose cross section depends both on the geometrical cross
+section of the original body and on the longitudinal lift distribution.
+The design of minimum drag wings for transonic aircraft requires that the effects
+of the fuselage be taken into account. Near sonic speeds there is a strong interaction
+between the wing and fuselage. Small changes in the fuselage shape affect the strength of
+the shock waves, which in turn affects the performance of the wing. Aside from local
+effects, the equivalence rule itself shows that the fuselage and the lift distribution affect
+the overall area distribution. Presumably, the overall area distribution determines the
+shape for minimum drag configurations (local effects being considered). Hence, the slender-body theories may be useful for the design of minimum drag wings for transonic
+aircraft. However, these theories need experimental verification and further development.
+Owing to the lack of a suitable transonic theory, linear theory is used for transonic
+design work under some conditions. Lock and Rogers (ref. 8) use linear theory in design
+ing transonic wing bodies (moderate wing taper) so that the isobars on the wing are essen
+tially straight. The concept has been experimentally verified by Lock (ref. 9) for conditions
+where the local Mach number normal to the isobars is less than 1.0 over most of the wing.
+A quasi-two-dimensional flow (independent of span location except at center-line kink and
+wing tips) without shock waves was obtained for the wing. There is no rigorous justification
+for this use of linear theory; however, theory shows that the flow over an infinite swept cyl
+inder changes from elliptic to hyperbolic when the normal component of the Mach number
+exceeds 1.0 at any point in the flow. 1 Since the lift coefficients necessary in practice may
+be high enough so that some supercritical flow and shock waves exist on the wing, this design procedure may not always be practical.
+The purpose of the present study is to justify the use of linear (subsonic lifting sur
+face) theory for calculating the twist distribution required to maintain an elliptic span load
+at transonic cruise conditions. The justification for this use of linear theory is made on
+the basis of the transonic equivalence rule. The results are verified by comparison with
+experimental data and slender-wing theory. The effect of wing sweep on the required
+twist distribution is also investigated. The portion of the transonic range studied consists
+of speeds up to and including sonic free-stream Mach number.
+1An infinite swept cylinder produces cylindrical pressure wavelets which propagate
+in a direction normal to the cylinder. These wavelets can only coalesce to form a shock
+wave when the normal component of the Mach number exceeds one.
+
+
+SYMBOLS
+Values are presented in both SI Units and U.S. Customary Units. The measure
+ments and calculations were made in U.S. Customary Units.
+Aj(x,y,?7) influence coefficient matrix elements, m - 1 (ft - 1 ) (see eq. (6))
+b wing span, m (ft)
+CL wing lift coefficient, Wing lift
+q0 S
+CL,N CL based on VN, see equation (10)
+Plower - Pupper
+ACp pressure loading, q )
+c local streamwise wing chord, m (ft)
+cav average chord, S/b, m (ft)
+Local chord load
+cI section lift coefficient, qc
+MN component of Moo defined by equation (9)
+Moo free-stream Mach number
+N number of pressure modes is denoted by N + 1
+p static pressure, N/m 2 (lbf/ft2 )
+qj () coefficient of the jth chordal loading function, N/m (lbf/ft); j = 0 to N
+q, free-stream dynamic pressure, pV22, N/m2 (lbf/ft 2)
+S actual wing area, m 2 (ft2 )
+VN = V, cos Ac/2, m/sec (ft/sec)
+Vo free-stream velocity, m/sec (ft/sec)
+
+
+w perturbation velocity in z-direction, m/sec (ft/sec)
+x,y,z right-hand Cartesian coordinate system with origin in plane of symmetry at
+wing root midchord, m (ft) (see fig. 1)
+x' dummy variable form of x, m (ft)
+E wing twist angle, rad (deg)
+17 dimensionless spanwise coordinate, 
+b/2
+0 chordwise angular location of ACp, rad (deg)
+Ac/2 sweep of midchord line on outboard portion of wing, rad (deg) (see fig. 1)
+P, free-stream density, kg/m 3 (slugs/ft 3 )
+perturbation velocity potential, m 2 /sec (ft2 /sec)
+Subscripts:
+LE leading edge
+TE trailing edge
+Mathematical symbols:
+[] square matrix
+column matrix
+BASIC CONCEPTS
+The transonic equivalence rule outlined by Spreiter and Stahara (ref. 4) states that
+the flow near a lifting slender-wing body at transonic speeds is the sum of two simpler
+flows. These simpler flows are the axisymmetric transonic flow over the equivalent body
+of revolution and the two-dimensional incompressible cross flow which will make the flow
+tangent to the surface. (See refs. 4 and 5.) Spreiter and Stahara point out that the loading
+on the wing, that is, the difference in pressure across the wing, depends only on the cross
+
+
+flow solution and can be calculated by linear theory even at transonic speeds. Since wing
+twist distribution depends mainly on the spanwise load distribution, the equivalence rule
+therefore indicates the possibility of designing the twist of a sonic aircraft wing by use of
+linear theory.
+The same type of approach is not valid for the design of transonic airfoils. Linear
+theory indicates that the airfoil can be separated into thickness and camber, and that the
+same camber with different thickness distributions results in the same net pressure load
+ing. These results are clearly incorrect in the nonlinear transonic range.
+A linear theory has been used by Igoe (ref. 10) to calculate the twist distribution
+required for cruise near sonic speeds. Igoe found good agreement between the prediction
+of the theory and an experimentally determined twist of a supercritical wing, designed for
+low drag and high drag-divergence Mach number so as to result in efficient cruise near Mo = 1. Igoe used an expression for the downwash from reference 11 which applies to
+a wing of arbitrary aspect ratio at Mo = 1. However, the expression also agrees with
+results of slender-wing theory (slender or low-aspect-ratio wings at arbitrary Mach num
+ber). This agreement is not surprising because as M, approaches 1.0, the Prandtl
+Glauert correction continually reduces the aspect ratio. Hence, a high-aspect-ratio wing
+mathematically reduces to a slender wing as M, approaches 1.0. Both cases, the high
+aspect-ratio wing at M, = 1 and the low-aspect-ratio or highly swept wing at arbitrary Mach number, are three-dimensional problems whose solutions can be obtained from the
+two-dimensional equation (discussed in refs. 11 and 12)
+2 a2- 0 (1)
+8y 2 az 2
+In the method of reference 10, the downwash at a given point on the wing is obtained
+by integrating over the area of the wing defined by the Mach forecone which is a plane at
+M, = 1. The downwash is twice the value of the near-wake downwash from the portion of
+the wing forward of the given point; this is due to the fact that the Prandtl-Glauert trans
+formation moves the point into the far wake of the forward part of the wing.
+The present study utilizes the modified Multhopp lifting-surface theory for subsonic
+flow according to Lamar (ref. 13). This method of solving the downwash equations of
+lifting-surface theory (eq. (7-28) of ref. 5) uses a series representation of the pressure
+loading ACp of the form2
+2 Reference 13 uses c for chord and c(,q) for half-chord. In the present report
+c 7)
+
+
+2 qo() N nj (2)
+AC(0,7) = cot -+ sin jO (2)
+c(a) q o 2 qo
+where qj(r) is the coefficient of the jth chordal loading function and 0 and 77 are the chordwise and spanwise variables, respectively. The number of unknown pressure modes is N + 1.
+Setting the leading-edge singularity to zero (qo = 0) yields a sine series for the chordwise load at r7. In the present study, it was found that most practical loadings could be represented by a sine series. In this case the section load becomes
+cl(() C(N) = q) (3)
+2 qoo
+By assuming an elliptic spanwise load to minimize induced drag, and using the relation for the total wing lift
+1c (
+(4
+) ())
+C L = 1 dca
+v (4)
+0 cay
+the ql()/qg, coefficient can be written as
+q l(l) 8
+_ cavCLTl_ r72 (5)
+Determining the wing twist distribution involves what is referred to as the design problem. In the design problem the chordwise and spanwise load distributions, the planform, the design lift coefficient, and the cruise Mach number are specified. Once the shape of the chordwise load at 77 is selected, the coefficients qj()/q 1 (7l) can be calculated by a Fourier sine-series analysis. If the planform and the design lift coefficient
+CL are known, the value of ql(7)/q, can be computed from equation (5), and then each
+of the qj() qoo coefficients can be computed.
+The downwash at point (x,y) on the planform is then computed from the matrix equation
+=([xAy (xy, (6)
+where the AJ(x,y, 7)'s are elements of the influence coefficient matrix for computing the downwash at (x,y) caused by the jth chordal loading function at 7. The elements
+A3 (x,y,7) are functions of the planform shape and cruise Mach number. (See ref. 13.) Once the downwash is known, the shape of the mean camber surface is found from
+
+
+c (x/c)TE ) (7)
+where z/c is computed for the point x/c.
+The twist angle E at each span station is then computed from
+tan E =)LE (E
+Since (z/c)TE = 0 in reference 13, then
+E = tan- E
+In order to be consistent with the approximations of linear theory, it is assumed that
+)LE = tan EE (8)
+From equations (7) and (8) it is seen that the angle of twist is approximately propor
+tional to the downwash velocity. It is also seen from the preceding results that the down
+wash velocity is directly proportional to the wing lift coefficient. Thus, once the loading, the planform shape, and the Mach number are fixed, the magnitude of E varies linearly
+with the magnitude of CL, and the value of E/CL at each span station is independent of
+the magnitude of CL. This approximation was used in the calculations.
+RESULTS AND DISCUSSION
+Figure 1 and table I describe the wing planforms analyzed in this study. The number
+of chordwise control points, which also equals the number of chordwise pressure modes, 3
+was 8; the number of spanwise stations on a semispan at which control points were located
+was 12 (includes station at wing center line).
+Figure 2 shows the twist distribution of the 400 wing as calculated by lifting-surface
+theory for various values of the free-stream Mach number; also shown is the twist calcu
+lated by using slender-wing theory, as presented in figure 7 of reference 10. Since the
+twist is proportional to the wing lift, the twist angle has been divided by the wing lift
+coefficient. As shown in the sketch in the figure, the planform is approximated by
+3 Control points are locations where the tangent flow condition is satisfied; pressure modes are the trigonometric terms of equation (2).
+
+
+straight line segments. Elliptic spanwise and rectangular chordwise loads were imposed
+for both solutions.
+It is seen that as M, approaches 1.0, the lifting-surface solution approaches the
+slender-wing solution, and for M,, = 0.9999, the lifting-surface solution is identical to
+the slender-wing solution outboard of q = 0.5. This is to be expected since, as explained
+previously, the transformed (equivalent incompressible) wing becomes very slender as
+M, approaches 1.0. The areas of integration of the wing loading used to obtain the
+downwash at a given point on the wing also become equal for the two methods. The
+slender-wing solution integrates over the portion of the wing ahead of a given point.
+The lifting-surface solution integrates over the entire wing surface; however, the portion
+of the wing surface downstream of the given point has no influence on that point. This
+lack of influence can be seen by imagining that the downstream region of the wing is repre
+sented by, for example, a horseshoe vortex lattice. Infinitely far downstream of a horse
+shoe vortex, the induced downwash approaches a constant value. However, infinitely far
+upstream of a horseshoe vortex, the induced velocity goes to 0 (ref. 14). Since a horse
+shoe vortex downstream of a given point on the wing will be moved infinitely far down
+stream from the point on the transformed wing as M, approaches 1.0, the vortex will
+not influence the given point.
+Figure 2 shows that the net twist increases as M, increases. This result can be
+explained by recalling that the angle of twist is directly proportional to the downwash
+velocity. As M, increases, the transformed wing sweep increases, and points on the
+wing are swept farther into the wake of the more forward points, and therefore encounter
+greater downwash. The dip in the twist distribution in figure 2 between 7 of 0.2 and 0.4
+is caused by the crank in the leading edge at 7 = 0.266.
+Figure 3 compares the twist distribution from the lifting-surface theory with an
+experimentally determined twist distribution at M, = 1.00. The calculations were made on the exact planform shape of the 400 wing (table I). An elliptic spanwise load distribu
+tion was used because the experimental spanwise load was very close to elliptic. Calcu
+lations were made for a rectangular chordwise load distribution and for the experimental
+chordwise load distributions that occurred near the design cruise condition. Two repre
+sentatative experimental chordwise loads are shown in figure 4 with the Fourier sine
+series used to approximate them.
+The experimental twist distribution in figure 3 was obtained from figure 7 of refer
+ence 10. These data were determined by model measurements which were corrected for
+wing incidence, angle of attack, and aeroelastic effects caused by bending. This wing was
+designed for low drag and high drag-divergence Mach number so as to result in efficient
+cruise near M., = 1. At transonic speeds it is difficult to design a wing to maintain an
+elliptic span load because of the requirement for high lift coefficients at the tip. However,
+
+
+as seen from reference 10, the experimental spanwise load distribution was very close to
+elliptic.
+From figure 3 it is seen that the theory predicts the approximate magnitude and
+distribution of twist. The absence of the effects of the fuselage and the assumption of
+small perturbations in the calculations could account for the small discrepancies between
+the theory and the experiment.
+The three planforms described in table I and figure 1 were used to determine the
+effect of sweep on the twist distribution. As indicated in figure 1, the planform variations
+occurred primarily on the portion of the wing outboard of the glove. Assuming that a
+quasi-two-dimensional flow exists over most of the wing, simple-sweep theory was used
+to define the cruise Mach numbers and the wing lift coefficients for the 36.50 and 310
+wings. Because of the difficulty of maintaining two-dimensional flow over the entire span
+of a swept wing, it is not expected that the full benefit of sweep, as predicted by simple
+sweep (cosine) theory, would be obtained. However, unpublished data from wind-tunnel
+tests by the Langley Research Center on carefully designed wing-body combinations have
+indicated that sweep benefits on drag-rise Mach number as large as 1/cos0.8Ac/2 can
+be realized. Thus the normal component of Mach number was defined as
+MN = M" cos0.8Ac/2 (9)
+where Ac/2 is the sweep of the midchord line on the outboard section. The wing lift
+coefficient based on the normal component of free-stream velocity CL,N was calculated
+from the usual simple-sweep theory relation
+CL = CL,N cos 2 Ac/2 (10)
+Equations (9) and (10) were used to define the conditions for two cases. In the first
+case, the wing lift coefficient and normal component of Mach number were held constant;
+in the second case, both the lift coefficient based on the normal component of free-stream
+velocity and the normal component of Mach number were held constant. The latter case
+was an attempt to maintain the same sectional properties (based on VN) over most of the
+span as the sweep was changed. (See ref. 15.)
+Results for the first case are shown in figure 5. The lift coefficient was held con
+stant at 0.31. By assuming a cruise Mach number of 0.9999 for the 400 wing, the normal
+component of Mach number was held constant and the cruise Mach numbers were calcu
+lated from equation (9) for the 36.50 and 310 wings. The experimental chordwise load dis
+tributions used in figure 3 and an elliptic spanwise load were used. Figure 5 indicates
+that significantly less twist is required as the sweep angle and Mach number are lowered.
+(The effect of Mach number alone is seen in fig. 2.)
+
+
+Results for the second case are shown in figure 6. The wing lift coefficients
+required to maintain the airfoil near its design lift condition were determined from equa
+tion (10) with CL,N held constant. The Mach numbers and load distributions of figure 5
+were used. Figure 6 shows that the effect of reduced Mach number and sweep angle is
+offset by the effect of an increase in the lift coefficient; thus, there is very little difference
+in the twist for the three wings. The contrasting effects of lift coefficient and Mach num
+ber are consistent with the results of figure 2.
+Finally, it is useful to identify which factors primarily influence the wing twist. As
+seen from the preceding discussion, the wing twist for efficient cruise is determined by the
+planform shape, the cruise Mach number, the design lift coefficient, and the spanwise and
+chordwise load distributions. The effect of a large change in the shape of the chordwise
+load distribution on the twist of the 400 wing at a Mach number of 0.9999 is shown in fig
+ure 7. It is seen here, and also in figure 3, that for this planform the effect of large
+changes in the shape of the chordwise load distribution is small. Hence, for the cases
+investigated, if the span load is constrained to be elliptic, a family of twist distributions
+can be generated for a given planform which would apply to a reasonable range of chord
+loads. If it is assumed that tan E = E and the twist is generated in terms of E/CL for
+different span stations, the single parameter of this family would be M,. A series of
+curves such as those in figure 2 would result.
+CONCLUSIONS
+The transonic equivalence rule shows that chordwise and spanwise load distributions
+can be calculated on lifting wing bodies at transonic speeds using linear theory. Since
+wing twist distribution depends mainly on the spanwise load distribution, the equivalence
+rule therefore indicates the possibility of designing the twist of a sonic aircraft wing by
+use of linear theory.
+As the free-stream Mach number approaches 1.0, the wing twist calculated by linear
+subsonic lifting-surface theory approaches the result calculated by slender-wing theory.
+Linear lifting-surface theory was compared with experimental results on a high
+aspect-ratio wing at transonic cruise conditions. The comparison showed that the theory
+predicts the approximate magnitude of the wing twist distribution required to maintain an
+elliptic span load for these conditions.
+When the lift coefficient and component of Mach number normal to the outboard mid
+chord line were held constant, variations in the sweep of the portion of a high-aspect-ratio
+wing outboard of the glove were found to require moderate changes in the twist distribution
+at transonic speeds. However, if both the normal Mach number and the lift coefficient
+based on the component of free-stream velocity normal to the outboard midchord line are
+
+
+held constant, as suggested by simple-sweep theory, it was found that only small changes
+occur in the twist distribution.
+For a given planform and an elliptic span load distribution, a single parameter fam
+ily of twist distributions can be developed. This family is applicable to a reasonable range of chord load distributions and a lift coefficient low enough to insure that the tangent of the twist angle can be approximated by the angle itself. The family results from a plot of the twist angle divided by wing lift coefficient against spanwise location, with the cruise Mach number as a parameter.
+Langley Research Center, National Aeronautics and Space Administration, Hampton, Va., October 8, 1974.
+Experimental
+chordwise load -8- Rectangular
+- chordwise load
+-12
+0 .2 .4 .6 .8 1.0
+Figure 3.- Comparison of wing twist calculated by lifting-surface theory of reference 13 with experimental results at M, = 1.00. Theory assumes an elliptic spanwise load.
+
+
+Fourier sine-series Sapproximation
+o 0_Experiment
+0
+ACp 0 ACp
+00
+x/c x/c
+Figure 4.- Representative experimental chordwise loads at two span stations on the 400 swept wing at M, = 0.99 and the design lift coefficient with their
+Fourier sine-series approximation.
+
+
+-2
+-4
+E deg -6 - A c/2 M0
+310 0.9150
+-8 
+\ 36.50 .9620
+-10 " 400 .9999
+-12
+0 .2 .4 .6 .8 1.0
+Figure 5.- Sweep effect on wing twist according to lifting-surface theory of reference 13 with MN and CL held constant (CL = 0.31). Experimental
+chordwise load of 400 wing and elliptic spanwise load.
+
+
+-2
+-4
+E,deg -6 
+A
+I / c/2 Mo CL
+310 0.9150 0.38
+36.50 .9620 .34
+-0 400 .9999 .31
+-12
+0 .2 .4 .6 .8 1.0
+Figure 6.- Sweep effect on wing twist according to lifting-surface theory of reference 13 with MN and CL,N held constant. Experimental
+chordwise load of 400 wing and elliptic spanwise load.
+
+
+-4
+-82
+,deg
+CL -20
+-24 - Rectangular
+chordwise
+-28- load
+\y Right triangular
+- 32 - - 1 chordwise load
+(zero at trailing edge)
+0 .2 .4 .6 .8 1.0
+Figure 7.- Chordwise load effect on wing twist according to lifting-surface theory of
+reference 13 on the 400 swept wing at Moo = 0.9999. Elliptic spanwise load.
+NASA-Langley, 1974 L-9832 23

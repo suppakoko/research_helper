@@ -1,0 +1,69 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "HX2",
+  "title": "Data on shape and location of detached shock waves on cones and spheres",
+  "venue": "NACA Technical Note 2000, 1950",
+  "publisher": "us-government",
+  "layout": {
+    "columnsExpected": null,
+    "columnsExpectedBasis": "not visible",
+    "headingNumbering": "unknown",
+    "webHeadings": "not checked",
+    "notes": [
+      "headings and layout not checked in advance: the candidate list was drawn without opening any paper",
+      "the download carried a 436-byte non-PDF header before %PDF-; on the owner's approval bytes 436 onward were kept (plan/00 §6 item 373(b))"
+    ]
+  },
+  "doi": null,
+  "otherId": "NTRS 19930082664",
+  "licence": "US government work (17 U.S.C. 105)",
+  "licenceEvidence": "page 1 of the extracted text: NACA Technical Note 2000, January 1950, by J. W. Heberle, G. P. Wood and P. B. Gooderum of the Langley Aeronautical Laboratory (NACA staff authorship confirmed, 2026-11-12). Before that: NTRS record: distribution PUBLIC, GOV_PUBLIC_USE_PERMITTED. NTRS gives no affiliation for the authors (Heberle, Wood, Gooderum); NACA staff authorship to be confirmed on page 1 after download (the lesson of X3). PDF header check 200 (14.8 MB, large scan).",
+  "sourceUrl": "https://ntrs.nasa.gov/api/citations/19930082664/downloads/19930082664.pdf",
+  "landingUrl": "https://ntrs.nasa.gov/citations/19930082664",
+  "recordedAt": "2026-11-12T09:30:10.494Z",
+  "extractedAt": "2026-11-12T09:30:10.494Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "HX2.pdf",
+    "bytes": 14781720,
+    "sha256": "615615d17fedd880b91188f7fad33d03eb81429a6ceb63dcc2c492492f390a8f"
+  },
+  "text": {
+    "file": "HX2.txt",
+    "bytes": 14586,
+    "chars": 14579,
+    "sha256": "2234606d4506e03fe4aa4ae02957980e13811cd436d4f681661d3d7a142b9f7a",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 14579,
+      "truncated": false,
+      "pages": 44,
+      "runningHeadLinesRemoved": 0,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.4230769230769231,
+      "supplementaryCharsRemoved": 0,
+      "ocrWords": 2389,
+      "ocrSplits": 0,
+      "ocrSplitShare": 0,
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 30,
+      "twoColumnPages": 6
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

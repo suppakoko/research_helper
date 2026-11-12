@@ -1,0 +1,68 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "HB1",
+  "title": "SysNDD: A Systematic Database for Neurodevelopmental Disorders",
+  "venue": "bioRxiv (genetics), v1 posted 2026-10-01",
+  "publisher": "biorxiv",
+  "layout": {
+    "columnsExpected": 1,
+    "columnsExpectedBasis": "expected, not seen: all first-set bioRxiv papers were 1 column",
+    "headingNumbering": "unknown",
+    "webHeadings": "not checked",
+    "notes": [
+      "headings and layout not checked in advance: the candidate list was drawn without opening any paper"
+    ]
+  },
+  "doi": "10.64898/2026.09.29.755401",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "the bioRxiv header on page 1 of Zotero's raw extraction (removed from the committed text as a running head) states: \"It is made available under a CC-BY 4.0 International license\", 2026-11-12. Before that: bioRxiv's own API (api.biorxiv.org details) gives license \"cc_by\"; the article page answered HTTP 429 (rate limit) and was not retried. Re-check on the PDF header line, as for B1/B2.",
+  "sourceUrl": "owner's browser download, 2026-11-12, from https://www.biorxiv.org/content/10.64898/2026.09.29.755401v1.full.pdf or the article page https://www.biorxiv.org/content/10.64898/2026.09.29.755401v1 (which address was used is not recorded)",
+  "landingUrl": "https://www.biorxiv.org/content/10.64898/2026.09.29.755401v1",
+  "recordedAt": "2026-11-12T09:30:10.494Z",
+  "extractedAt": "2026-11-12T09:30:10.494Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "HB1.pdf",
+    "bytes": 2486798,
+    "sha256": "7123c51784f843a30a92fb22336d4a0f05c5a2d59c61336835cbcb4ba1857e53"
+  },
+  "text": {
+    "file": "HB1.txt",
+    "bytes": 49307,
+    "chars": 49109,
+    "sha256": "c0a8949fa5e7d06e9d3b3f1de39c27ca3ed39d23898dfb19f32e98064e86d7d0",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 49109,
+      "truncated": false,
+      "pages": 34,
+      "runningHeadLinesRemoved": 136,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.19533433670178457,
+      "supplementaryCharsRemoved": 3285,
+      "ocrWords": 5946,
+      "ocrSplits": 0,
+      "ocrSplitShare": 0,
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 26,
+      "twoColumnPages": 0
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

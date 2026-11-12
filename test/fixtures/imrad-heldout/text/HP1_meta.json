@@ -1,0 +1,68 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "HP1",
+  "title": "Rehospitalization due to COVID-19 reinfection in Rio de Janeiro, 2020–2022: Associations with vaccination status, sociodemographic and clinical factors",
+  "venue": "PLOS ONE (2026)",
+  "publisher": "plos",
+  "layout": {
+    "columnsExpected": 1,
+    "columnsExpectedBasis": "expected, not seen: all four first-set PLOS papers were 1 column",
+    "headingNumbering": "unknown",
+    "webHeadings": "not checked",
+    "notes": [
+      "headings and layout not checked in advance: the candidate list was drawn without opening any paper"
+    ]
+  },
+  "doi": "10.1371/journal.pone.0332281",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "PLOS article page: \"Creative Commons Attribution License\", links creativecommons.org/licenses/by/4.0; read 2026-11-11. PDF link answered 200 application/pdf to a header check (0.6 MB). The extracted text (pages 1–2) also states the Creative Commons Attribution License (2026-11-12).",
+  "sourceUrl": "https://journals.plos.org/plosone/article/file?id=10.1371/journal.pone.0332281&type=printable",
+  "landingUrl": "https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0332281",
+  "recordedAt": "2026-11-12T09:30:10.494Z",
+  "extractedAt": "2026-11-12T09:30:10.494Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "HP1.pdf",
+    "bytes": 620317,
+    "sha256": "fff8bdf8eb7706d92aa66a9f0e05c7385c0248ca30f815d15d983383db794142"
+  },
+  "text": {
+    "file": "HP1.txt",
+    "bytes": 29667,
+    "chars": 29554,
+    "sha256": "ae688864994ad2ad28f26f296dd331bae51935feba7fa510b7ef6f543e11bee7",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 29554,
+      "truncated": false,
+      "pages": 12,
+      "runningHeadLinesRemoved": 12,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.3233879567365237,
+      "supplementaryCharsRemoved": 1536,
+      "ocrWords": 3563,
+      "ocrSplits": 0,
+      "ocrSplitShare": 0,
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 10,
+      "twoColumnPages": 0
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

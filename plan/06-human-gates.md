@@ -1165,6 +1165,8 @@ requires, before the first call.
 
 ### G-22 — Decide the R-19b outcome if the section detector misses its threshold
 
+> **Decided 2026-11-10 by the owner, in chat, written 2026-11-12 (`G-22`; `plan/00` §6 items 365(d) and 374):** keep whole-document chunking without section labels (what the tree does), so `summary.fullTextMode`'s default stays `auto` and `IMRAD_DETECTOR_VALIDATED` stays false; and improve the detector, measuring the improvement once on a held-out set of twenty new papers (`plan/04` `P3-T40` and `P3-T41`) rather than on the forty labels it is tuned against. *This decision was given on 2026-11-10 and not written down until 2026-11-12, when `P3-T40`'s report found it missing.*
+
 **Blocks:** Phase 3's ship; the shape of Phase 4's W4-1 and W4-4
 (`07-phase-4-trend-report.md` §5.1; `05-phases-4-7-outline.md` §1 until 2026-10-26).
 

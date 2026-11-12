@@ -1,0 +1,68 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "HP2",
+  "title": "Demographic changes and behavioural responses shape vulnerability to infectious disease outbreaks",
+  "venue": "PLOS Computational Biology (2026)",
+  "publisher": "plos",
+  "layout": {
+    "columnsExpected": 1,
+    "columnsExpectedBasis": "expected, not seen (PLOS layout; first-set PLOS papers were 1 column)",
+    "headingNumbering": "unknown",
+    "webHeadings": "not checked",
+    "notes": [
+      "headings and layout not checked in advance: the candidate list was drawn without opening any paper"
+    ]
+  },
+  "doi": "10.1371/journal.pcbi.1014319",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "PLOS article page links creativecommons.org/licenses/by/4.0; read 2026-11-11. PDF header check 200 application/pdf (2.1 MB). Page 1 of the extracted text also states the Creative Commons Attribution License (2026-11-12).",
+  "sourceUrl": "https://journals.plos.org/ploscompbiol/article/file?id=10.1371/journal.pcbi.1014319&type=printable",
+  "landingUrl": "https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1014319",
+  "recordedAt": "2026-11-12T09:30:10.494Z",
+  "extractedAt": "2026-11-12T09:30:10.494Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "HP2.pdf",
+    "bytes": 2061122,
+    "sha256": "212d5b2c931bfce083248d11f249c71fd016290033ae000825e9324320bb4fc1"
+  },
+  "text": {
+    "file": "HP2.txt",
+    "bytes": 47117,
+    "chars": 46900,
+    "sha256": "1eefc85c0456e2c66c2d9388d3032d6d593ae5659e870b2ce24e8d69309c9568",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 46900,
+      "truncated": false,
+      "pages": 16,
+      "runningHeadLinesRemoved": 16,
+      "gutterPages": 1,
+      "referencesCut": true,
+      "referencesShare": 0.13835959822602414,
+      "supplementaryCharsRemoved": 2253,
+      "ocrWords": 6615,
+      "ocrSplits": 0,
+      "ocrSplitShare": 0,
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 14,
+      "twoColumnPages": 0
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

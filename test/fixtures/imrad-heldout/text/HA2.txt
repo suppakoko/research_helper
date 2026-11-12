@@ -1,0 +1,127 @@
+Reverse Item Response Theory for Sparsity-Robust Ranking
+in Fragmented Cancer Drug-Response Matrices
+Jung Min Kang∗ Independent Researcher Seoul, South Korea
+May 2026
+Abstract
+We introduce reverse Item Response Theory (IRT) to pharmacogenomic drug-response analysis by treating cancer types as latent “subjects” with resistance ability and drugs as “items” with evasion difficulty. Applied to 242,036 drug sensitivity measurements from the Genomics of Drug Sensitivity in Cancer (GDSC2) database, the model estimates cancer-type-level invitro resistance and drug-level broad activity on a shared latent scale. Validation across four missingness regimes demonstrates that reverse IRT better recovers the full-data latent ranking than simple averaging, with advantages of ∆ρ= +0.089 to +0.095 at 60% missingness under MCAR, cancer-biased, and drug-biased sparsity. Held-out prediction confirms IRT achieves the best Brier score among five evaluated methods. Bootstrap confidence intervals show 19 of 28 cancer types have stable resistant/sensitive classifications. Cross-platform PRISM replication shows 82% directional agreement but weak rank-order correlation (ρ= 0.25), indicating the contribution is methodological robustness under fragmented evaluation, not a universal clinical resistance leaderboard.
+1 Introduction
+Large-scale pharmacogenomic screening efforts, including the Genomics of Drug Sensitivity in Cancer [GDSC;Yang et al.,2012,Iorio et al.,2016] and the PRISM Repurposing dataset [Corsello et al., 2020], have generated comprehensive drug-response matrices spanning hundreds of drugs and thousands of cancer cell lines. Existing approaches include ANOVA-based biomarker discovery [Garnett et al.,2012], machine learning prediction [Costello et al.,2014], deep learning [Liu et al.,2020], and recent work inferring general principles of drug sensitivity with experimental validation [Carli et al.,2025]. These approaches model each drug–cell-line pair independently or predict sensitivity from genomic features, without jointly estimating a cancer type’s global resistance and a drug’s global activity on a common measurement scale. Item Response Theory [IRT;Lord and Novick,1968,Baker and Kim,2004] provides this capability. IRT jointly estimates subject ability and item difficulty on a shared latent scale.Kang [2026a] demonstrated that IRT-based ranking outperforms simple averaging under sparse evaluation in AI benchmarking.Rodriguez et al.[2021] applied IRT to NLP evaluation, andPolo et al. [2024] used IRT for efficient LLM benchmarking.
+∗Email:gangjeongmin23@gmail.com
+1
+arXiv:2610.00002v1 [cs.LG] 16 May 2026
+
+
+We propose a conceptual inversion: cancer types become “subjects” with latent resistanceθ j, drugs become “items” with evasion difficultyb i:
+P(sensitive) =σ(b i −θ j) (1)
+The primary contribution is not the specific rankings—which are platform-dependent—but demonstrating that reverse IRT provides sparsity-robust ranking recovery in fragmented drug-response matrices. This is relevant because real-world therapeutic evidence matrices are sparse: drugs, indications, and trial populations are unevenly evaluated.
+2 Data
+GDSC2.Release 8.5 (October 2023), Wellcome Sanger Institute. Raw: 242,036 drug–cell-line measurements (969 cell lines, 286 drugs, 32 TCGA cancer types). After removing unclassified types (196,345 remaining) and excluding CLL (9 drugs, insufficient coverage), we aggregate to a 28×286 matrix with 7,821 cells (97.7% coverage). Binarization: sensitive if fitted LN IC50<3.297 (global median,≈27μM). A global threshold avoids drug-specific normalization; drug parameters reflect apparent broad in-vitro activity rather than absolute pharmacological potency. PRISM.Secondary dose-response dataset [Corsello et al.,2020]: 701,004 IC50 entries, 1,448 compounds, 499 cell lines. Cell lines mapped via DepMap lineage metadata, yielding 17 overlapping cancer types.
+3 Methods
+Reverse IRT.1PL model (Eq.1) with analytical gradients (finite-difference error<0.02), LBFGS-B optimization, Gaussian priors (σ2 = 4). Parameters: 28+286 = 314 for 7,821 observations. Sparsity test.Remove 20–60% of cells under four regimes: MCAR, cancer-biased (harder cancers lose more), drug-biased (weaker drugs lose more), pathway-block (entire pathways removed). Evaluate Spearmanρvs. full-data IRT ranking (15 seeds). Held-out prediction.20% cells held out, 10-fold CV. Brier score against cancer-only averaging, drug-only averaging, two-way additive (global + cancer effect + drug effect), logistic fixed effects, and reverse IRT. Bootstrap CIs.200 drug-panel (column) resamples for 95% CIs onθ. PRISM replication.Independent reverse IRT on PRISM; Spearmanρwith GDSC2 ranking.
+4 Results
+4.1 Sparsity Robustness
+Reverse IRT outperforms averaging across all regimes (Table1, Figure1). The advantage generally increases with missingness, except under pathway-block missingness where it remains positive but modest.
+4.2 Held-Out Prediction
+IRT achieves the best Brier score among all five evaluated methods (Table2, Figure2).
+
+
+Table 1: ∆ρ= IRT−averaging for recovery of the full-data IRT ranking under induced sparsity (mean±SD, 15 seeds).
+Regime 20% 40% 60%
+MCAR +0.028±0.003 +0.049±0.003 +0.089±0.008 Cancer-biased +0.025±0.002 +0.048±0.006 +0.095±0.016 Drug-biased +0.033±0.002 +0.066±0.005 +0.093±0.006 Pathway-block +0.008±0.004 +0.019±0.004 +0.018±0.008
+0 10 20 30 40 50 60 Missing data (%)
+0.00
+0.02
+0.04
+0.06
+0.08
+0.10
+0.12
+Δρ (IRT − Averaging)
+MCAR Cancer-biased Drug-biased Pathway-block
+Figure 1: Ranking recovery advantage (∆ρ) of reverse IRT over averaging under four missingness regimes. Error bars show±1 SD across 15 seeds. IRT outperforms averaging in all conditions.
+4.3 Cancer Resistance Ranking
+The ranking shows face-valid concordance with known clinical difficulty patterns (Figure3). Pancreatic adenocarcinoma (PAAD) ranks most resistant, directionally consistent with clinical difficulty (13.7% five-year relative survival; SEER). Hematological malignancies rank most sensitive, consistent with therapeutic advances in ALL (∼90% childhood cure rate; NCI PDQ). Nineteen of 28 cancer types have stable resistant/sensitive classifications (CIs not crossing zero); nine middle-tier cancers remain uncertain.
+4.4 External Replication
+PRISM replication yieldsρ= 0.252 (p= 0.33) with 82% directional agreement (14/17 cancers; Figure4). Directional agreement is strongest at the extremes. Three middle-tier cancers (STAD, HNSC, NB) show disagreement, consistent with the bootstrap uncertainty zone.
+
+
+Table 2: Mean Brier score across 10 held-out folds (lower = better).
+Method Brier ∆ vs IRT
+Cancer-only averaging 0.1338 +0.1195 Drug-only averaging 0.0340 +0.0197 Two-way additive 0.0176 +0.0032 Logistic fixed effects 0.0181 +0.0038 Reverse IRT 0.0143—
+0.00 0.02 0.04 0.06 0.08 0.10 0.12 0.14 0.16 Brier Score (lower = better)
+Cancer-only
+Drug-only
+Two-way additive
+Logistic FE
+Reverse IRT
+0.1338
+0.0340
+0.0176
+0.0181
+0.0143
+Figure 2: Held-out Brier score among five evaluated methods (10-fold CV). Reverse IRT outperforms all methods including the fairer two-way additive and logistic fixed-effect baselines.
+
+
+−2 −1 0 1 θ (In-Vitro Resistance)
+ALL
+DLBC
+LAML
+LCML
+MM
+MB
+NB
+HNSC
+STAD
+SCLC
+SKCM
+CESC
+ESCA
+COREAD
+BRCA
+KIRC
+BLCA
+LUSC
+LGG
+GBM
+THCA
+OV
+PRAD
+LIHC
+LUAD
+UCEC
+MESO
+PAAD
+Figure 3: Cancer in-vitro resistance with bootstrap 95% CIs (200 drug-panel resamples). Red: highly resistant (θ >0.5); orange: moderately resistant; light blue: moderately sensitive; dark blue: highly sensitive. CIs crossing zero indicate uncertain classification.
+
+
+−0.5 0.0 0.5 1.0 1.5 GDSC2 θ
+−0.5
+0.0
+0.5
+1.0
+1.5
+PRISM θ
+GBM
+HNSC
+KIRC
+LUAD
+NB
+PAAD
+STAD
+UCEC
+ρ = 0.252, p = 0.33 14/17 direction agree
+Direction agrees Direction disagrees
+Figure 4: GDSC2 vs PRISM resistance estimates. Blue: directional agreement; red crosses: disagreement. Only extremes and disagreements are labeled; full table in repository outputs. Weak rank-order correlation (ρ= 0.25) despite 82% directional agreement.
+
+
+5 Discussion
+The primary finding is methodological: reverse IRT provides sparsity-robust ranking recovery in drug-response matrices. The Evaluation Failure Scaling Law mechanism [Kang,2026a], originally demonstrated in AI benchmark evaluation, transfers to pharmacogenomic data. Limitations.(1) Cell-line in-vitro resistance does not equal clinical resistance. (2) Binarization at a global LN IC50 median discards continuous information. (3) The 1PL model assumes unidimensional resistance; the LLTM [Fischer,1973,Kang,2026b] with mutation features could decompose resistance into interpretable components. (4) PRISM replication is directionally consistent but rank-order weak, reflecting platform differences.
+6 Conclusion
+Reverse IRT provides a sparsity-robust framework for ranking cancer types and drugs on a shared latent scale. The method outperforms averaging under all tested missingness regimes, achieves the best held-out calibration among five evaluated methods, and produces rankings with face-valid clinical concordance. The contribution is methodological: when drug-response matrices become fragmented, reverse IRT preserves ranking structure better than averaging. Cross-platform replication confirms this is a ranking methodology contribution, not a universal biological discovery.
+Data and Code Availability
+GDSC2 Release 8.5 is available from CancerRxGene:
+https://www.cancerrxgene.org/downloads/bulk_download
+PRISM secondary dose-response and DepMap cell line metadata are available from DepMap:
+https://depmap.org/repurposing
+All code, validation scripts, output CSVs, and metadata:
+https://github.com/testofschool/reverse-irt-cancer

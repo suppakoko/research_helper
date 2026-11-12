@@ -3,7 +3,7 @@
 > **Generated from the task cards in `01`–`04`, `07` and `08`** (Phase 4's file, read since 2026-10-26, and
 > Phase 5's, read since 2026-11-01). If a row here disagrees with a card, the card wins — then regenerate
 > this file.
-> **Last updated:** 2026-11-12 · **217 tasks: 112 `DONE`, 105 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 40**, Phase 3 **0 of 39**, Phase 4 **0 of 25**, Phase 5 **0 of 32**. **The plan has grown from the 153 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25, plus the 30 Phase 5 was drafted and reviewed with on 2026-11-01; its 31st card, `P5-T31`, added when the owner's decisions were applied, counts as growth) to 217, so 64 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-11-12 · **219 tasks: 112 `DONE`, 107 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 40**, Phase 3 **0 of 41**, Phase 4 **0 of 25**, Phase 5 **0 of 32**. **The plan has grown from the 153 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25, plus the 30 Phase 5 was drafted and reviewed with on 2026-11-01; its 31st card, `P5-T31`, added when the owner's decisions were applied, counts as growth) to 219, so 66 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -24,11 +24,23 @@ Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0
 | 0 — Toolchain spike | 35 | 17.75 d | 17.75–25 d | 6–9 d (+97%) |
 | 1 — PubMed slice | 46 | 29.25 d | 29.25–41 d | 9–12 d (+144%) |
 | 2 — Multi-source + dedup | 40 | 35.00 d | 35.00–49 d | 12–16 d (+119%) |
-| 3 — LLM + summaries | 39 | 29.50 d | 29.5–41 d | 12–15 d (+97%) |
-| **Phases 0–3** | **160** | **111.50 d** | **111.50–156 d** | 39–52 d (+114% over the top of the band) |
+| 3 — LLM + summaries | 41 | 32.00 d | 32.0–45 d | 12–15 d (+113%) |
+| **Phases 0–3** | **162** | **114.00 d** | **114.00–160 d** | 39–52 d (+119% over the top of the band) |
 | 4 — Trend report | 25 | 25.75 d | 25.75–36 d | 8–11 d (+134%) |
 | 5 — Related + recommendations | 32 | 36.25 d | 36.25–51 d | 10–14 d (+159%) |
 | 6–7 | not decomposed | — | 36–50 d ⚠ **scaled, not measured** | 17–24 d |
+
+**2026-11-12, later: `P3-T40` and `P3-T41` added, 1.0 d and 1.5 d** (§6 item 374). The owner's `G-22` follow-up: a
+held-out set of twenty new papers (`P3-T40`), then the detector improvement measured on the first set and once on the
+held-out set (`P3-T41`); both estimates are the coordinator's and unmeasured, and both cards are gated. Phase 3 is **41
+cards and 32.00 d**, re-read from the cards' `Estimate` rows by script; 32.0 × 1.4 = 44.8 → 45, so the band is 32.0–45 d
+(was 29.5–41). The last column is 32 ÷ 15 = 2.133 → +113% (it read +97%), and the Phases 0–3 row is 114.00 ÷ 52 = 2.192 →
++119% (it read +114%). The project total is 114.00 + 25.75 + 36.25 + 36 = **212.00 d** low and 160 + 36 + 51 + 50 =
+**297 d** high (was 209.50–293), still ≈ 10–14 months at 21 working days (212.00 ÷ 21 ≈ 10.1; 297 ÷ 21 ≈ 14.1). The
+critical path P0 → P1 → P2 → P4 → P6 → P7 stays **143.75–201** because Phase 3 is not on it. The Phase 3 route
+P0 → P1 → P3 → P4 → P6 → P7 becomes 17.75 + 29.25 + 32.0 + 25.75 + 15 + 21 = **140.75** low and 25 + 41 + 45 + 36 + 21 +
+29 = **197** high (was 138.25–193), so Phase 2's lead over it shrinks from 5.5 d / 8 d to **3 d / 4 d**. Phase 5 waits on
+the longer of P2 and P3, still P2, so **Phase 5's float stays 4.5–6 d**. `docs/11` §1–§2 carry the rest.
 
 **2026-11-12: `P2-T40` added, 0.5 d** (§6 item 370(a)–(c)). The owner's decision of 2026-11-11 that the documents attached to
 one paper and the versions of one F1000Research article are linked, not merged; the estimate is the coordinator's and
@@ -413,7 +425,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | `P3-T20` | The 40-PDF IMRaD fixture set with ground-truth labels | `P3-T19` | 1.75 d | 🔒 |
 | `P3-T21` | IMRaD section detector | `P3-T19` | 1.5 d |  |
 | `P3-T22` | Detector accuracy harness, 85 % gate, degrade switch | `P3-T20`, `P3-T21` | 0.5 d | 🔒 |
-| `P3-T23` | Chunker: section-aware, flat, and single-shot paths | `P3-T13`, `P3-T21`, `P3-T22` | 0.75 d |  |
+| `P3-T23` | Chunker: section-aware, flat, and single-shot paths | `P3-T13`, `P3-T21`, `P3-T22`, `P3-T41` | 0.75 d |  |
 | `P3-T24` | Prompt registry with versioned prompt files | — | 0.5 d |  |
 | `P3-T25` | Per-paper summarizer, DR-1, and the grounding check | `P3-T12`, `P3-T16`, `P3-T23`, `P3-T24`, `P3-T26`, `P3-T32`, `P3-T36` | 1.25 d |  |
 | `P3-T26` | Summary cache keyed per `docs/06` §11.2 | `P3-T19`, `P3-T24`, `P3-T32`, `P3-T33` | 0.5 d |  |
@@ -421,7 +433,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | `P3-T28` | Item-pane AI summary section | `P3-T25`, `P3-T32`, `P3-T35` | 0.75 d |  |
 | `P3-T29` | Summarize-collection pipeline, notes, remove-notes command | `P3-T16`, `P3-T17`, `P3-T25`, `P3-T27`, `P3-T32`, `P3-T35` | 1.25 d |  |
 | `P3-T30` | LLM fixtures and contract tests | `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10`, `P3-T11`, `P3-T12` | 0.75 d | 🔒 |
-| `P3-T31` | Phase-3 acceptance run against the definition of done | `P3-T14`, `P3-T22`, `P3-T28`, `P3-T29`, `P3-T30`, `P3-T37` | 0.75 d | 🔒 |
+| `P3-T31` | Phase-3 acceptance run against the definition of done | `P3-T14`, `P3-T22`, `P3-T28`, `P3-T29`, `P3-T30`, `P3-T37`, `P3-T41` | 0.75 d | 🔒 |
 | `P3-T32` | Preference rows Phase 3 reads (`docs/07` §8.5) | — | 0.75 d |  |
 | `P3-T33` | Cache layer: interface, SQLite store, keys, migration | `P3-T32` | 1.0 d |  |
 | `P3-T34` | Job record, `job` table, queue and checkpoint | `P3-T36` | 1.0 d |  |
@@ -430,6 +442,8 @@ uses a synthetic API-key-shaped string, never a real key.
 | `P3-T37` | Detect a keyring-less Linux backend (gate `G-09`) | `P3-T02`, `P3-T03` | 0.25 d | 🔒 |
 | `P3-T38` | Keep an LLM 429's body; never retry a parse failure | `P3-T05` | 0.5 d |  |
 | `P3-T39` | Store money preferences as whole cents | `P3-T32` | 0.5 d |  |
+| `P3-T40` | Held-out IMRaD fixture set (20 papers): text, candidates… | `P3-T22` | 1.0 d | 🔒 |
+| `P3-T41` | Detector improvement, then one held-out measurement | `P3-T40` | 1.5 d | 🔒 |
 
 ### Phase 4
 
@@ -3277,6 +3291,12 @@ the caller of what the card builds; if it does not, the caller is added with a d
     - (a) Asked whether recall counts as settled (item 372(e)), the owner chose "지금 수치로 끝냄": the measured 0.9429 over 35 true duplicates meets the 0.90 target, the conference-paper-and-journal-version case (both misses) is recorded as a known limit, and the engine stays as it is. Written into `docs/02` §11.3 (note "Measured 2026-11-12"). With no false merge in the 90 labelled pairs, the measurement for `G-17` is complete; only the owner marks the gate done.
     - (b) The held-out set for the detector re-measurement (G-22 follow-up): of the ten papers the coordinator was to download, seven arrived (HP1, HP2, HN1, HN2, HA1, HA2, HX1; each checked to begin with "%PDF-", sizes and SHA-256 recorded outside the repo). Springer answered "not found" for HS1 and HS2; HX2 came with a 436-byte non-PDF header in front of an otherwise normal PDF. The owner chose "직접 받기 + 머리말 제거": the owner downloads HS1 and HS2 by browser with the other ten, and the coordinator downloaded HX2 again, kept bytes 436 onward (the file now begins "%PDF-1.6") and recorded both checksums. The files stay in `D:\KIST\projects\research_helper-heldout\`, outside the repo; the owner's list with addresses is `owner-downloads.md` there.
     - (c) Next: once the owner's twelve papers are in, card the detector improvement and the held-out measurement; the held-out labels are given in chat, never pre-filled by the detector or a model.
+374. **The held-out set is complete, and its two cards, 2026-11-12** (G-22 follow-up, item 373(b)–(c); `plan/04` `P3-T40` and `P3-T41`).
+    - (a) **DECIDED 2026-11-12 (coordinator, under item 313):** the owner did not download HO2, so the spare HO3 (Nucleic Acids Research, the same publisher family, OUP) replaces it. The held-out set is these 20: HE1 HE2 HS1 HS2 HW1 HW2 HO1 HO3 HP1 HP2 HN1 HN2 HI1 HI2 HA1 HA2 HB1 HB2 HX1 HX2.
+    - (b) All 20 PDFs are in `D:\KIST\projects\research_helper-heldout\`, outside the repo: the coordinator's eight of item 373(b) (HX2 with its 436-byte header cut) and the owner's twelve, downloaded by browser. The spares HE3, HI3 and HX3 are in the folder too and are not used.
+    - (c) **Carded:** `P3-T40` (1.0 d, gated), the held-out fixture set: text extracted inside Zotero as for the first set, candidate heading lines from the plain line-shape rule, a `labels/` directory filled only by the owner's chat decisions, and `scripts/measure-imrad.ts` refusing the set without an explicit final-measurement flag; and `P3-T41` (1.5 d, gated at `G-22` if the result is below 85 %), the detector improvement for the losses of item 365(b), tuned and measured on the first set and reported as tuned, then measured once on the held-out set, the figure `IMRAD_DETECTOR_VALIDATED` derives from. Edges: `P3-T22` → `P3-T40` → `P3-T41` → `P3-T23`, `P3-T31`. Phase 3 is 41 cards and 32.0 d (32.0–45 d), propagated to the five places in `plan/README.md` §7 (§1 above).
+    - (d) **2026-11-12, later (`P3-T40`, read on the PDF): `HI1.pdf` is not HI1's paper.** Its first page is Nucleic Acids Research, doi 10.1093/nar/gkag934, "Size and sequence variation of the Lid…" (OUP, CC BY 4.0), which is HO2's paper; the IEEE paper HI1 names is not in the folder. So (b)'s "all 20 PDFs are in" is wrong: 19 are, and the held-out set in `test/fixtures/imrad-heldout/` holds those 19, with HI1 pending. It also means HO2 was downloaded after all (as `HI1.pdf`), so (a)'s premise needs a second look. **Open, for the owner and the coordinator:** download HI1's PDF (and rename the present file `HO2.pdf`), or let the spare HI3 stand in; and whether HO2 or HO3 is the OUP paper. The spares HE3, HI3 and HX3 were not opened, so their files are not checked either.
+    - (e) **The owner's `G-22` decision of 2026-11-10 was never written down** (`P3-T40`'s report): keep whole-document chunking without section labels, and improve the detector and measure it on new papers. Written 2026-11-12 into `docs/06` §4.3, `docs/11` R-19b, `plan/06` `G-22` and `docs/spikes/imrad-accuracy-report.md`, each saying it was written late.
 
 ## 7. Regenerating this file
 

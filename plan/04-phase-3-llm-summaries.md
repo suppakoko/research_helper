@@ -65,8 +65,11 @@ promises tier 3; the open line on `P3-T03` covers the documents.)
 **Risks retired.** R-4, R-5, R-6 (partly), **R-9** (retired by design under D5), **R-19** (quality
 gate + cost preview), **R-19b** (detector validated, or `auto` degraded to whole-document chunking).
 
-**Effort.** **29.5 developer-days over 39 cards** (§3), so the published band is
-**29.5–41 d** (29.5 × 1.4 = 41.3 → 41). *Updated 2026-10-23:* `P3-T21` was re-estimated 0.5 → 1.5 d
+**Effort.** **32.0 developer-days over 41 cards** (§3), so the published band is
+**32.0–45 d** (32.0 × 1.4 = 44.8 → 45). *Updated 2026-11-12:* `P3-T40` (1.0 d) and `P3-T41` (1.5 d),
+the held-out IMRaD set and the detector improvement measured once on it (`plan/00` §6 item 374), moved
+it from 29.5–41 d over 39 cards; propagated the same day to the five places in `plan/README.md` §7,
+with the sum re-read from the cards by script, and `npm run index:derive` was run. *Updated 2026-10-23:* `P3-T21` was re-estimated 0.5 → 1.5 d
 (owner, `plan/00` §6 item 274(d)), moving it from 28.5–40 d; propagated the same day to the five
 places in `plan/README.md` §7, with the sums re-read from the cards by script, and
 `npm run index:derive` was run. *Updated 2026-10-20:* `P3-T38` and `P3-T39` (0.5 d each,
@@ -210,7 +213,9 @@ And two that `docs/11` states as deliverables but which gate the phase as hard:
 | `P3-T37` | Detect a keyring-less Linux backend (gate `G-09`) | 0.25 | **Yes** |
 | `P3-T38` | Keep an LLM 429's body; never retry a parse failure | 0.5 | none |
 | `P3-T39` | Store money preferences as whole cents | 0.5 | none |
-| | **Total** | **29.5** | 8 gates |
+| `P3-T40` | Held-out IMRaD fixture set (20 papers): text, candidates, sealed labels | 1.0 | **Yes** |
+| `P3-T41` | Detector improvement, then one held-out measurement | 1.5 | **Yes** |
+| | **Total** | **32.0** | 10 gates |
 
 **Entry points** (no `Depends on`): `P3-T01`, `P3-T05`, `P3-T24`, `P3-T32`, `P3-T36`. The owner
 chose `P3-T01` and `P3-T24` (without its old step 7) to start first; `P3-T32` is the next natural
@@ -2099,7 +2104,7 @@ attachment folder (item 274(d)).
 | **ID** | `P3-T22` |
 | **State** | `TODO` |
 | **Depends on** | `P3-T20`, `P3-T21` |
-| **Blocks** | `P3-T23`, `P3-T31` |
+| **Blocks** | `P3-T23`, `P3-T31`, `P3-T40` |
 | **Retires** | `R-19b` |
 | **Implements** | `FR-22` |
 | **Estimate** | 0.5 d |
@@ -2155,6 +2160,10 @@ Below 85 %: stop at `G-22` with the overall and per-family figures.
 **Notes.** If the owner reverts the default, that changes D7 and therefore `docs/00` §3, `docs/06`
 §5.4 and `docs/07` §8.5 — the owner's document change, not a quiet code change.
 
+> **2026-11-12 (`plan/00` §6 item 374):** the `G-22` follow-up is carded as `P3-T40` (a held-out set of
+> twenty papers) and `P3-T41` (the detector improvement and one held-out measurement), so this card now
+> also blocks `P3-T40`.
+
 ---
 
 ### P3-T23 — Chunker: section-aware, flat, and single-shot paths
@@ -2163,7 +2172,7 @@ Below 85 %: stop at `G-22` with the overall and per-family figures.
 |---|---|
 | **ID** | `P3-T23` |
 | **State** | `TODO` |
-| **Depends on** | `P3-T13`, `P3-T21`, `P3-T22` |
+| **Depends on** | `P3-T13`, `P3-T21`, `P3-T22`, `P3-T41` |
 | **Blocks** | `P3-T25` |
 | **Retires** | part of `R-19` |
 | **Implements** | part of `FR-22`, part of `FR-34` |
@@ -2247,6 +2256,9 @@ npm run typecheck && npm run test:unit -- llm/chunking
 > detector against the owner's labels, setting `IMRAD_DETECTOR_VALIDATED` (and so whether `auto` may
 > pass `sectionAware: true` to this chunker or must degrade to the flat path), and gate `G-22`.
 > Nothing here assumes the detector passes 85 %: the chunker takes `sectionAware` as given.
+>
+> **2026-11-12 (`plan/00` §6 item 374):** `P3-T41` joins **Depends on** for the same reason as
+> `P3-T22`: after it, `IMRAD_DETECTOR_VALIDATED` derives from the held-out measurement.
 >
 > **As built 2026-10-27:** `planChunks(source, model, promptId, options)` — `options` carries the
 > prompt registry (`max_tokens` through `resolveMaxTokens`; optional since item 299(b), when the
@@ -3029,7 +3041,7 @@ test/contract`) already runs the new files. Report: `plan/reports/P3-T30.md` onc
 |---|---|
 | **ID** | `P3-T31` |
 | **State** | `TODO` |
-| **Depends on** | `P3-T14`, `P3-T22`, `P3-T28`, `P3-T29`, `P3-T30`, `P3-T37` |
+| **Depends on** | `P3-T14`, `P3-T22`, `P3-T28`, `P3-T29`, `P3-T30`, `P3-T37`, `P3-T41` |
 | **Blocks** | none |
 | **Retires** | closes `R-4`, `R-5`, `R-9`, `R-19`, `R-19b`; part of `R-6` |
 | **Implements** | `NFR-4`, `NFR-5`, `NFR-16`, `FR-23`, `FR-24` |
@@ -3103,6 +3115,9 @@ Then the manual steps above on a real Zotero 10 profile, stopping at each gate.
 **Notes.** Rewritten 2026-10-20: the old step 6 grepped for each key's first eight characters,
 which required the executor to hold them, and generated a debug bundle that does not exist until
 Phase 7. Only the owner changes a card's state to `DONE`.
+
+> **2026-11-12 (`plan/00` §6 item 374):** `P3-T41` joins **Depends on**, because the definition of
+> done's detector line is decided by its held-out measurement.
 
 ---
 
@@ -3827,15 +3842,210 @@ dollars; the conversion from cents is theirs.
 
 ---
 
+### P3-T40 — Held-out IMRaD fixture set (20 papers): text, candidates, sealed labels
+
+| Field | Value |
+|---|---|
+| **ID** | `P3-T40` |
+| **State** | `TODO` |
+| **Depends on** | `P3-T22` |
+| **Blocks** | `P3-T41` |
+| **Retires** | part of `R-19b` (with `P3-T41`) |
+| **Implements** | part of `FR-22` |
+| **Estimate** | 1.0 d |
+| **Human gate** | **Yes** — the `G-22` follow-up: the owner labels the twenty papers' sections in chat, four at a time, by the rules of `plan/00` §6 item 364(a)–(f). The agent shows heading lines from `candidate-headings.json` and the text around them, never anything from the detector, then stops and waits. |
+
+**Goal.** Twenty papers that are not in the first set are committed as text under
+`test/fixtures/imrad-heldout/`, with candidate heading lines and a `labels/` directory that only the
+owner's chat decisions fill, and `scripts/measure-imrad.ts` refuses to score that set unless it is
+told this is the one final measurement.
+
+**Why this is a card.** `P3-T22` measured the detector at 68.00 % against the 85 % bar (`plan/00`
+§6 item 365(a)); improving it against the same 40 labels would measure the tuning, not the detector
+(item 365(d)). The owner chose a held-out set of about twenty new papers (items 373(b)–(c), 374).
+
+**Read first.**
+- `plan/00-task-index.md` §6 item 374 — the twenty papers, the HO3 swap, the three unused spares
+- `plan/00-task-index.md` §6 item 373(b)–(c) — where the PDFs are, HX2's trimmed header, and that the
+  held-out labels come from the owner in chat, never pre-filled by the detector or a model
+- `test/fixtures/imrad/README.md` "How the text is made, and why it needs Zotero" — the extraction
+  the held-out text must be made by, and why it runs inside Zotero
+- `test/fixtures/imrad/README.md` "Licences and attribution" — the attribution a CC BY text needs
+- `docs/06-summarization-and-trend-report.md` §4.3, note "Decided 2026-10-24" — the ground-truth
+  format: start offsets into the committed text
+- `plan/00-task-index.md` §6 item 364(a)–(f) — the labelling rules the owner applies again
+
+**Files.**
+- modify `scripts/build-imrad-fixtures.ts` (a `--set` selector over every command)
+- modify `scripts/measure-imrad.ts` (`--set`, the refusal, the final-measurement flag)
+- create `test/fixtures/imrad-heldout/manifest.json`
+- create `test/fixtures/imrad-heldout/text/` (`<id>.txt` and `<id>_meta.json` for each of the twenty)
+- create `test/fixtures/imrad-heldout/candidate-headings.json`
+- create `test/fixtures/imrad-heldout/labels/.gitkeep` (the owner's labels are written into this
+  directory later, only by `ingest --set heldout`)
+- create `test/fixtures/imrad-heldout/README.md`
+- create `test/unit/pipeline/imradHeldout.test.ts`
+- create `D:\KIST\projects\research_helper-heldout\_log.txt` (outside the repository, never committed)
+
+**Do.**
+1. Give `scripts/build-imrad-fixtures.ts` a set selector, `--set first` or `--set heldout`, on
+   `extract`, `candidates`, `ingest` and `validate`. With no `--set` the first set is used and
+   everything it writes stays byte-for-byte as before.
+2. Write the PDF folder's `_log.txt` for the twenty, in the first set's format
+   (`parseDownloadLog`), from each file's real size and SHA-256. HX2's line is for the trimmed file.
+3. Build `manifest.json` from the approved candidate list with the first set's fields; map each
+   family to the first set's publisher name and each licence to its `REDISTRIBUTABLE_LICENCES`
+   spelling; set `layout.webHeadings` to "not checked" (the owner does not check web lists) and
+   `hasImradStructure` to `null`.
+4. Run `extract --set heldout` inside Zotero, with no test-profile Zotero running and not while the
+   integration suite runs.
+5. For each paper whose licence was not confirmed on the publisher page, read page 1 of its
+   extracted text for the licence statement and record what it says in `licenceEvidence`. If a text
+   shows a licence that does not allow redistribution, do not commit that text; stop and report the
+   paper.
+6. Run `candidates --set heldout` and `validate --set heldout`.
+7. In `scripts/measure-imrad.ts`, refuse `--set heldout` unless `--final-heldout-measurement` is
+   also given. **That flag may be used only by `P3-T41`, once, after its detector change is
+   committed.**
+8. Add `test/unit/pipeline/imradHeldout.test.ts`: the held-out manifest, its text and sidecar
+   hashes, no overlap with the first set, the committed candidate lines, and the refusal (tested with
+   a test double, so no detector runs on the held-out text).
+9. At the gate, the owner labels in chat; the decisions are ingested with `ingest --set heldout`.
+
+**Do NOT.**
+- Do **not** run the detector or `measure-imrad.ts` on the held-out set, and do not look at detector
+  output for its papers. The in-Zotero half already discards it (`extract.spec.ts`); leave it so.
+- Do **not** let code or a model write a label. Candidate headings come from the plain line-shape
+  rule `isCandidateLine`, never from the detector.
+- Do **not** copy a PDF into the repository.
+- Do **not** add the spares HE3, HI3 and HX3, or HO2, which was not downloaded.
+- Do **not** change any file under `test/fixtures/imrad/`.
+
+**Done when.**
+- [ ] `manifest.json` lists exactly HE1 HE2 HS1 HS2 HW1 HW2 HO1 HO3 HP1 HP2 HN1 HN2 HI1 HI2 HA1
+      HA2 HB1 HB2 HX1 HX2, and `validate --set heldout` exits 0.
+- [ ] `candidates` and `validate` with no `--set` leave `test/fixtures/imrad/` unchanged
+      (`git status` is clean there).
+- [ ] No held-out paper shares a DOI, another identifier or a title with the first set.
+- [ ] `measure-imrad.ts --set heldout` without the flag exits non-zero, and the test shows no
+      detector was called.
+- [ ] After the gate: `labels/` holds the owner's twenty files, written by `ingest --set heldout`,
+      and `validate --set heldout` still exits 0.
+- [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` exit 0; three consecutive
+      integration runs are clean.
+
+**Verify with.**
+```bash
+npx tsx scripts/build-imrad-fixtures.ts validate --set heldout && npx tsx scripts/build-imrad-fixtures.ts validate && npm run typecheck && npm run test:unit -- imradHeldout imradFixtureManifest
+```
+
+**Notes.** Created 2026-11-12 from `plan/00` §6 item 374; the estimate is the coordinator's and
+unmeasured. **Callers (rule 10):** `main` in `scripts/build-imrad-fixtures.ts` is run by hand; the
+set table and `validateFixtureSet` it exports are imported by `test/unit/pipeline/imradHeldout.test.ts`
+and by `scripts/measure-imrad.ts`. The final-measurement flag's only caller is `P3-T41`, by hand.
+**Constructing file:** `scripts/build-imrad-fixtures.ts` writes every file under
+`test/fixtures/imrad-heldout/` except `manifest.json`'s first version and `README.md`, which this
+card writes from the approved candidate list. "Sealed" means the labels exist only from the owner and
+are read by nothing but `measure-imrad.ts` under the flag.
+
+**2026-11-12, later (`plan/00` §6 item 374(d)):** the set holds **19** papers, not twenty. `HI1.pdf`
+holds HO2's paper, so HI1 is left out until its right PDF is in; where this card says "twenty",
+read "the papers of the set". The gate's labelling and the finishing conditions apply to the
+papers the set holds when the owner labels.
+
+---
+
+### P3-T41 — Detector improvement, then one held-out measurement
+
+| Field | Value |
+|---|---|
+| **ID** | `P3-T41` |
+| **State** | `TODO` |
+| **Depends on** | `P3-T40` |
+| **Blocks** | `P3-T23`, `P3-T31` |
+| **Retires** | `R-19b` (with `P3-T22`) |
+| **Implements** | `FR-22` |
+| **Estimate** | 1.5 d |
+| **Human gate** | **Yes** — gate `G-22`, if the held-out figure is below 85 %: the agent stops, reports the first-set figure (tuned) and the held-out figure (not tuned) separately, by publisher family, and waits for the owner. |
+
+**Goal.** The detector recovers the losses `P3-T22` named, measured on the first set, and one
+measurement on the held-out set, recorded with its date and set, is what `IMRAD_DETECTOR_VALIDATED`
+derives from.
+
+**Read first.**
+- `plan/00-task-index.md` §6 item 365(b) — the losses to fix
+- `docs/spikes/imrad-accuracy-report.md` — the same losses by paper and line
+- `docs/06-summarization-and-trend-report.md` §4.3 — the heading table and the "As built
+  2026-10-23" note, which the fix changes and which are written first
+- `docs/06-summarization-and-trend-report.md` §4.3, note "DECIDED 2026-11-10 (coordinator…)" — the
+  scoring rules, which do not change
+- `plan/00-task-index.md` §6 item 364(a) — the owner's name rule; a new table row must agree with it
+- `scripts/measure-imrad.ts` module note — the final-measurement flag and when it may be used
+
+**Files.**
+- modify `src/pipeline/summarize/imrad.ts` (`IMRAD_HEADING_TABLE`, the line scan, `IMRAD_MEASUREMENT`,
+  a held-out record, and `IMRAD_DETECTOR_VALIDATED`'s derivation)
+- modify `scripts/measure-imrad.ts` (the held-out run checks against the held-out record)
+- modify `test/unit/pipeline/imrad.test.ts`
+- modify `test/unit/pipeline/imradAccuracy.test.ts`
+- modify `docs/06-summarization-and-trend-report.md` (§4.3)
+- modify `docs/spikes/imrad-accuracy-report.md`
+
+**Do.**
+1. Write each detector rule change into `docs/06` §4.3 as a dated note before coding it.
+2. Fix the losses of item 365(b), measuring **on the first set only**
+   (`npx tsx scripts/measure-imrad.ts`). This is tuning against the first set's labels and is
+   reported as tuning.
+3. Set `IMRAD_MEASUREMENT` to the first set's new figure, so the regression test pins it.
+4. Stop for the coordinator to commit the detector change. Then measure **once** on the held-out
+   set: `npx tsx scripts/measure-imrad.ts --set heldout --final-heldout-measurement`.
+5. Record that figure in `src/pipeline/summarize/imrad.ts` with its date, its set and the commit it
+   measured, and derive `IMRAD_DETECTOR_VALIDATED` from it against `IMRAD_ACCURACY_BAR`.
+6. Report the first-set figure (tuned) and the held-out figure (not tuned) separately, in
+   `docs/spikes/imrad-accuracy-report.md` and the card report.
+
+**Do NOT.**
+- Do **not** open the held-out texts, candidate lines or labels while changing the detector, and do
+  not run anything on them but step 4's one measurement.
+- Do **not** tune and re-measure on the held-out set a second time without the owner's decision.
+- Do **not** derive `IMRAD_DETECTOR_VALIDATED` from the tuned first-set figure.
+- Do **not** change the scoring rules, the bar or any label.
+
+**Done when.**
+- [ ] The first-set figure is recorded as tuned, and the regression test pins it.
+- [ ] The held-out set was measured exactly once, after the detector commit; the figure, date, set
+      and commit are in `imrad.ts` and the spike report.
+- [ ] `IMRAD_DETECTOR_VALIDATED` derives from the held-out record, and a unit test says so.
+- [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` exit 0; three consecutive
+      integration runs are clean.
+
+**Verify with.**
+```bash
+npm run typecheck && npm run test:unit -- imrad && npx tsx scripts/measure-imrad.ts
+```
+The held-out measurement of step 4 is run once, by hand, and is not part of this command.
+Below 85 % on the held-out set: stop at `G-22`.
+
+**Notes.** Created 2026-11-12 from `plan/00` §6 item 374; the estimate is the coordinator's and
+unmeasured. It blocks the two cards `P3-T22` blocks that are still open, because both read the
+outcome: `P3-T23` (whether `auto` may pass `sectionAware: true`) and `P3-T31` (the definition of
+done's detector line). **Callers (rule 10):** `IMRAD_DETECTOR_VALIDATED` is read by `acquireSource`
+(`src/pipeline/summarize/acquire.ts`) and passed to `summarizeItem` as `imradDetectorValidated` by
+`summarizePipeline.ts` and `trendReportPipeline.ts`; the detector is called by `acquireSource`.
+**Constructing file:** `src/pipeline/summarize/imrad.ts` holds the detector and both records.
+
+---
+
 ## 3. Estimate reconciliation
 
 | | Developer-days |
 |---|---|
-| Sum of the 39 task cards (2026-10-23, after `P3-T21`'s re-estimate) | **29.5** |
+| Sum of the 41 task cards (2026-11-12, after `P3-T40` and `P3-T41`) | **32.0** |
+| Sum of the 39 task cards (2026-10-23, after `P3-T21`'s re-estimate) | 29.5 |
 | Sum of the 39 task cards (2026-10-20, after `P3-T38` and `P3-T39`) | 28.5 |
 | Sum of the 37 task cards (2026-10-20, the re-carding) | 27.5 |
 | Previous sum (31 cards, 2026-09-09) | 23.5 |
-| `docs/11` §1 Phase 3 band, published 2026-10-23 | **29.5–41** (29.5 × 1.4 = 41.3 → 41; was 28.5–40 from 2026-10-20, and 27.5–39 earlier that day) |
+| `docs/11` §1 Phase 3 band, published 2026-11-12 | **32.0–45** (32.0 × 1.4 = 44.8 → 45; was 29.5–41 from 2026-10-23, 28.5–40 from 2026-10-20, and 27.5–39 earlier that day) |
 
 **Re-estimated 2026-10-20, with the revision of every card** (`plan/00` §6 item 234). Three
 movements:
@@ -3874,6 +4084,14 @@ ruled for the outline-based detector (item 271(c)) and the card's agent measured
 over 39 cards, re-read from the cards' `Estimate` rows by script; 29.5 × 1.4 = 41.3 → 41. The card
 is ungated, so the gate count stays 8, and no edge changed. Propagated the same day to the five places
 in `plan/README.md` §7.
+
+**Two cards added 2026-11-12:** `P3-T40` (1.0 d; the held-out IMRaD fixture set of twenty papers) and
+`P3-T41` (1.5 d; the detector improvement, measured on the first set and then once on the held-out set),
+both from `plan/00` §6 item 374, the `G-22` follow-up. Both estimates are the coordinator's and
+unmeasured. 29.5 + 1.0 + 1.5 = **32.0 d** over 41 cards, re-read from the cards' `Estimate` rows by
+script; 32.0 × 1.4 = 44.8 → 45. Both are gated, so the gate count rises from 8 to 10. New edges:
+`P3-T22` → `P3-T40` → `P3-T41` → `P3-T23`, `P3-T31`. Propagated the same day to the five places in
+`plan/README.md` §7.
 
 The estimates exclude review latency, waiting for key approvals, and the owner's time at gates
 (`G-12`'s adjudication in particular), per `plan/README.md` §7.

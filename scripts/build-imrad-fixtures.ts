@@ -28,7 +28,23 @@
  *    labels file. The unit test (`test/unit/pipeline/imradFixtureManifest
  *    .test.ts`) runs the same checks.
  *
+ * **Two sets (`P3-T40`).** Every command takes `--set first` (the default:
+ * the 40 papers in `test/fixtures/imrad/`, written byte for byte as before
+ * the selector existed) or `--set heldout` (the papers in
+ * `test/fixtures/imrad-heldout/`, `plan/00` §6 item 374, kept apart from the
+ * detector work of `P3-T41` until its one final measurement). Both sets have
+ * the same layout and are checked by the same rules; {@link FIXTURE_SETS}
+ * names them.
+ *
  * **What it never does.** It never writes a label of its own: every label in
+@@END
+@@@OLD
+ * npx tsx scripts/build-imrad-fixtures.ts validate
+ * ```
+@@@NEW
+ * npx tsx scripts/build-imrad-fixtures.ts validate
+ * npx tsx scripts/build-imrad-fixtures.ts validate --set heldout              # any command, held-out set
+ * ```
  * `labels/` is one the owner set on the page. It never reads the detector's
  * output (the in-Zotero half discards it), never calls a model, never copies a
  * PDF into the repository, and never downloads anything.
@@ -86,6 +102,62 @@ const REPO_ROOT = resolve(HERE, "..");
 
 /** `test/fixtures/imrad/`, the fixture directory the card names. */
 export const IMRAD_DIR = resolve(REPO_ROOT, "test/fixtures/imrad");
+/** `test/fixtures/imrad-heldout/`, the held-out set (`P3-T40`). */
+export const IMRAD_HELDOUT_DIR = resolve(
+  REPO_ROOT,
+  "test/fixtures/imrad-heldout",
+);
+
+/** The names `--set` accepts. */
+export const FIXTURE_SET_NAMES = ["first", "heldout"] as const;
+export type FixtureSetName = (typeof FIXTURE_SET_NAMES)[number];
+
+/** One fixture set: where it lives and how its commands are spelled. */
+export interface FixtureSet {
+  readonly name: FixtureSetName;
+  /** Absolute path of the set's directory. */
+  readonly dir: string;
+  /** The same directory relative to the repository, with `/` separators. */
+  readonly path: string;
+  /** What a command line adds to select it (empty for the default set). */
+  readonly args: string;
+}
+
+/**
+ * The two sets. `first` is `P3-T20`'s 40 papers and the default, so every
+ * command without `--set` behaves exactly as before the selector existed;
+ * `heldout` is `P3-T40`'s papers (`plan/00` §6 item 374).
+ */
+export const FIXTURE_SETS: Readonly<Record<FixtureSetName, FixtureSet>> = {
+  first: {
+    name: "first",
+    dir: IMRAD_DIR,
+    path: "test/fixtures/imrad",
+    args: "",
+  },
+  heldout: {
+    name: "heldout",
+    dir: IMRAD_HELDOUT_DIR,
+    path: "test/fixtures/imrad-heldout",
+    args: " --set heldout",
+  },
+};
+
+/**
+ * The set a command line selects: `--set <name>`, or the first set when
+ * `--set` is absent. A string is the reason the selection is refused.
+ */
+export function fixtureSetFromArgs(
+  args: readonly string[],
+): FixtureSet | string {
+  const i = args.indexOf("--set");
+  if (i === -1) return FIXTURE_SETS.first;
+  const name = args[i + 1];
+  if (!FIXTURE_SET_NAMES.includes(name as FixtureSetName)) {
+    return `--set needs one of ${FIXTURE_SET_NAMES.join(", ")}; got ${String(name)}`;
+  }
+  return FIXTURE_SETS[name as FixtureSetName];
+}
 export const MANIFEST_FILE = "manifest.json";
 export const CANDIDATES_FILE = "candidate-headings.json";
 export const TEXT_DIR = "text";
@@ -323,10 +395,11 @@ export const CANDIDATE_RULE_TEXT: readonly string[] = [
 
 export function buildCandidatesFile(
   texts: readonly { id: string; text: string }[],
+  set: FixtureSet = FIXTURE_SETS.first,
 ): CandidatesFile {
   return {
     schema: "imrad-candidate-headings-v1",
-    generatedBy: `npx tsx ${SCRIPT} candidates`,
+    generatedBy: `npx tsx ${SCRIPT} candidates${set.args}`,
     rule: CANDIDATE_RULE_TEXT,
     papers: texts.map(({ id, text }) => {
       const candidates = candidateLines(text);
@@ -998,6 +1071,7 @@ function runHarness(env: Record<string, string>): Promise<number> {
 }
 
 interface ExtractOptions {
+  readonly set: FixtureSet;
   readonly pdfDir: string;
   readonly only: readonly string[] | null;
   readonly check: boolean;
@@ -1012,7 +1086,8 @@ async function packageVersion(): Promise<string> {
 }
 
 async function extract(options: ExtractOptions): Promise<number> {
-  const manifest = await readManifest();
+  const dir = options.set.dir;
+  const manifest = await readManifest(dir);
   const papers = manifest.papers.filter(
     (p) => options.only === null || options.only.includes(p.id),
   );
@@ -1076,7 +1151,7 @@ async function extract(options: ExtractOptions): Promise<number> {
     let differ = 0;
     for (const paper of papers) {
       const fresh = await readFile(join(work, `${paper.id}.txt`));
-      const committedPath = join(IMRAD_DIR, paper.textFile);
+      const committedPath = join(dir, paper.textFile);
       const committed = existsSync(committedPath)
         ? await readFile(committedPath)
         : null;
@@ -1095,7 +1170,7 @@ async function extract(options: ExtractOptions): Promise<number> {
 
   const version = await packageVersion();
   const now = new Date().toISOString();
-  await mkdir(join(IMRAD_DIR, TEXT_DIR), { recursive: true });
+  await mkdir(join(dir, TEXT_DIR), { recursive: true });
   const updated = new Map<string, ManifestPaper>();
   for (const paper of papers) {
     const bytes = await readFile(join(work, `${paper.id}.txt`));
@@ -1104,7 +1179,7 @@ async function extract(options: ExtractOptions): Promise<number> {
     ) as RunInfo;
     const text = bytes.toString("utf8");
     const textSha = sha256Hex(bytes);
-    const metaPath = join(IMRAD_DIR, TEXT_DIR, `${paper.id}${META_SUFFIX}`);
+    const metaPath = join(dir, TEXT_DIR, `${paper.id}${META_SUFFIX}`);
     let extractedAt = now;
     let tool: Record<string, unknown> = {
       script: SCRIPT,
@@ -1162,7 +1237,7 @@ async function extract(options: ExtractOptions): Promise<number> {
         "none: the text is the paper's own published text under the licence above",
       ],
     };
-    await writeFile(join(IMRAD_DIR, paper.textFile), bytes);
+    await writeFile(join(dir, paper.textFile), bytes);
     await writeFile(metaPath, toJsonText(meta), "utf8");
     updated.set(paper.id, {
       ...paper,
@@ -1177,7 +1252,7 @@ async function extract(options: ExtractOptions): Promise<number> {
     );
   }
   await writeFile(
-    join(IMRAD_DIR, MANIFEST_FILE),
+    join(dir, MANIFEST_FILE),
     toJsonText({
       ...manifest,
       papers: manifest.papers.map((p) => updated.get(p.id) ?? p),
@@ -1185,22 +1260,22 @@ async function extract(options: ExtractOptions): Promise<number> {
     "utf8",
   );
   if (!options.keepWork) await rm(work, { recursive: true, force: true });
-  return writeCandidates();
+  return writeCandidates(options.set);
 }
 
 // ---------------------------------------------------------------------------
 // 9. candidates, ingest, validate
 // ---------------------------------------------------------------------------
 
-async function writeCandidates(): Promise<number> {
-  const manifest = await readManifest();
+async function writeCandidates(set: FixtureSet): Promise<number> {
+  const manifest = await readManifest(set.dir);
   const texts: { id: string; text: string }[] = [];
   for (const paper of manifest.papers) {
-    if (!existsSync(join(IMRAD_DIR, paper.textFile))) continue;
-    texts.push({ id: paper.id, text: await readText(paper.id) });
+    if (!existsSync(join(set.dir, paper.textFile))) continue;
+    texts.push({ id: paper.id, text: await readText(paper.id, set.dir) });
   }
-  const file = buildCandidatesFile(texts);
-  await writeFile(join(IMRAD_DIR, CANDIDATES_FILE), toJsonText(file), "utf8");
+  const file = buildCandidatesFile(texts, set);
+  await writeFile(join(set.dir, CANDIDATES_FILE), toJsonText(file), "utf8");
   for (const paper of file.papers) {
     process.stdout.write(
       `${paper.id}: ${paper.candidateCount} candidate lines of ${paper.lineCount}\n`,
@@ -1213,13 +1288,14 @@ async function writeCandidates(): Promise<number> {
   return 0;
 }
 
-async function ingest(exportPath: string): Promise<number> {
-  const manifest = await readManifest();
+async function ingest(exportPath: string, set: FixtureSet): Promise<number> {
+  const dir = set.dir;
+  const manifest = await readManifest(dir);
   const docs = readDecisionExport(
     JSON.parse(await readFile(resolve(exportPath), "utf8")),
   );
   const candidates = JSON.parse(
-    await readFile(join(IMRAD_DIR, CANDIDATES_FILE), "utf8"),
+    await readFile(join(dir, CANDIDATES_FILE), "utf8"),
   ) as CandidatesFile;
   const unknown = [...docs.keys()].filter(
     (id) => !manifest.papers.some((p) => p.id === id),
@@ -1230,7 +1306,7 @@ async function ingest(exportPath: string): Promise<number> {
   }
   const outcomes = new Map<string, IngestOutcome>();
   for (const paper of manifest.papers) {
-    const text = await readText(paper.id);
+    const text = await readText(paper.id, dir);
     outcomes.set(
       paper.id,
       decisionsToLabels(
@@ -1251,13 +1327,13 @@ async function ingest(exportPath: string): Promise<number> {
     );
     return 1;
   }
-  await mkdir(join(IMRAD_DIR, LABELS_DIR), { recursive: true });
+  await mkdir(join(dir, LABELS_DIR), { recursive: true });
   const papers: ManifestPaper[] = [];
   for (const paper of manifest.papers) {
     const outcome = outcomes.get(paper.id);
     if (outcome?.kind === "labels") {
       await writeFile(
-        join(IMRAD_DIR, paper.labelsFile),
+        join(dir, paper.labelsFile),
         toJsonText(outcome.labels),
         "utf8",
       );
@@ -1276,20 +1352,20 @@ async function ingest(exportPath: string): Promise<number> {
     }
   }
   await writeFile(
-    join(IMRAD_DIR, MANIFEST_FILE),
+    join(dir, MANIFEST_FILE),
     toJsonText({ ...manifest, papers }),
     "utf8",
   );
   return 0;
 }
 
-async function validate(): Promise<number> {
-  const errors = await validateFixtureSet();
+async function validate(set: FixtureSet): Promise<number> {
+  const errors = await validateFixtureSet(set.dir);
   if (errors.length > 0) {
     process.stderr.write(`${errors.join("\n")}\n`);
     return 1;
   }
-  process.stdout.write("test/fixtures/imrad/ is consistent.\n");
+  process.stdout.write(`${set.path}/ is consistent.\n`);
   return 0;
 }
 
@@ -1298,8 +1374,29 @@ function argValue(args: readonly string[], name: string): string | null {
   return i === -1 ? null : (args[i + 1] ?? null);
 }
 
+/** The options that take a value; their values are not positional arguments. */
+const VALUE_OPTIONS = ["--set", "--pdf-dir", "--only"];
+
+/** The first argument that is neither an option nor an option's value. */
+function firstPositional(args: readonly string[]): string | undefined {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i] as string;
+    if (VALUE_OPTIONS.includes(arg)) {
+      i++;
+      continue;
+    }
+    if (!arg.startsWith("--")) return arg;
+  }
+  return undefined;
+}
+
 export async function main(args: readonly string[]): Promise<number> {
   const [command, ...rest] = args;
+  const set = fixtureSetFromArgs(rest);
+  if (typeof set === "string") {
+    process.stderr.write(`${set}\n`);
+    return 2;
+  }
   switch (command) {
     case "extract": {
       const pdfDir = argValue(rest, "--pdf-dir");
@@ -1310,6 +1407,7 @@ export async function main(args: readonly string[]): Promise<number> {
       if (!(await stat(pdfDir)).isDirectory()) return 2;
       const only = argValue(rest, "--only");
       return extract({
+        set,
         pdfDir,
         only: only === null ? null : only.split(",").map((s) => s.trim()),
         check: rest.includes("--check"),
@@ -1317,20 +1415,20 @@ export async function main(args: readonly string[]): Promise<number> {
       });
     }
     case "candidates":
-      return writeCandidates();
+      return writeCandidates(set);
     case "ingest": {
-      const file = rest[0];
+      const file = firstPositional(rest);
       if (file === undefined) {
         process.stderr.write("ingest needs the export file.\n");
         return 2;
       }
-      return ingest(file);
+      return ingest(file, set);
     }
     case "validate":
-      return validate();
+      return validate(set);
     default:
       process.stderr.write(
-        "Usage: build-imrad-fixtures.ts extract --pdf-dir <folder> [--check] [--only A,B] [--keep-work] | candidates | ingest <export.json> | validate\n",
+        "Usage: build-imrad-fixtures.ts extract --pdf-dir <folder> [--check] [--only A,B] [--keep-work] | candidates | ingest <export.json> | validate; each takes [--set first|heldout] (default first)\n",
       );
       return 2;
   }

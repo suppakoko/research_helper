@@ -1,0 +1,69 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "HS2",
+  "title": "AIS-derived port-calling opportunity modelling in conflict-affected waters",
+  "venue": "EPJ Data Science (Brief Report) (2026)",
+  "publisher": "springer",
+  "layout": {
+    "columnsExpected": 1,
+    "columnsExpectedBasis": "expected, not seen: first-set EPJ Data Science paper S4 was 1 column",
+    "headingNumbering": "unknown",
+    "webHeadings": "not checked",
+    "notes": [
+      "headings and layout not checked in advance: the candidate list was drawn without opening any paper",
+      "article type Brief Report"
+    ]
+  },
+  "doi": "10.1140/epjds/s13688-026-00699-2",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "link.springer.com article page links creativecommons.org/licenses/by/4.0; read 2026-11-11. Crossref CC BY 4.0. PDF link answered 404 to a header-only request (as HS1). Page 1 of the extracted text also states: \"Open Access This article is licensed under a Creative Commons Attribution 4.0 International License\" (2026-11-12); the PDF is Springer's \"Article in Press\" version.",
+  "sourceUrl": "owner's browser download, 2026-11-12, from https://link.springer.com/content/pdf/10.1140/epjds/s13688-026-00699-2.pdf or the article page https://link.springer.com/article/10.1140/epjds/s13688-026-00699-2 (which address was used is not recorded)",
+  "landingUrl": "https://link.springer.com/article/10.1140/epjds/s13688-026-00699-2",
+  "recordedAt": "2026-11-12T09:30:10.494Z",
+  "extractedAt": "2026-11-12T09:30:10.494Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "HS2.pdf",
+    "bytes": 2703159,
+    "sha256": "b698d804e4625ff97c5a7214dcda7477f086c5e882b7ead19afd69ed8b97d3d7"
+  },
+  "text": {
+    "file": "HS2.txt",
+    "bytes": 51252,
+    "chars": 51198,
+    "sha256": "126256aef0125032674dfe1be36602db3392797d6785e2d888b0767bae79e787",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 51198,
+      "truncated": false,
+      "pages": 48,
+      "runningHeadLinesRemoved": 47,
+      "gutterPages": 47,
+      "referencesCut": true,
+      "referencesShare": 0.34575820693356507,
+      "supplementaryCharsRemoved": 0,
+      "ocrWords": 6627,
+      "ocrSplits": 0,
+      "ocrSplitShare": 0,
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 7,
+      "twoColumnPages": 3
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

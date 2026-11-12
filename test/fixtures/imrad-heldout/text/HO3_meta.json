@@ -1,0 +1,69 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "HO3",
+  "title": "Structural basis of PARP2 recognition of nucleosomal DNA breaks and inhibitor trapping",
+  "venue": "Nucleic Acids Research 54(18), gkag939 (2026)",
+  "publisher": "oup",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "expected, not seen (same journal as O2)",
+    "headingNumbering": "unknown",
+    "webHeadings": "not checked",
+    "notes": [
+      "headings and layout not checked in advance: the candidate list was drawn without opening any paper",
+      "replaces HO2, which was not downloaded (plan/00 §6 item 374(a)); the next CC BY research article after HO2 in the same list"
+    ]
+  },
+  "doi": "10.1093/nar/gkag939",
+  "otherId": "PMC13635751",
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "page 1 of the extracted text states: \"Open Access article distributed under the terms of the Creative Commons Attribution License (https://creativecommons.org/licenses/by/4.0/)\", 2026-11-12. Before that: As HO2: OUP Crossref CC BY 4.0 (version of record); Europe PMC PMC13635751 \"cc by\"; OUP site 403.",
+  "sourceUrl": "owner's browser download, 2026-11-12, from https://academic.oup.com/nar/article-pdf/54/18/gkag939/71595458/gkag939.pdf or its alternative https://europepmc.org/articles/PMC13635751?pdf=render (which address was used is not recorded)",
+  "landingUrl": "https://academic.oup.com/nar/article/doi/10.1093/nar/gkag939",
+  "recordedAt": "2026-11-12T09:30:10.494Z",
+  "extractedAt": "2026-11-12T09:30:10.494Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "HO3.pdf",
+    "bytes": 8442167,
+    "sha256": "ffefd0fa4707cfbf987fff0b4aad0d538a92e1cb7948b0fb1166af51bcb7d080"
+  },
+  "text": {
+    "file": "HO3.txt",
+    "bytes": 69689,
+    "chars": 69071,
+    "sha256": "f8d501d498ae56dcee31c6647efcabdaf41fcc86b1da07f97915e480a851f1bb",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 69071,
+      "truncated": false,
+      "pages": 16,
+      "runningHeadLinesRemoved": 0,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.19425838418130936,
+      "supplementaryCharsRemoved": 1179,
+      "ocrWords": 8835,
+      "ocrSplits": 0,
+      "ocrSplitShare": 0,
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 14,
+      "twoColumnPages": 13
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

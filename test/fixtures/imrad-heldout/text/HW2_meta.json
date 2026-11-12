@@ -1,0 +1,68 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "HW2",
+  "title": "NIHSS and Large Artery Atherosclerosis Affect Efficacy of Dual Antiplatelet Therapy Versus Alteplase for Minor Stroke",
+  "venue": "Brain and Behavior 16(10), e71813 (2026)",
+  "publisher": "wiley",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "expected, not seen: first-set Brain and Behavior paper W4 was 2 columns",
+    "headingNumbering": "unknown",
+    "webHeadings": "not checked",
+    "notes": [
+      "headings and layout not checked in advance: the candidate list was drawn without opening any paper"
+    ]
+  },
+  "doi": "10.1002/brb3.71813",
+  "otherId": "PMC13639244",
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "page 1 of the extracted text states: \"This is an open access article under the terms of the Creative Commons Attribution License\" (no version on the page), 2026-11-12. Before that: Wiley page bot check (not read). Wiley Crossref record CC BY 4.0 (version of record); Europe PMC PMC13639244 \"cc by\".",
+  "sourceUrl": "owner's browser download, 2026-11-12, from https://onlinelibrary.wiley.com/doi/pdf/10.1002/brb3.71813 or its alternative https://europepmc.org/articles/PMC13639244?pdf=render (which address was used is not recorded)",
+  "landingUrl": "https://onlinelibrary.wiley.com/doi/10.1002/brb3.71813",
+  "recordedAt": "2026-11-12T09:30:10.494Z",
+  "extractedAt": "2026-11-12T09:30:10.494Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "HW2.pdf",
+    "bytes": 960944,
+    "sha256": "345934cdb713401b2d80b47e42e48dab7b48b2fa3fcc787e579d8f73b0e7a695"
+  },
+  "text": {
+    "file": "HW2.txt",
+    "bytes": 32839,
+    "chars": 32720,
+    "sha256": "6593e0649a105b002dd3ac191337198232c3f2d0199f4b9277a939e57fe320df",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 32720,
+      "truncated": false,
+      "pages": 9,
+      "runningHeadLinesRemoved": 0,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.18503113325031134,
+      "supplementaryCharsRemoved": 0,
+      "ocrWords": 4216,
+      "ocrSplits": 0,
+      "ocrSplitShare": 0,
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 6,
+      "twoColumnPages": 5
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

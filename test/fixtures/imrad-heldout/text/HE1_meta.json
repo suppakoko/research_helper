@@ -1,0 +1,68 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "HE1",
+  "title": "A randomized crossover study of cardiologist reporting of severe aortic stenosis with/without assistance from artificial intelligence (AI)",
+  "venue": "iScience 29(10), 115562 (2026)",
+  "publisher": "elsevier",
+  "layout": {
+    "columnsExpected": null,
+    "columnsExpectedBasis": "not visible; first-set iScience paper E2 was observed as 1 column (expected 2)",
+    "headingNumbering": "unknown",
+    "webHeadings": "not checked",
+    "notes": [
+      "headings and layout not checked in advance: the candidate list was drawn without opening any paper"
+    ]
+  },
+  "doi": "10.1016/j.isci.2026.115562",
+  "otherId": "PMC13594739",
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "page 2 of the extracted text (the article page after the graphical abstract) states: \"This is an open access article under the CC BY license (http://creativecommons.org/licenses/by/4.0/)\", 2026-11-12. Before that: Publisher pages (cell.com, sciencedirect.com) answered a bot check, so not read. Elsevier's own Crossref record gives CC BY 4.0 for the version of record; Europe PMC record PMC13594739 gives \"cc by\". Re-check on the PDF.",
+  "sourceUrl": "owner's browser download, 2026-11-12, from https://www.cell.com/iscience/pdf/S2589-0042(26)00937-5.pdf or its alternative https://europepmc.org/articles/PMC13594739?pdf=render (which address was used is not recorded)",
+  "landingUrl": "https://www.cell.com/iscience/fulltext/S2589-0042(26)00937-5",
+  "recordedAt": "2026-11-12T09:30:10.494Z",
+  "extractedAt": "2026-11-12T09:30:10.494Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "HE1.pdf",
+    "bytes": 3654985,
+    "sha256": "996d6eddf6bd5847a88dd355d2365039e1ae3d3f276dcf0bdf62a97357262c85"
+  },
+  "text": {
+    "file": "HE1.txt",
+    "bytes": 44289,
+    "chars": 44040,
+    "sha256": "7ebe092e3d3f2f892dbb8201729061929d51bea1b733f8be0240132046ce82d2",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 44040,
+      "truncated": false,
+      "pages": 12,
+      "runningHeadLinesRemoved": 56,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.26397961323204466,
+      "supplementaryCharsRemoved": 1594,
+      "ocrWords": 5635,
+      "ocrSplits": 0,
+      "ocrSplitShare": 0,
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 10,
+      "twoColumnPages": 7
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

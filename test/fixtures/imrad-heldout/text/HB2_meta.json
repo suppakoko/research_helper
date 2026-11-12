@@ -1,0 +1,68 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "HB2",
+  "title": "3D confinement reshapes RNA folding and enhances circularisation in the Zika virus",
+  "venue": "bioRxiv (biophysics), v2 posted 2026-10-01",
+  "publisher": "biorxiv",
+  "layout": {
+    "columnsExpected": 1,
+    "columnsExpectedBasis": "expected, not seen (bioRxiv layout)",
+    "headingNumbering": "unknown",
+    "webHeadings": "not checked",
+    "notes": [
+      "headings and layout not checked in advance: the candidate list was drawn without opening any paper"
+    ]
+  },
+  "doi": "10.64898/2026.01.10.698690",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "the bioRxiv header on page 1 of Zotero's raw extraction (removed from the committed text as a running head) states: \"available under a CC-BY 4.0 International license\", 2026-11-12. Before that: bioRxiv API license \"cc_by\"; article page 429, not retried.",
+  "sourceUrl": "owner's browser download, 2026-11-12, from https://www.biorxiv.org/content/10.64898/2026.01.10.698690v2.full.pdf or the article page https://www.biorxiv.org/content/10.64898/2026.01.10.698690v2 (which address was used is not recorded)",
+  "landingUrl": "https://www.biorxiv.org/content/10.64898/2026.01.10.698690v2",
+  "recordedAt": "2026-11-12T09:30:10.494Z",
+  "extractedAt": "2026-11-12T09:30:10.494Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "HB2.pdf",
+    "bytes": 20751506,
+    "sha256": "ed7bbaedadcaede8c650b947ad312edcac709201b8ad36fca3ac2d8020807f84"
+  },
+  "text": {
+    "file": "HB2.txt",
+    "bytes": 57233,
+    "chars": 56913,
+    "sha256": "d43e1b7c1429b9768d1822049646cc2a8fcf825b1d98c6e2965a4f8d27f74fe8",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 56913,
+      "truncated": false,
+      "pages": 20,
+      "runningHeadLinesRemoved": 80,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.1384335968320605,
+      "supplementaryCharsRemoved": 960,
+      "ocrWords": 8256,
+      "ocrSplits": 0,
+      "ocrSplitShare": 0,
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 13,
+      "twoColumnPages": 0
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

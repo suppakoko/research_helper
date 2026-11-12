@@ -1,0 +1,200 @@
+/
+GOVT. DOc,
+000
+zH NATIONAL ADVISORY COMMITTEE
+0
+z FOR AERONAUTICS
+TECHNICAL NOTE 2000
+DATA ON SHAPE AND LOCATION OF DETACHED SHOCK WAVES
+ON CONES AND SPHERES
+Br Juergen W. Heberle, George P. Wood,
+and Paul B. Gooderum
+Langley Aeronautical Laboratory
+Langley Air Force Base, Va.
+Washington January 1950
+B'JNESS, SCIENCE
+& CH NJLO(Y ::Ep'r.
+N 16
+
+
+NATIONAL ADVISORY COMMITTEE FOR AERONAUTICS
+TECHNICAL NOTE 2000
+DATA ON SHAPE AND LOCATION OF DETACHED SHOCK WAVES
+ON CONES AND SPHERES
+By Juergen W. Heberle, George P. Wood, and Paul B. Gooderurn
+SUMMARY
+Accurate experimental data are given on the shape and the location of detached shock waves on cones and spheres at Mach numbers from 1.17 to 1.81. The data are correlated to obtain equations that describe the shock waves. This knowledge of the shock waves should be useful in calculations of the pressure distribution and the pressure drag of the fore part of cones and spheres. The experimental data on shock waves are compared with theory.
+IWRODUCTI0N
+One of the problems in aerodyn1Lics that Is of current interest is the problem of predicting the shape and the location of detached shock waves, or bow waves. The problem is of practical importance because a knowledge of the shock gave Is useful in calculating the drag of the nose of the body behind the shock wave. The flow behind a detached shock wave is subsonic in a region that is bounded by the shock wave, the sonic line, and the fore part of the body. If these boundaries of the subsonic region are known, then the pressure distribution over the fore part, or nose, of the body and the pressure drag of the fore part of the body can be calculated (references 1 and 2).
+A few theoretical attacks on the problem of describing the detached
+shock waves on bodies of revolution have been made (references 3 to 6).
+Attempts have been made to compare the theoretical results with the
+available experimental results (references 3, 5, and 6). Experimental
+results have, however, been scarce.
+The purpose of the present paper is to give experimental data on the location of detached shock waves on spheres and conical-tip cylinders. (For brevity, the conical-tip cylinders are referred to in the present paper as cones.) For this purpose, series of
+
+
+2 NACA TN 2000
+interferograms were taken of the flow around spheres and cones, of
+various vertex semiangles between 350 and 900, at Mach numbers ranging from 1.17 to 1.81. Measurements. of the shock waves were made on these interferograms and were correlated to obtain equations that describe the part of the shock wave ahead of the sonic line.
+SYMBOLS
+c0 , c1 , c2 , . . . coefficients
+C constant of apparatus
+d diameter of sphere; diameter of cylinder
+K curvature of bow wave at its nose
+M free-stream Mach number
+n number of points measured on a bow wave
+p pressure of air in jet
+R gas constant
+axial distance of shock wave from center of sphere
+axial distance of shock wave from plane of shoulder of cone
+S fringe shift in free stream
+T static temperature of air in jet
+T 5 stagnation temperature of air in jet
+
+
+MACA TN 2000 3
+X, y coordinates
+X dimensionless coordinate (x/d)
+Y dimensionless coordinate (y/d)
+7 ratio of specific heats
+5 root-mean-square deviation
+density of atmospheric air
+density of air in jet
+9 - vertex semiangle of conical tip
+APP.ARATtJS
+A 3-inch-square free jet and an interferometer with 4--inch-square
+plates were used. This apparatus has been described in reference 7.
+Different Mach numbers were obtained by using five supersonic nozzles
+• similar to those described in reference 7. For the calibration of each
+nozzle, interferograms were taken that showed part of the free stream and also part of the undisturbed region outside the jet. The fringe • shift S in the free stream was determined by comparing such an interferogram with a no-flow interferograin. Then the free-stream density p
+was computed by means of equation (3) of reference 7,
+- --=CS+l
+where C is a constant of the apparatus and where a, the density of
+the undisturbed air, was determined from the measured atmospheric pressure and temperature. The supply to the jet was regulated in such a way that the jet emerged with its static pressure equal to that of the atmosphere. Then, the static temperature T in the free stream was computed by the general gas law,
+p = pRT
+
+
+L. NACA TN 2000
+The stagnation temperature T 8 was measured with a thermocouple a short distance upstream of the nozzle where the airspeed was low. Then the Mach number was obtained from the relation
+=i+
+2
+The calibration yielded the values 1 . 11, 1. 30 , 1.37, 1.62, and. 1.81
+for the Mach numbers of the five nozzles. The determination of the Mach number given by each nozzle was made as carefully as was practicable. Some uncertainty, nevertheless, exists in the final result. This
+uncertainty is estimated to be not greater than 3 percent.
+RESULTS
+Spheres
+Interferograms of the flow at several Mach numbers around spheres
+of various diameters d are shown in figures 1 to 5. Additional
+interferograms with spheres of other diameters were taken at each Mach number. At a given Mach number, corresponding distances on different interferográias were found to be proportional to d; that is, in these tests, the Reynolds number had no apparent effect on the part of the shock wave that was ahead of the sonic line. Therefore, only one interferogram is shown for each Mach number except for Mach number 1.81; for which interferograms of the flow around spheres of three
+different diameters have been included to illustrate this result (fig. 5).
+Axial distance of shock waves. - The axial distance Sl of the shock
+wave from the center of the sphere has been obtained from figures 1 to 5. The variation of the quantity s1/d with Mach number is shown in figure 6. The equation of the curve that has been drawn through the experimental points is
+= ( - l)' (1)
+Over the range of Mach number used, the curve fits the data well. Equation (1) is not applicable, however, at Mach numbers much greater than the largest used in the present tests, because, according to equation (1), the distance between the nose of the shock wave and the center of the sphere is less than the radius of the sphere at Mach numbers greater than 3.37.
+
+
+x= ___
+a
+Y:r d
+The results of these measurements are given in table I.
+x
+NACA TN 2000 5
+Whether equation (i) remains applicable at Mach numbers less than the smallest used in the present investigation is not yet known. The equation does give, however, the correct asymptotic value, infinity, for the quantity s1/d. as the Mach number approaches unity.
+The theory of reference 3 predicts the variation of the distance
+between the nose of the shock wave and the nose of the sphere, 11
+- - -, with Mach number, for Mach numbers near unity. A comparison
+of the theoretical results with the present experimental results is
+given in figure 7. One of the curves in figure 7 is taken from
+figure 2 of reference 3. The curve for the experimental results is
+plotted from equation (1) of the present paper. Heference 6 also
+predicts the location of the shock wave. One of the curves in figure 7
+is based on the results of reference 6.
+Equations of shock waves. - Equations for that part of the shock wave which bounds the subsonic region have also been determLned. The coordinates x and y of points on the shock wave were measured with reference to the axes shown in the y adjacent sketch. The measurements were reduced to the dimensionless variables
+The simple shape of the shock wave suggests the use of a power series
+..
+to describe it. Because of the choice of the origin and because the shock wave is symmetrical about the x-axis,
+C0 = c 1 = c 3 C5 . . . = 0
+
+
+6 NACA TN 2000
+and, therefore,
+. . (2)
+The first two terms on the right-hand side of the equation are found to be sufficient for an accurate description of the shock waves.
+&
+Application of the method of least squares yields the following formulas for the coefficients:
+c 2 =!(IxiYj2YY18 - >x1Yi' \IY.6)
+_(yx2 Iy6 - 2I1Y
+where i = 1,2,3, . . . n, the values of X j and Yj are taken from table I, and
+D =YjY8 (.6)2 n
+Associated with each pair of values c and cj1. is the quantity
+n 21/2
+where = c 2Y 2 + ci .Y1 - X. The value of- is a measure of how well
+the equation fits the data the smaller is, the better the fit.
+Computed values of C 2 , c), and are listed in table II. In
+figure 8, these values of c 2 and c are plotted against M.
+
+
+NACA TN 2000 7
+An inspection of the figure shows that there is a fairly regular variation of c 2 and c 1 with Mach number. Curves that show the approximate
+variation have been arbitrarily drawn in figure 8 to aid in interpolation at other than test Mach numbers. The equations of these curves are
+c 2 = i - e_070(M_fl ()
+cj1 = -0.Oli.2(M - 1)
+The scatter in the values of cj is much larger, on a relative basis, than the scatter in the values of c 2 . This large uncertainty in the value of c does not necessarily indicate a large uncertainty, how
+ever, in the values of X calculated from equations (2), (3), and (u),
+because the term in equation (2) that contains c is usually much smaller than the term that contains c2.
+Curvature of shock waves. - Reference 5 is a theoretical investigation
+of the problem of the detached shock wave in front of a body of revolution.
+One of the quantities that is studied is the product (s - .K, where
+- is the distance of the nose of the shock wave from the nose of
+2
+the sphere and K is the curvature of the shock wave at its nose. Two
+approximations to the variation of (si - ith Mach number are
+2/ derived. See equations (29) and (30) of reference 15. These equations have been used to plot the curves shown in figure 9. These theoretical
+results can be compared with the present experimental results. The curvature K is easily shown from equation (2) to be 2c 2/d. Experi/ d\
+mental values of the product s 1 - —)K have been computed from the
+2/ values of c 2 in table II and the values of s 1/d in figure 6. These
+experimental values are shown in figure 9.
+Location of sonic line. - For calculation of the pressure drag by the method of reference 1, a knowledge of at least the approximate location of the sonic line, as well as the shock wave, is needed. The two ends of the sonic line can be located fairly accurately from the results given in the present paper. The location of the end of the. sonic line that lies on the shock wave can be found from the equation
+
+
+roi
+NACA TN 2000
+of the shock wave, equation (2), and the simple theory of oblique shock waves, which gives the angle of the shock wave for which the Mach number immediately behind the shock wave is unity.
+The position of the other end of the sonic line, at the surface of the sphere; can be obtained approximately from information that has been obtained in connection with another investigation. Interferograms of the flow around spheres at Mach numbers of 1.30 and 1.62 were analyzed
+sufficiently to locate the end of the sonic line. The sonic line was
+found to intersect the sphere 1i80 from the nose of the sphere at a Mach nuinber'of 1.30 and 52 from the nose at a Mach number of.1.62. Over at least most of the range of Mach number covered in the present paper, therefore, the end of the sonic line is close to 50 0 from the nose of
+the sphere.
+Cones
+A set of conical-tip cylinders was fabricated from steel rods of various diameters by machining one end to the shape of cones with various vertex angles. The circle of . intersection of the conical part with the cylindrical part is referred to as the shoulder of the cone. Interferograms of the flow around these cones at various Mach numbers were taken and are shown as figures 10 to 15.
+Axial distance of shock waves. - The axial distance 2 of the
+shock wave from the plane of the shoulder was measured on the interferograms.
+The ratio s 2/d is shown in figure 16 as a function of Mach number. A simple equation that describes the variation of s 2/d with Mach number
+over the range of the experiments was obtained from the data. The equation is
+I
+= o.'8(M - l)/2 ()
+d
+and was used to plot the curve shown in figure 16.
+Although a wide range of vertex angle was used, s2/d does not
+vary much with vertex angle at a given Mach number. The variation in s2/d with angle does not exceed about 10 percent. This result was true even when the vertex semiangle was increased to 900 and the
+end of the cylinder thus became flat. This result agrees with Busemannts
+result (reference 8), which is stated for two-dimensional flow but which shoud be true also. for three-dimensional flow, that the shoulder is the most important part of a body in determining the detached shock wave and that the nose is unimportant in the determination of the location of the detached shock wave.
+
+
+NACA TN 2000
+The result that the cone angle had little effect on the value of s2/d was not true when the cone angle was decreased enough for the shock
+wave to approach attachment to the tip of the cone. A typical case when
+the shock wave is nearly attached is shown in figure 15. The distance
+2 given by equation (5) does not apply in this case.
+Equations of shock waves.- Measured values of the coordinates of the shock waves are given in table III. In a manner similar to that used for the spheres, a power series
+= c 2Y2 + cY
+was fitted to the shock waves on the cones. Computed values of the coefficients C2 and c14. and of the root-mean-square deviation
+are listed in table IV.
+Location of sonic line.- As was the case for spheres, the two ends of the sonic line can be located. The end that lies on the shock wave can be found from the theory of oblique shock waves. The other end lies at the shoulder of the body and is perpendicular to the surface of the conical tip (reference 2).
+CONCLUDING REMARKS
+Data have been obtained on the shape and the location of detached shock waves on spheres and cones. These data have been correlated to give equations that describe the shock waves. Information about the location of the sonic line has also been given. With the boundaries of the subsonic region behind the detached shock wave thus known, the pressure distribution and the pressure drag of the fore part of spheres and cones can be calculated, as for example by the method of Maccoll.
+The experimental data given herein should also be useful for comparison with the results of future developments in the theory of detached shock waves.
+Langley Aeronautical Laboratory National Advisory Committee for Aeronautics Langley Air Force Base, Va., September 19, l9149
+
+
+10 NACA TN 2000

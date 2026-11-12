@@ -1,0 +1,68 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "HW1",
+  "title": "A Facial Foundation Model for Clinical Biomarker Prediction and Real-World Mobile Deployment",
+  "venue": "Advanced Science, e77861 (2026)",
+  "publisher": "wiley",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "expected, not seen: first-set Advanced Science papers W2, W3 were 2 columns",
+    "headingNumbering": "unknown",
+    "webHeadings": "not checked",
+    "notes": [
+      "headings and layout not checked in advance: the candidate list was drawn without opening any paper"
+    ]
+  },
+  "doi": "10.1002/advs.77861",
+  "otherId": "PMC13631392",
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "page 1 of the extracted text states: \"This is an open access article under the terms of the Creative Commons Attribution License\" (no version on the page), 2026-11-12. Before that: Wiley page answered a Cloudflare \"Just a moment...\" check, so not read. Wiley Crossref record: CC BY 4.0 (version of record); Europe PMC PMC13631392: \"cc by\". Re-check on the PDF.",
+  "sourceUrl": "owner's browser download, 2026-11-12, from https://advanced.onlinelibrary.wiley.com/doi/pdf/10.1002/advs.77861 or its alternative https://europepmc.org/articles/PMC13631392?pdf=render (which address was used is not recorded)",
+  "landingUrl": "https://advanced.onlinelibrary.wiley.com/doi/10.1002/advs.77861",
+  "recordedAt": "2026-11-12T09:30:10.494Z",
+  "extractedAt": "2026-11-12T09:30:10.494Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "HW1.pdf",
+    "bytes": 3788487,
+    "sha256": "9c6f8b54b84dcd67ef26a2e2837d9df42cc81784f1875a109861b8a9d4d5cedd"
+  },
+  "text": {
+    "file": "HW1.txt",
+    "bytes": 80758,
+    "chars": 80467,
+    "sha256": "0ad02e8b11677cc2b288c8253fc5f17a47810fff2808d5bba6f611956d6223a9",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 80467,
+      "truncated": false,
+      "pages": 19,
+      "runningHeadLinesRemoved": 0,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.1383383126131046,
+      "supplementaryCharsRemoved": 0,
+      "ocrWords": 9388,
+      "ocrSplits": 0,
+      "ocrSplitShare": 0,
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 16,
+      "twoColumnPages": 15
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

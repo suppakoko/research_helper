@@ -1,0 +1,68 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "HS1",
+  "title": "IXSH-FD: integrated XGBoost-SHAP hybrid framework for SNP feature discovery",
+  "venue": "BMC Bioinformatics (2026)",
+  "publisher": "springer",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "expected, not seen: first-set BMC Bioinformatics paper S1 was 2 columns",
+    "headingNumbering": "unknown",
+    "webHeadings": "not checked",
+    "notes": [
+      "headings and layout not checked in advance: the candidate list was drawn without opening any paper"
+    ]
+  },
+  "doi": "10.1186/s12859-026-06664-0",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "link.springer.com article page links creativecommons.org/licenses/by/4.0; read 2026-11-11. Crossref also CC BY 4.0. The PDF link (the page's own citation_pdf_url) answered 404 to a header-only request, which may only mean Springer refuses header requests. The extracted text (page 15) also states: \"Open Access This article is licensed under a Creative Commons Attribution 4.0 International License\" (2026-11-12); the PDF is Springer's \"Article in Press\" version.",
+  "sourceUrl": "owner's browser download, 2026-11-12, from https://link.springer.com/content/pdf/10.1186/s12859-026-06664-0.pdf or the article page https://link.springer.com/article/10.1186/s12859-026-06664-0 (which address was used is not recorded)",
+  "landingUrl": "https://link.springer.com/article/10.1186/s12859-026-06664-0",
+  "recordedAt": "2026-11-12T09:30:10.494Z",
+  "extractedAt": "2026-11-12T09:30:10.494Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "HS1.pdf",
+    "bytes": 2864981,
+    "sha256": "150830b4a354ed570992617365930f91788c08a2578ac28c31e67abec44b3009"
+  },
+  "text": {
+    "file": "HS1.txt",
+    "bytes": 52441,
+    "chars": 52284,
+    "sha256": "10d6a517318f9ab11e645e015d6cb387a9e485797f1ebc882ea8086d47732506",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 52284,
+      "truncated": false,
+      "pages": 18,
+      "runningHeadLinesRemoved": 52,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.20134115418690618,
+      "supplementaryCharsRemoved": 0,
+      "ocrWords": 6437,
+      "ocrSplits": 0,
+      "ocrSplitShare": 0,
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 16,
+      "twoColumnPages": 0
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "HX1",
+  "title": "Calculation of the twist distribution of wings designed for cruise at transonic speeds",
+  "venue": "NASA Technical Note D-7813 (L-9832), December 1974",
+  "publisher": "us-government",
+  "layout": {
+    "columnsExpected": 1,
+    "columnsExpectedBasis": "expected, not seen: first-set NASA TN D-7812 (XR2) was 1 column",
+    "headingNumbering": "unknown",
+    "webHeadings": "not checked",
+    "notes": [
+      "headings and layout not checked in advance: the candidate list was drawn without opening any paper"
+    ]
+  },
+  "doi": null,
+  "otherId": "NTRS 19750004865",
+  "licence": "US government work (17 U.S.C. 105)",
+  "licenceEvidence": "page 1 of the extracted text: NASA TN D-7813, by Michael J. Mann, NASA Langley Research Center, December 1974. Before that: NTRS record (NASA's own): distribution PUBLIC, determinationType GOV_PUBLIC_USE_PERMITTED, no third-party material; author M. J. Mann, NASA Langley Research Center. PDF header check 200 (0.6 MB).",
+  "sourceUrl": "https://ntrs.nasa.gov/api/citations/19750004865/downloads/19750004865.pdf",
+  "landingUrl": "https://ntrs.nasa.gov/citations/19750004865",
+  "recordedAt": "2026-11-12T09:30:10.494Z",
+  "extractedAt": "2026-11-12T09:30:10.494Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "HX1.pdf",
+    "bytes": 621057,
+    "sha256": "d20b96efd7af155e4079f074f9e867df8a35f476285026be43f31e2d7abdc68e"
+  },
+  "text": {
+    "file": "HX1.txt",
+    "bytes": 26646,
+    "chars": 26643,
+    "sha256": "45c29dea9cafaf7ccfca4cbb6606546d45184d3ad22f72074586775e164dc226",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 26643,
+      "truncated": false,
+      "pages": 25,
+      "runningHeadLinesRemoved": 25,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.12512722855172867,
+      "supplementaryCharsRemoved": 0,
+      "ocrWords": 3921,
+      "ocrSplits": 0,
+      "ocrSplitShare": 0,
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 21,
+      "twoColumnPages": 1
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

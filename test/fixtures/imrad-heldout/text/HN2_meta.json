@@ -1,0 +1,68 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "HN2",
+  "title": "Large-scale marine eDNA database reveals seasonal latitudinal diversity gradients in Japan driven by vagrant fish",
+  "venue": "Scientific Reports 16, 30406 (2026)",
+  "publisher": "nature",
+  "layout": {
+    "columnsExpected": 1,
+    "columnsExpectedBasis": "expected, not seen: first-set Scientific Reports paper N6 was observed as 1 column",
+    "headingNumbering": "unknown",
+    "webHeadings": "not checked",
+    "notes": [
+      "headings and layout not checked in advance: the candidate list was drawn without opening any paper"
+    ]
+  },
+  "doi": "10.1038/s41598-026-52959-w",
+  "otherId": null,
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "nature.com article page links creativecommons.org/licenses/by/4.0; final version; read 2026-11-11. PDF header check 200 application/pdf (1.9 MB).",
+  "sourceUrl": "https://www.nature.com/articles/s41598-026-52959-w.pdf",
+  "landingUrl": "https://www.nature.com/articles/s41598-026-52959-w",
+  "recordedAt": "2026-11-12T09:30:10.494Z",
+  "extractedAt": "2026-11-12T09:30:10.494Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "HN2.pdf",
+    "bytes": 1855345,
+    "sha256": "954d47b83f6eb42a87b1c7229bf09cfc47590b1c139befc2645f7d899719e1d2"
+  },
+  "text": {
+    "file": "HN2.txt",
+    "bytes": 32683,
+    "chars": 32635,
+    "sha256": "1ed660fcc054b0946eee7689e3c3386fff1b9cc83e4391322e01e6ade937c4c8",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 32635,
+      "truncated": false,
+      "pages": 10,
+      "runningHeadLinesRemoved": 30,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.26938145022274956,
+      "supplementaryCharsRemoved": 0,
+      "ocrWords": 4241,
+      "ocrSplits": 0,
+      "ocrSplitShare": 0,
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 9,
+      "twoColumnPages": 0
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

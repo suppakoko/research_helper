@@ -1,0 +1,654 @@
+Article in Press
+EPJ Data Science https://doi.org/10.1140/epjds/s13688-026-00699-2
+AIS-derived port-calling opportunity modelling in
+conflict-affected waters
+Received: 17 March 2026
+Accepted: 31 August 2026
+Cite this article as: van Ginkel, M. AIS-derived port-calling opportunity modelling in conflict-affected waters. EPJ Data Science (2026). https://doi.org/ 10.1140/epjds/s13688-026-00699-2
+Michael van Ginkel
+We are providing an unedited version of this manuscript to give early access to its findings. Before final publication, the manuscript will undergo further editing. Please note there may be errors present which affect the content, and all legal disclaimers apply.
+If this paper is publishing under a Transparent Peer Review model then Peer Review reports will publish with the final article.
+© The Author(s) 2026. Open Access This article is licensed under a Creative Commons Attribution 4.0 International License, which permits use, sharing, adaptation, distribution and reproduction in any medium or format, as long as you give appropriate credit to the original author(s) and the source, provide a link to the Creative Commons licence, and indicate if changes were made. The images or other third party material in this article are included in the article’s Creative Commons licence, unless indicated otherwise in a credit line to the material. If material is not included in the article’s Creative Commons licence and your intended use is not permitted by statutory regulation or exceeds the permitted use, you will need to obtain permission directly from the copyright holder. To view a copy of this licence, visit http://creativecommons.org/licenses/by/4.0/.
+
+
+AIS-derived port-calling opportunity
+modelling in conflict-affected waters
+3
+Michael van Ginkel
+Criminology Department, Tilburg Law School
+Tilburg University, Warandelaan 2, 5037 AB Tilburg, Netherlands
+m.r.vanginkel@tilburguniversity.edu
+8
+Abstract: The long-standing protracted conflicts surrounding the coastal breakaway territory of Abkhazia
+in Georgia and the occupied territories in Eastern Ukraine have contributed to a complex maritime
+operating environment. Detecting anomalous vessel behaviour in such environments remains challenging,
+particularly where prolonged Automatic Identification System (AIS) transmission gaps may obscure
+vessel movements. This study draws on a historical dataset of over 27 million AIS transmission signals
+from the Eastern Black Sea for the year 2018 to examine patterns of AIS transmission loss in conflict
+affected waters. A Discrete Port Calling Opportunities Model (DPCOM), combined with a grid-based
+statistical framework, is applied to identify plausible port-calling opportunities associated with prolonged
+AIS transmission gaps and to evaluate their spatial distribution. The results demonstrate that DPCOM
+selected trajectories are strongly associated with statistically significant anomaly hotspots and identify
+recurring patterns of AIS transmission loss. The study creates a reproducible framework for analysing
+prolonged AIS transmission gaps, highlighting the value of large-scale behavioural analytics for maritime
+domain awareness in conflict-affected coastal environments.
+Key Words: AIS, anomalous behaviour, protracted conflict, Black Sea
+1 Introduction
+
+
+Coastal protracted conflicts have can create environments conducive to maritime smuggling.
+Researchers have consistently linked protracted conflicts to illicit activities [1-7]. The limited
+sovereignty and alternative government structures associated with protracted conflicts create
+opportunities for illicit networks to emerge and expand [3, 8, 9]. In coastal territories, these illicit
+networks exploit the increased connectivity to international markets offered by access to the
+maritime domain. Heavily trafficked shipping lanes and rapidly expanding seaport infrastructure
+offer opportunities to build international smuggling networks [10]. Within the crime-conflict
+nexus, regional political, economic, and security contexts influence how maritime smuggling
+manifests in relation to protracted conflict.
+Within the Black Sea region, the coastal protracted conflicts surrounding Eastern Ukraine and the
+breakaway territory of Abkhazia in Georgia have both been linked to maritime smuggling [11, 12].
+Reports of smuggled imports and exports include harmful products like weapons, nuclear
+materials, and narcotics [11, 13-18]. While international compliance varies depending on the
+nation involved, Ukraine and Georgia have both formally instituted municipal legislation
+prohibiting or restricting trade with Crimea and Abkhazia, respectively [19-21]. Consequently,
+even vessels containing benign shipments can be considered complicit in illicit trading if they fail
+to follow the proper procedures when visiting ports in the breakaway territories. For instance,
+while visitations to ports in Abkhazia can occur, if permission is granted, they must first undergo
+inspection in a port controlled by Georgia’s central government [16]. Interceptions of more benign
+shipments contained timber, illegally obtained fish, scrap metal, coal, fuel, agricultural products,
+and contraband cigarettes [15, 16, 22]. In the case of Abkhazia, primarily Turkish-flagged vessels
+have been associated with these illicit visitations, with vessel cargo including both household
+goods and more harmful products [16, 17, 23].
+
+
+Although research has provided important insights into the relationship between crime and conflict
+along coastlines, challenges in systematically collecting and analysing data on smuggling have
+created a dearth of empirical research on the subject. Creating a maritime dataset on vessel
+movement patterns in the Black Sea provides a basis for examining patterns of anomalous
+maritime behaviour in conflict-affected coastal environments. Direct observation of maritime
+smuggling is inherently difficult, as illicit activities are often concealed within routine maritime
+traffic and rarely generate comprehensive public datasets. Consequently, maritime security
+researchers frequently rely on behavioural indicators associated with concealment and other forms
+of irregular vessel activity. Although datasets on vessel movements cannot provide direct evidence
+of smuggling, an analysis of spatial distributions forms an important preliminary step in
+understanding how conflict-affected maritime environments shape opportunities for irregular
+maritime activity.
+This study investigates whether anomalous vessel movement data exhibit systematic spatial
+association with conflict-affected maritime environments in the Eastern Black Sea and Abkhazia
+specifically. Rather than identifying illicit activity directly, the analysis focuses on detecting and
+characterising anomalous vessel behaviours as observable deviations in vessel reporting and
+movement continuity that may reflect different maritime monitoring conditions, operational
+constraints, or concealment strategies. The analysis of vessel movement patterns raises three
+related sets of questions that structure the empirical investigation. Firstly, to what extent do
+anomalous AIS vessel behaviours exhibit spatial clustering in the Eastern Black Sea. Secondly,
+what common characteristics exist in the profiles of vessels associated with anomalous movement
+patterns. Thirdly, are anomalous behaviours disproportionately concentrated in maritime regions
+affected by protracted conflict relative to other areas of the study region. Together, these questions
+
+
+provide an analytical framework for linking observed AIS irregularities to broader spatial,
+behavioural, and contextual dimensions of maritime activity.
+This work contributes to extant literature in the following ways. From a methodological standpoint,
+the paper builds on hybrid anomaly detection modelling in data science by integrating A Discrete
+Port Calling Opportunities Model (DPCOM) with a grid-based statistical model to analyse the
+spatial distributions of anomalous AIS signals. Likewise, the study makes an empirical
+contribution to Black Sea security research by constructing and analysing a large-scale AIS dataset
+to generate a profile of vessels habitually demonstrating anomalous movement patterns. Lastly,
+the study provides important insights into how anomalous maritime behaviour in conflict-affected
+coastal environments can be interpreted.
+2 Previous Literature
+Since the phased introduction of AIS as a result of a 2002 amendment to the International
+Convention for the Safety of Life at Sea by the International Maritime Organization, the United
+Nations agency responsible for regulating international shipping, opportunities to track vessel
+movement have arisen. AIS are communication systems that share vessel locations and other
+associated vessel information, including identification, speed, position, and course, to terrestrial
+and satellite radars, which third parties can then compile for analysis [24]. The use of AIS is
+mandatory for vessels over 300 tons and all passenger vessels, both in transit and at anchor [25].
+By transmitting AIS signals on a regular basis throughout the duration of their journey, typically
+between two and 180 seconds depending on operating conditions, vessels can avoid collisions in
+areas of high traffic and assist search and rescue operations [24, 26]. Notably, moored vessels in
+practice frequently turn off their AIS signals, a practice that differs depending on location [27].
+
+
+Within the United States, for instance, it is permissible to turn off AIS transmitters during mooring,
+but vessels are required to resume transmitting 15 minutes prior to resuming transit [28]. By
+mapping the distribution of vessel locations captured by AIS transmissions, researchers and law
+enforcement can assess vessel movements for anomalous behaviour.
+Anomalous behaviour in reported positions can indicate either participation in illicit activities or
+implementation problems. A variety of technical failures and human errors can cause transmission
+and reception issues that result in anomalous behaviour [25]. AIS messages can become corrupted
+or lost during unsecured Very High Frequency (VHF) transmission, manually entered information,
+like estimated time of arrival, can result in human error and non-standardized values, and faulty
+equipment can lead to time and location discrepancies [78]. Anomalies, however, can also reflect
+intentional manipulation [25]. Vessels have been shown to intentionally disconnect from the AIS
+system to avoid law enforcement tracking while conducting illicit activities at sea [29]. To
+ascertain if anomalous behaviour reflects intentional obfuscation, various statistical methods have
+been employed to analyse distribution trends. Many models used for anomaly detection focus on
+a specific type of maritime crime, including ship-to-ship smuggling [30, 31], sanction evasion [30,
+32], illegal fishing [25, 33, 34], and piracy [35]. Others focus on anomaly detection more generally
+by studying trends in on-off switching of AIS signals [36] and deviations in movement from
+expected routes [37]. Although studies have focused on a variety of different types of anomalous
+AIS behaviour [36, 38-41], the most popular methods of anomaly detection models revolve around
+deviation from standard routes [24].
+Wolsing and colleagues further categorize anomaly detection into three main branches: machine
+learning approaches that learn patterns from data, stochastic approaches that identify statistical
+deviations from expected behaviour, and geometric approaches that detect spatial or trajectory
+
+
+based irregularities [24]. Studies employing the geometry approach use deterministic geometric
+constraints and shape-based comparisons to detect anomalies [44-47]. While the geometric
+approach has clear utility in modelling behaviour, increasing the scale of datasets and dealing with
+noise can create issues in computation [44]. Machine learning methods have become increasingly
+popular in concert with advancements in artificial intelligence to handle large dataset
+manipulation. In machine learning models, abnormal vessel behaviours are detected by noting
+when vessels deviate from learned normal models [48]. Machine learning methods include the use
+of neural networks to detect anomalies in real time [49-52], as well as clustering [43, 53-55] and
+Density-Based Spatial Clustering of Applications with Noise (DBSCAN), more specifically [42,
+56-59], to detect anomalies in historic datasets. Limitations in interpretability and transparency
+continue to detrimentally affect machine learning methods [60, 61]. Although machine learning
+methods are rapidly developing, hurdles in implementation mean stochastic methods of analysis
+continue to prevail.
+Stochastic methods employ statistical methods that assume AIS trajectories follow a probabilistic
+distribution [37, 62, 63]. As Yan and Wang explain, “observations with a lower probability than
+the threshold in statistical inference process are considered as anomalous behaviours” [64].
+Popular stochastic methods include Gaussian Mixture Model and Kernel Density Estimation [65
+69], Bayesian Network [70-73], and Gaussian Process [31, 74]. While studies exist that attempt to
+integrate machine learning with stochastic methods [42, 53 69], the complicated format makes
+implementation difficult [64]. Since geometric, machine learning, and stochastic approaches all
+have their own limitations, access to technology, the maritime environment under consideration,
+the anomaly type under study, and other project parameters dictate which approach confers the
+most advantages.
+
+
+This study builds on the existing scholarship by applying a stochastic anomaly detection model
+supported by processes like DBSCAN, which typically underpin machine learning approaches, in
+the data curation phase for greater operability. To determine if vessels disconnected from AIS
+systems could potentially visit ports in Abkhazia, a Discrete Port Calling Opportunities Model
+(DPCOM) was created to compare expected distances and time thresholds with extended gaps in
+AIS transmission. Drawing on the methods employed by Rodríguez and colleagues to detect
+suspicious fishing vessel activity [34], a null model is then employed to determine the statistical
+relevance of the results obtained from DPCOM. Comparing results to the null model evaluates
+probabilistic deviations from expected behaviour, a method that aligns underlying objectives of
+the Gaussian Mixture and Kernel Density Estimation models. Combined, the methods create an
+empirical dataset on maritime traffic anomalies that can support further research on the
+connections between irregular maritime activities and protracted conflict in the Black Sea.
+The proposed framework has the advantage over many machine learning approaches by avoiding
+having to rely on confirmed instances of illicit activity. Challenges in observing and verifying
+maritime smuggling cases in conflict-affected maritime environments mean such datasets remain
+scarce and difficult to obtain. Similarly, while geometric trajectory-based methods may identify
+unusual movement patterns, the approaches often provide limited insight into the operational
+meaningfulness of such deviations within a specific maritime context. The DPCOM framework
+addresses these constraints by combining vessel movement reconstruction with domain-specific
+operational assumptions regarding vessel speed, transmission gaps, and port accessibility. This
+allows anomalous behaviour to be identified in a transparent and interpretable manner despite
+limits on information.
+
+
+More broadly, the framework illustrates the value of hybrid anomaly detection approaches in
+environments characterised by a lack of data around confirmed cases of illicit activity and high
+levels of uncertainty. The approach prioritizes interpretability and methodological transparency,
+allowing for the evaluation of individual modelling assumptions and threshold choices. This may
+be particularly relevant for anomaly detection work where opportunities for ground-truthing are
+limited and transparent workflows are often preferable to more complex black-box models.
+3 Data and Methods
+167
+Figure 1: Analytical Workflow (figure by author)
+1. 3.1 Maritime Database
+The AIS dataset used for the study was purchased from Spire Global, which provided pre
+processing services in the form of integration between terrestrial and satellite data and basic data
+
+
+cleaning [75]. Integrating terrestrial and satellite data increases the accuracy of datasets. Terrestrial
+data experiences fewer temporal variations and dropped signals in areas of high density, while
+satellites offer broader coverage and redundancy capabilities [25]. Aside from geographic
+coordinates, the vessel information associated with AIS data included latitude, longitude, time,
+draught, heading, destination, and Maritime Mobile Service Identities (MMSI), a unique nine-digit
+number used to identify ships. The dataset obtained covered the Eastern Black Sea for 2018 and
+included a total of roughly 27 million locations. The year 2018 was selected to coincide with the
+most recent period of relative stability before both the Covid 19 pandemic and the outright invasion
+of Ukraine by Russia in 2022. Additional datasets from the World Port Index, available from the
+National Geospatial-Intelligence Agency, were used to contextualize the AIS data [76]. Another
+dataset was created based on known longitude and latitudes of ports in Georgia to reflect the
+locations of smaller ports not provided in the World Port Index. Maritime zones and coastlines
+were extracted from MarineRegions to situate the AIS data in the maritime environment [77].
+
+
+185
+Figure 2: Georgia’s maritime jurisdictions in the Eastern Black Sea (figure by author)
+Through the hybrid use of relational database management system (RDBMS) and geographical
+information system (GIS) software, a maritime database was created and curated in preparation
+for analysis (Appendix 1). After the creation of a heterogeneous database that included all relevant
+maritime information, erroneous data points were identified and removed part of the data cleaning
+phase using Structured Query Language (SQL), a programming language used for storing and
+processing information. Although SPIRE Global conducts basic cleaning of raw AIS messages
+before delivering the datasets to clients, the provided datasets generally still contain erroneous
+signals. Erroneous signals removed included locations discovered on land, incorrect and duplicate
+MMSI numbers, and duplicate location and time values. Queries were then used on the cleaned
+datasets to explore and extract AIS metadata, like the number of transmissions, unique MMSI, and
+vessel types present, and other information would assist in the spatial analysis phase.
+
+
+198
+Figure 3: Maritime data flow chart with corresponding software (figure by author)
+After creating and cleaning the database, inter-event statistics were generated to analyse vessel
+behaviour. First trajectories, defined as a “series of time-sorted locations corresponding to the same
+MMSI number”, across the Black Sea were created” [34]. The inter-event statistics between two
+consecutive transmission locations were then computed based on these vessel trajectories. Firstly,
+inter-event time represented and defined as the time difference between the locations I and i +1
+was generated [34]. Vessel speed represented by s was then computed between consecutive
+transmission locations by dividing traveling distance represented by d by the corresponding .
+Combined, vessel trajectories and their associated spatial-temporal information provided insights
+into the movement trajectories of vessels. To improve the accuracy of the inter-event statistics,
+vessel trajectories affected by docking and map boundaries in the Eastern Black Sea dataset and
+mooring in the separately created Georgian Maritime Domain sub-dataset were removed from the
+analysis (Appendix 2).
+3.2 Anomaly Modelling
+
+
+Having generated and curated the inter-event statistics of vessel trajectories, the data was then
+placed into DPCOM to identify which vessels transiting Georgia's maritime jurisdiction could have
+feasibly visited Abkhazia without detection. The DPCOM model acts as a screening framework
+for identifying feasible port-calling opportunities under uncertainty, not as a deterministic
+classifier of illicit activity. In order to determine which vessels had transmission gaps long enough
+to visit Abkhazian ports without being detected, an algorithm was generated based on duration of
+transmission gaps ( ) the distance (d) of the transmission gap start (p1) and end (p2) locations to
+the nearest Abkhazian port (q), a fixed overhead of one hour to account for time spent at port, and
+an assumed vessel speed of 10 m/s. The one-hour overhead is consistent with maritime operations
+research, which commonly models vessel manoeuvring as requiring approximately one hour per
+port call. The speed parameter of 10 m/s (approximately 19.4 knots) was selected as a conservative
+operational assumption intended to ensure that only transmission gaps providing sufficient time
+for a vessel to travel to a port, conduct basic port operations, and rejoin its observed AIS track
+were classified as discrete port-calling opportunities.
+The algorithm flagged suspicious vessel segments (SVS) where time required (TR) to discreetly
+visit the nearest Abkhazian port was less than the time available (TA) during AIS transmission
+gaps, as denoted by the formula;
+SVS = TR < TA
+TA = Ti / 3600
+TR = (2d / 10 + 3600) / 3600
+d = min(D(p1, q), D(p2, q))
+Where D(p, q) refers to the distance between locations of p and q. By spatially and temporally
+linking vessel transmission gaps to ports, and comparing reachable time versus observed time,
+
+
+vessel transmission gaps were flagged that had discrete port-calling opportunities in Abkhazia. To
+evaluate the robustness of the DPCOM classification, a sensitivity analysis was conducted by
+varying two key model parameters: the minimum AIS transmission-gap duration and the assumed
+vessel travel speed. Transmission-gap thresholds of 6, 12, 24, and 48 hours were tested,
+representing progressively more conservative definitions of prolonged AIS interruption. In
+addition, three operational vessel speeds (5, 10, and 15 m/s) were evaluated to represent slower,
+conservative, and faster transit assumptions.
+After identifying vessels with discrete Abkhazia port-calling opportunities, a grid-based statistical
+model assesses if identified trajectories occur in areas of low or high statistical probability. First,
+Georgia's maritime jurisdiction was divided into a regular 25 km × 25 km grid in the projected
+coordinate reference system. Grid cells were assigned a 1 km spatial buffer during the overlay
+analysis to account for positional uncertainty in AIS transmissions and to minimise edge effects
+for transmission-gap start locations located near cell boundaries. The 25 km × 25 km anomaly grid
+consisted of 51 spatial cells. To evaluate the suitability of the normal approximation underlying
+the z-score calculation, expected anomaly frequencies were examined for each grid cell. Of the 51
+cells, 36 had expected anomaly counts ≥5, while 15 had lower expected counts. These low
+frequency cells were retained for exploratory hotspot mapping but interpreted cautiously because
+normal approximations to Poisson counts become unreliable at small expected frequencies. For
+each cell, observed anomaly counts, vessel-normalized expected anomaly counts, and
+corresponding z-scores were calculated (Supplementary Table 1). These values provide
+transparency for the hotspot identification procedure and allow direct evaluation of the relationship
+between observed and expected anomaly frequencies.
+
+
+Second, the number of flagged anomalies, or start points for transmission gaps over 24 hours, was
+counted per cell. This conservative threshold was intended to isolate prolonged AIS interruptions
+that may permit extensive unobserved vessel movement [34], and its empirical basis is examined
+in the Results section. Third, a null model was generated by determining the number of expected
+anomalies (EA) per cell. The equation takes into account the observed points per grid cell (OP),
+the observed anomalies per vessel (OAV), and observed points by vessel (OPV) to create:
+EA = OP x (OAV/OPV)
+By incorporating vessel normalization, the expected number of anomalies in a grid reflects both
+the number of vessels present and their individual propensity for exhibiting anomalous behaviour.
+The resulting null model evaluates whether the spatial distribution of anomalous trajectories
+identified by DPCOM differs from those expected when taking into consideration the underlying
+distribution of vessel traffic. The null hypothesis states that the spatial distribution of anomalies is
+consistent with the observed traffic pattern and that variation between grid cells reflects random
+fluctuations in vessel activity. The alternative hypothesis states that anomalies are concentrated in
+specific locations to a greater extent than would be expected from traffic density alone. Under this
+framework, high positive z-scores indicate grid cells containing more anomalous trajectories than
+expected under the null hypothesis, while non-significant cells indicate anomaly frequencies
+consistent with the underlying traffic distribution. A z-score was thus assigned to each grid to
+calculate how extreme the difference between the observed anomaly count (OA) per cell and the
+expected anomaly count per cell was. The z-score was computed using the z-score formula:
+Z = (OA - EA) / √EA
+
+
+A z-score of 1.645 or higher, corresponding to the upper five percent critical value of the standard
+normal distribution, was used as a threshold for a high concentration. In other words, fewer than
+five percent of grid cells would reach this z-score value by chance under the null model. The
+anomalies that could feasibly have reached Abkhazia in the analysis phase were then overlaid onto
+the grid cells of the statistical model to determine if they correlated to areas of high concentration.
+To provide contextual validation, the transmission gaps identified by DPCOM as intersecting with
+high concentration cells were compared with the corresponding proportion of AIS transmission
+gaps over 24 hours.
+Importantly, the z-score analysis is intended as an exploratory hotspot analysis rather than a formal
+inferential test. Because multiple AIS transmission gaps may originate from the same vessel,
+observations are not strictly independent, and the variance implied by the normal approximation
+may therefore be underestimated. In addition, grid cells with low expected anomaly counts may
+violate the assumptions underlying the normal approximation of the Poisson distribution.
+Consequently, z-scores are interpreted as descriptive measures of relative spatial concentration
+rather than definitive statistical evidence of anomalous behaviour. To facilitate assessment of these
+limitations, the observed and expected anomaly counts for each grid cell are provided as
+supplementary material.
+In the following Results and Discussion sections, the trends and patterns identified throughout the
+geospatial analysis process are presented for both the Eastern Black Sea generally and Georgia's
+maritime jurisdiction more specifically. Particular attention is paid to the flags, destinations, and
+locations of vessels experiencing significant gaps in AIS transmission signals. By examining the
+spatial distribution and characteristics of these AIS anomalies, the study explores patterns of
+
+
+anomalous vessel behaviour and their potential association with conflict-affected coastal
+environments, including the vicinity of Abkhazia.
+4 Results
+4.1 Eastern Black Sea
+Metric Value
+Total Georgian Trajectories 17,317,767 Dark Trajectories 41,534 (0.2% of Total Trajectories) Habitual Dark Trajectories 19,738 (0.1% of Dark Trajectories) Total Georgian Vessels 5,487 Dark Vessels 4,555 (83% of Total Georgian Vessels) Habitual Dark Vessels 600 (13.2% of Total Dark Vessels) Most Common Habitual Dark Vessel Type Cargo, Tanker, Tug Most Common Habitual Dark Vessel Flag State Russia, Turkey, Panama Most Frequent Habitual Dark Trajectory Origins Russia, Ukraine, Turkey
+Table 1: Key Metrics of Undocked Vessels in the Eastern Black Sea
+Measurements of the inter-event statistics generated normative range values for vessel
+transmission gaps. 17,317,767 trajectories were generated for the Eastern Black Sea during 2018
+outside of mooring areas and the cartographic buffer zone. These included 5487 unique vessels, as
+denoted by their MMSI number. Histograms of t reveal a slowly decaying marginal distribution.
+Although the distribution exhibited a long tail, 99.8 percent of all observed trajectories remained
+below 24 hours. Considering the rareness of transmission gaps longer than 24 hours, a closer
+analysis of these trajectories, termed dark trajectories, was conducted. The dark trajectories were
+associated with 4,555 distinct MMSI numbers, meaning 83 percent of vessels at some point
+experienced transmission gaps over 24 hours. The subset of vessels contributing the highest
+number of dark trajectories collectively accounted for approximately half of identified dark
+trajectories. This group represented 13.2 percent of vessels in the Eastern Black Sea dataset and
+
+
+descriptively consisted of vessels exhibiting at least 20 AIS transmission gaps exceeding 24 hours
+during the study year.
+Based on these descriptive statistics, a correlation was observed between the identified vessels and
+irregular maritime activity. Normalization for vessel activity levels showed a moderate correlation
+(r ≈ 0.32) between total trajectories and dark trajectories of these vessels, indicating that while
+more active vessels tend to have more dark segments, most variation in dark trajectories cannot be
+explained by activity alone. Together with the disproportionate contribution of the top 13.2 percent
+of vessels, this supports the identification of a subset of vessels with a higher propensity for going
+dark. These vessels, termed habitual dark vessels, warranted further investigation due to their
+repeated involvement in prolonged AIS transmission gaps and anomalous movement patterns.
+327
+Figure 4: Maritime jurisdictions associated with vessel trajectory origins (figure by author)
+The identified 600 habitual dark vessels were associated with 20 different country flags, with the
+most flags belonging to Russia (44.8 percent), Turkey (15.2 percent), Panama (11.4 percent), Malta
+
+
+(6 percent), and Moldova (0.8 percent). The AIS signals belonged to a variety of vessel types, with
+the highest percentage of types being cargo (19.4 percent), tanker (8 percent), tug (5.1 percent),
+fishing (3 percent), and special craft (3 percent). Lastly, the dark trajectories associated with
+habitually dark vessels, termed habitual dark trajectories, were mapped to examine their
+geographic distribution across maritime jurisdictions. The results indicate that the proportion of
+habitual dark trajectories occurring within the maritime jurisdictions of Georgia and Ukraine, both
+areas with protracted conflicts, was approximately three times higher than the proportion of total
+trajectories observed in those areas. Given the study's focus on conflict-affected maritime
+environments, the observed patterns in Georgia's maritime jurisdiction were examined in greater
+detail.
+4.2 Georgia and Abkhazia
+Metric Value
+Total Trajectories 20,358
+Unmoored Dark Trajectories 1,094 (5.4% of Total Trajectories)
+DPCOM Trajectories 552 (2.7% of Total Trajectories)
+Total Vessels 507
+DPCOM Vessels 77 (15.2% of Total Vessels)
+Habitual DPCOM Vessels 16 (20.8% of Total vessels)
+Most Common DPCOM Vessel Type Cargo, Tanker, Fishing
+Most Common DPCOM Vessel Flag State Russia, Panama, Turkey
+Most Frequent DPCOM Trajectory Origin Territorial
+Most Frequent DPCOM Trajectory Destinations Poti, Kulevi, Batumi
+Table 2: Key Metrics of Unmoored Vessels in Georgia’s Maritime Domain
+Applying the algorithm to determine discrete port-calling opportunities to Abkhazia provides
+insights into the potential relationships between vessels with long transmission gaps and the
+protracted conflict. To achieve more granular results, the algorithm was computed against an AIS
+dataset within Georgia’s maritime domain that removed all moored vessels instead of only vessels
+in the immediate vicinity of a port. The algorithm identified 552 DPCPM trajectories, representing
+
+
+2.7 percent of all non-mooring transmission gaps within Georgia’s maritime domain. To determine
+if the start points of DPCOM trajectories aligned with known anomaly areas, the results of the
+algorithm were cross-compared to cells in the statistical grid model that had exhibited high z
+scores.
+Of the 552 DPCOM trajectories, 328 (59.4 percent) originated within grid cells classified as
+anomaly hotspots. In comparison, only 3,338 of 20,358 (16.4 percent) non-mooring AIS
+transmission-gaps started within hotspot cells. Hence, DPCOM trajectories were approximately
+3.6 times more likely to originate in hotspot regions than transmission gaps in the broader
+unmoored vessel dataset. When restricted to AIS transmission gaps exceeding 24 hours within
+Georgia’s maritime domain, termed unmoored dark trajectories, 615 of 1,094 events (56.2 percent)
+originated within anomaly hotspot cells. Of all unmoored dark trajectories, 51.0 percent failed the
+DPCOM travel-time criterion and were excluded because the available AIS-off duration was
+insufficient to satisfy the required travel-time condition under the assumed operational parameters.
+Consequently, the DPCOM criterion substantially reduced the initial prolonged-gap population
+rather than simply assigning suspicion to all AIS interruptions.
+A subsequent sensitivity analysis evaluated assumed vessel speeds of 5, 10, and 15 m/s and
+minimum gap durations of 6, 12, 24, and 48 hours. The gap-duration threshold had no influence
+on the number of detected suspicious segments, with identical results obtained across all tested
+thresholds. In contrast, assumed speed substantially affected detection rates, producing 256, 536,
+and 804 suspicious segments at 5, 10, and 15 m/s, respectively. The number of vessels identified
+followed the same pattern, with 54, 77, and 112 vessels being associated with increases in speeds.
+Because multiple AIS transmission gaps may originate from the same vessel, vessel-level
+clustering was assessed among hotspot-associated DPCOM detections. The seven highest
+
+
+contributing vessels accounted for 176 of 328 hotspot overlaps (53.7 percent), with the remaining
+overlaps distributed among 32 additional vessels. This indicates that repeated observations from
+individual vessels contributed to hotspot frequencies, but the identified spatial pattern was not
+generated by a single vessel alone.
+Beyond the spatial analysis, vessel-level examination of DPCOM detections revealed recurring
+patterns among vessels exhibiting repeated transmission gaps. Habitual DPCOM vessels were
+defined as the subset of vessels contributing the highest number of DPCOM trajectories and
+collectively accounting for approximately 50 percent of detected DPCOM events. Within the
+Georgia maritime domain dataset, this corresponded to 16 vessels (20.8 percent of DPCOM
+associated vessels), each contributing at least four DPCOM-qualified transmission gaps during the
+study period. Habitual DPCOM vessels exhibited more frequent transmission gaps but generally
+shorter individual gap durations than occasional DPCOM vessels, which produced fewer but often
+substantially longer gaps. This indicates that recurrence and duration represent distinct dimensions
+of AIS transmission behaviour. Vessel flags associated with DPCOM trajectories include,
+primarily, Russia (14.8 percent), Panama (12.3 percent), Turkey (12.3 percent), Malta (9.9
+percent), and Georgia (6.2 percent). Habitual DPCOM vessels are associated most strongly with
+Russia and Georgia, especially. In terms of vessel types, cargo (25.6 percent), tanker (16.7
+percent), fishing vessel (5.6 percent), tug (5.6 percent), and passenger vessels (2.2 percent) are
+most strongly represented. Notably, however, tankers are far less likely to be habitual DPCOM
+vessels. Although most vessels choose not to declare their final destination during routes with
+DPCOM trajectories, when electing to do so, the most named destination ports are Poti (23.1
+percent), Kulevi (9.2 percent), and Batumi (7.7 percent). Lastly, mapping the starting points of
+DPCOM trajectories across Georgia’s maritime jurisdictions revealed that 65.7 percent began
+
+
+within the territorial sea, 10.4 percent within the contiguous zone, and 23.9 percent within the
+exclusive economic zone.
+396
+Figure 5: Number of DPCOM trajectories compared to the number of DPCOM vessels (figure by author)
+398
+Figure 6: Graph comparing the average DPCOM transmission gap to the number of DPCOM trajectories (figure by 400 author)
+
+
+401
+Figure 7: Comparison of destination ports between occasionally and habitually DPCOM vessels (figure by author)
+5 Discussion
+The following section moves from the quantitative results to their interpretation in terms of
+maritime security. Protracted coastal conflicts may contribute to limited maritime governance,
+reduced enforcement capacity, and restrictions on commercial activity, all of which can affect
+the reliability of vessel tracking systems. Prior research on maritime smuggling highlights that
+concealment-related behaviours often involve AIS disruption, irregular routing, and movement
+through less-monitored maritime areas [25, 29, 32, 34]. While such behaviours are not directly
+observable as intent in AIS data, they have been interpreted in previous studies as proxies for
+concealment-related activity [25, 34]. Hence, while not indicative of illicit activity on their own,
+the identified patterns provide an empirical basis for examining how protracted conflicts may
+shape irregular maritime behaviour.
+
+
+Firstly, the results provide valuable insights into maritime traffic trends in the Eastern Black Sea
+with relevance to maritime security. A notable feature of the dataset is the prevalence of vessels
+registered under Flags of Convenience (FoCs) among those classified as habitual dark vessels.
+FoC refers to a maritime practice where owners register their vessels under a different country’s
+ship registry, with significant implications for regulatory oversight and transparency in
+ownership structures [80, 81, 82]. In the dataset on the Eastern Black Sea, three of the five most
+frequently observed flags among habitual dark vessels (Malta, Panama, and Moldova) are
+commonly identified as open registries. A similar pattern is observed within Georgia’s maritime
+jurisdiction, where three of the five flags most used by habitual dark vessels correspond to
+countries with open registries (Malta, Panama, and Georgia). Although Georgian-flagged vessels
+are naturally more prevalent within the country’s waters, the overall distribution indicates a
+substantial presence of open registry flags within both the wider Black Sea and the Georgian
+maritime domain.
+Another notable feature of maritime traffic in the Eastern Black Sea was the prevalence of
+transmission gaps exceeding 24 hours. While only 0.2 percent of all transmission gaps exceeded
+this threshold, 83 percent of vessels experienced at least one such interruption during the study
+period. Focusing on vessels exhibiting habitual dark trajectories allows the analysis to
+distinguish recurrent AIS anomalies from isolated events, although additional research is needed
+to better understand the operational factors associated with occasional transmission gaps.
+Interpretation is further complicated by different protocols around AIS use during mooring and
+docking activities, which may contribute to some extended transmission gaps. Taken together,
+the prevalence of open-registry vessels among habitual dark vessels and the widespread
+
+
+occurrence of extended AIS transmission gaps highlight characteristics of the maritime operating
+environment that may complicate the monitoring of vessel activity in the Eastern Black Sea.
+Secondly, the study provides insights into the characteristics of vessels with discrete port-calling
+opportunities in Abkhazia. While all DPCOM vessels exhibited AIS transmission gaps exceeding
+24 hours, habitual DPCOM vessels produced a greater number of individual gaps with generally
+shorter average durations. In contrast, occasional DPCOM vessels exhibited fewer transmission
+gaps, but these events were often substantially longer in duration. These findings contribute to
+understanding variation in AIS transmission behaviour among vessels exhibiting recurrent
+anomalies. The results further indicate that vessels with port-calling opportunities exhibiting
+individual AIS transmission gaps of extended duration, suggesting substantial unobserved
+movement between recorded transmissions. Vessel profiles also provide insight into the spatial
+context in which transmission gaps occur. Specifically, 65.7 percent of transmission gaps began
+within Georgia’s territorial waters, which extend 12 nautical miles from the coastline. This pattern
+indicates that AIS transmission interruptions frequently occur relatively close to shore and often
+after vessels depart from major Georgian ports. Taken together, these findings contribute to the
+growing literature on AIS-derived anomaly detection by providing empirical data on the
+movement characteristics and transmission patterns of vessels exhibiting recurrent AIS anomalies.
+The vessel profiles also provide an opportunity to examine whether patterns identified in previous
+research regarding Turkish maritime activity near Abkhazia are reflected in the AIS-derived
+dataset. As discussed earlier, Turkish vessels have previously been linked to unauthorized port
+visits in Abkhazia [16,17]. First, the declared destination ports of suspicious vessels were checked.
+This information is manually entered by the vessels before departure. Less than 60 percent of the
+DPCOM trajectories, however, correspond to vessels electing to provide this information. Where
+
+
+destinations were provided, only 2.7 percent of DPCOM trajectories correspond to vessels destined
+for Turkish ports. Although a small percentage of the total, the inclusion of one Turkish port among
+14 total should be noted. Second, vessel registry information was examined. Turkish-flagged
+vessels accounted for 12.3 percent of vessels associated with DPCOM trajectories. These findings
+suggest that Turkish-flagged vessels are visibly linked to recurrent AIS anomalies in the study
+region. Further research incorporating additional sources of vessel ownership and operational data
+would be required to assess the significance of this relationship.
+Perhaps most importantly, the results suggest an association between protracted conflict settings
+and irregular maritime behaviour. The littoral countries along the Eastern Black Sea coastline
+exhibiting a disproportionately high ratio of habitual dark trajectories to total trajectories are
+Georgia and Ukraine, both of which contain territories affected by protracted conflicts. The
+elevated proportion of extended transmission gaps observed within these maritime jurisdictions is
+consistent with a relationship between conflict-affected maritime environments and anomalous
+vessel behaviour. A closer examination of Georgia’s maritime jurisdiction further reveals that a
+substantial number of AIS gaps provide discrete port-calling opportunities to Abkhazia’s coastline,
+a pattern consistent with the study’s expectations regarding the relationship between protracted
+conflict and AIS anomalies. Moreover, many of these trajectories originate in areas identified by
+the statistical model as containing significantly higher concentrations of anomalies than would be
+expected based on underlying traffic patterns. Taken together, the findings provide exploratory
+evidence that AIS anomalies occur disproportionately higher within maritime jurisdictions
+affected by protracted conflicts.
+Several methodological extensions offer promising avenues for future research. First, the
+framework could be integrated with more interpretable machine learning approaches to assess
+
+
+whether additional vessel characteristics could improve anomaly detection performance while
+preserving transparency in model outputs. Second, incorporating complementary data sources, like
+satellite imagery, port records, sanction databases, and vessel ownership registries, could provide
+additional contextual information for interpreting AIS anomalies. Applying the analytical
+framework to other maritime regions affected by protracted conflicts or areas with elevated levels
+of irregular maritime activity could allow for comparative assessments, although differing
+structural factors influencing events, including the region’s geopolitical, economic, and security
+environments, then need to be accounted for. Finally, expanding the geo-temporal parameters in
+future research would allow for more robust conclusions, facilitate longitudinal comparisons, and
+enable the identification of more nuanced patterns and trends.
+6 Limitations
+AIS transmission data provide a valuable source of empirical information on vessel movement
+patterns, but limitations in coverage, reliability, and adoption affect the completeness of the
+dataset. As discussed earlier, technological malfunctions, transmission errors, and inaccuracies
+arising from manual data entry can introduce noise. Although data-cleaning procedures were
+implemented to identify and remove erroneous observations where possible, some inaccuracies
+may remain. Likewise, AIS adoption is not universal; research conducted by Serra-Sogas and
+colleagues estimated that 30 percent of vessels, especially smaller recreational and artisanal
+vessels, do not continuously transmit AIS signals [83]. As a result, the dataset may underrepresent
+certain categories of maritime activity and potentially underestimate the overall prevalence of
+vessel movements in the study region.
+
+
+The analytical framework also relies on a number of modelling assumptions. The DPCOM model
+uses threshold values relating to transmission-gap duration, vessel speed, and port-calling
+opportunities to identify trajectories warranting further examination. While these parameters were
+selected to provide a conservative basis for identifying potentially relevant trajectories, alternative
+parameter choices may produce somewhat different classifications. Similarly, the statistical
+significance framework depends on the structure of the null model and the selected spatial grid
+configuration. Although these methods provide a systematic means of identifying deviations from
+expected traffic patterns, they inherently simplify the complexity of real-world vessel operations.
+Consequently, the results should be interpreted in terms of patterns rather than precise
+measurements of underlying maritime activity.
+The clandestine nature of illicit maritime activity makes direct verification particularly difficult.
+AIS anomalies alone cannot establish the occurrence of illicit activities like smuggling. Extended
+transmission gaps may result from a range of causes, ranging from technical failures to deliberate
+obfuscation. While previous research has associated some of these behaviours with concealment
+related maritime activity, attributing intent to individual vessels is beyond the scope of the present
+study. The findings should therefore be interpreted as evidence of irregular maritime activity rather
+than direct evidence of illicit conduct.
+7 Conclusion
+The study examined whether patterns of anomalous vessel behaviour were associated with
+conflict-affected coastal environments in the Eastern Black Sea. Building on existing research
+concerning maritime activity around Abkhazia, the study applied a Discrete Port Calling
+Opportunities Model and a grid-based statistical framework to a historic AIS dataset on vessel
+
+
+movements in 2018. The findings provide insights into the distribution of AIS anomalies, the
+characteristics of vessels exhibiting recurrent anomalous behaviour, and the spatial concentration
+of such patterns within the study region. The results provide exploratory evidence that anomalous
+AIS behaviours occur disproportionately higher within maritime jurisdictions affected by
+protracted conflicts. More broadly, the study demonstrates the potential value of combining
+stochastic anomaly-detection techniques with large-scale AIS data to investigate maritime activity
+in environments characterised by high uncertainty. Future research integrating additional data
+sources and extending the analysis across different temporal and geographic contexts may further
+improve understanding of the relationship between conflict-affected maritime environments and
+irregular vessel behaviour.
+8 Abbreviations
+AIS: Automatic Identification System
+DBSCAN: Density-Based Spatial Clustering of Applications with Noise
+DPCOM: Discrete Port Calling Opportunities Model
+EA: Expected Anomalies
+FoC: Flags of Convenience
+GIS: Geographic Information System
+MMSI: Maritime Mobile Service Identities
+OA: Observed Anomalies
+OAV: Observed Anomalies per Vessel
+OP: Observed Points
+OPV: Observed Points by Vessel
+
+
+RDBMS: Relational Database Management System
+SQL: Structured Query Language
+SVS: Suspicious Vessel Segments
+TA: Time Available
+TR: Time Required
+9 Declarations
+Ethics approval and consent to participate: Not applicable
+Consent for publication: Not applicable
+Availability of data and materials: The AIS data that support the findings of this study are
+available from Spire Global but restrictions apply to the availability of these data, which were
+used under license for the current study, and so are not publicly available. Data may be obtained
+from Spire Global (https://spire.com) subject to licensing restrictions. Additional data supporting
+this study include the World Port Index created by the National Geospatial-Intelligence Agency,
+which is publicly accessible, and MarineRegions.org data from the Flanders Marine Institute,
+which are licensed under Creative Commons Attribution and available for research use.
+Competing interests: The author declares that there are no competing interests.
+Funding: This work was supported by Tilburg University under the Special Data Collection
+Requests Fund.
+Authors' contribution: The author performed all aspects of the research and manuscript
+preparation.
+Acknowledgements: The author thanks Dr. Toine Spapens, Dr. Monica den Boer, and Thomas
+Joyce for discussions and feedback during the development of this research.
+
+
+Generative AI use: Generative AI tools were used during the preparation of this manuscript
+solely to assist with improving clarity of expression. All research design, data analysis,
+interpretation, and conclusions were conducted independently by the author.

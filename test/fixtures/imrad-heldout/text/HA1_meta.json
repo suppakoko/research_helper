@@ -1,0 +1,69 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "HA1",
+  "title": "PEDAL: Open Infrastructure for Citable AI Prompts in STEM Education and Research",
+  "venue": "arXiv (cs.DL) (2026)",
+  "publisher": "arxiv",
+  "layout": {
+    "columnsExpected": null,
+    "columnsExpectedBasis": "not visible without the PDF",
+    "headingNumbering": "unknown",
+    "webHeadings": "not checked",
+    "notes": [
+      "headings and layout not checked in advance: the candidate list was drawn without opening any paper",
+      "a large PDF (12.3 MB)"
+    ]
+  },
+  "doi": null,
+  "otherId": "arXiv:2610.00001v1",
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "arXiv abstract page links creativecommons.org/licenses/by/4.0 (same in the arXiv OAI-PMH record); \"TeX Source\" offered, so LaTeX-typeset. PDF header check 200 (12.3 MB, large).",
+  "sourceUrl": "https://arxiv.org/pdf/2610.00001v1",
+  "landingUrl": "https://arxiv.org/abs/2610.00001",
+  "recordedAt": "2026-11-12T09:30:10.494Z",
+  "extractedAt": "2026-11-12T09:30:10.494Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "HA1.pdf",
+    "bytes": 12299201,
+    "sha256": "fead4415b1aeb83c508802b669743216c83ffaf148a0b6b5eb6289e362bec650"
+  },
+  "text": {
+    "file": "HA1.txt",
+    "bytes": 65721,
+    "chars": 65113,
+    "sha256": "ad66bdcbd321d9f1adcc9bde25fc09357efea2d6a16adf4d24ee293da1f370db",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 65113,
+      "truncated": false,
+      "pages": 34,
+      "runningHeadLinesRemoved": 33,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.12488240195683144,
+      "supplementaryCharsRemoved": 0,
+      "ocrWords": 7199,
+      "ocrSplits": 0,
+      "ocrSplitShare": 0,
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 26,
+      "twoColumnPages": 0
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

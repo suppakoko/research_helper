@@ -1,0 +1,68 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "HA2",
+  "title": "Reverse Item Response Theory for Sparsity-Robust Ranking in Fragmented Cancer Drug-Response Matrices",
+  "venue": "arXiv (cs.LG) (2026)",
+  "publisher": "arxiv",
+  "layout": {
+    "columnsExpected": null,
+    "columnsExpectedBasis": "not visible without the PDF",
+    "headingNumbering": "unknown",
+    "webHeadings": "not checked",
+    "notes": [
+      "headings and layout not checked in advance: the candidate list was drawn without opening any paper"
+    ]
+  },
+  "doi": null,
+  "otherId": "arXiv:2610.00002v1",
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "arXiv abstract page links creativecommons.org/licenses/by/4.0; TeX source offered. PDF header check 200 (0.3 MB).",
+  "sourceUrl": "https://arxiv.org/pdf/2610.00002v1",
+  "landingUrl": "https://arxiv.org/abs/2610.00002",
+  "recordedAt": "2026-11-12T09:30:10.494Z",
+  "extractedAt": "2026-11-12T09:30:10.494Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "HA2.pdf",
+    "bytes": 260622,
+    "sha256": "8d0a543cf74a40f7f4699bb10fc8b9758a53d56e57c0e1eadaeca9e85a169294"
+  },
+  "text": {
+    "file": "HA2.txt",
+    "bytes": 9780,
+    "chars": 9682,
+    "sha256": "aa5a0b238a3ca88c8572cd239ef2d36a240858777fe86bc130c76b5bdd5b8329",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 9682,
+      "truncated": false,
+      "pages": 8,
+      "runningHeadLinesRemoved": 7,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.12922661870503596,
+      "supplementaryCharsRemoved": 0,
+      "ocrWords": 978,
+      "ocrSplits": 0,
+      "ocrSplitShare": 0,
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 4,
+      "twoColumnPages": 0
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

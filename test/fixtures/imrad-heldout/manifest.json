@@ -1,0 +1,543 @@
+{
+  "schema": "imrad-manifest-v1",
+  "description": "P3-T40: the held-out papers of the G-22 follow-up (plan/00 §6 items 373 and 374; 19 of the 20, HI1 pending, item 374(d)), kept apart from the detector work until P3-T41's one final measurement. Metadata from the owner-approved held-out candidate list of 2026-11-11 and the downloads of 2026-11-12; columnCount and hasImradStructure are written by scripts/build-imrad-fixtures.ts --set heldout. See README.md.",
+  "papers": [
+    {
+      "id": "HE1",
+      "title": "A randomized crossover study of cardiologist reporting of severe aortic stenosis with/without assistance from artificial intelligence (AI)",
+      "venue": "iScience 29(10), 115562 (2026)",
+      "publisher": "elsevier",
+      "doi": "10.1016/j.isci.2026.115562",
+      "otherId": "PMC13594739",
+      "landingUrl": "https://www.cell.com/iscience/fulltext/S2589-0042(26)00937-5",
+      "sourceUrl": "owner's browser download, 2026-11-12, from https://www.cell.com/iscience/pdf/S2589-0042(26)00937-5.pdf or its alternative https://europepmc.org/articles/PMC13594739?pdf=render (which address was used is not recorded)",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 2 of the extracted text (the article page after the graphical abstract) states: \"This is an open access article under the CC BY license (http://creativecommons.org/licenses/by/4.0/)\", 2026-11-12. Before that: Publisher pages (cell.com, sciencedirect.com) answered a bot check, so not read. Elsevier's own Crossref record gives CC BY 4.0 for the version of record; Europe PMC record PMC13594739 gives \"cc by\". Re-check on the PDF.",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": null,
+        "columnsExpectedBasis": "not visible; first-set iScience paper E2 was observed as 1 column (expected 2)",
+        "headingNumbering": "unknown",
+        "webHeadings": "not checked",
+        "notes": [
+          "headings and layout not checked in advance: the candidate list was drawn without opening any paper"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 7 of 10 pages with body text are two-column",
+      "textFile": "text/HE1.txt",
+      "labelsFile": "labels/HE1.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "HE2",
+      "title": "Ultrasound-assisted extraction of novel ancient tea polysaccharide NATP-60a: Process optimization, structural characterization, and mechanism of alleviating DSS-induced colitis in mice",
+      "venue": "Ultrasonics Sonochemistry 133, 108005 (2026)",
+      "publisher": "elsevier",
+      "doi": "10.1016/j.ultsonch.2026.108005",
+      "otherId": "PMC13524502",
+      "landingUrl": "https://www.sciencedirect.com/science/article/pii/S1350417726002701",
+      "sourceUrl": "owner's browser download, 2026-11-12, from https://www.sciencedirect.com/science/article/pii/S1350417726002701/pdfft or its alternative https://europepmc.org/articles/PMC13524502?pdf=render (which address was used is not recorded)",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the extracted text states: \"This is an open access article under the CC BY license (http://creativecommons.org/licenses/by/4.0/)\", 2026-11-12. Before that: ScienceDirect answered a robot/captcha check, so not read. Elsevier Crossref record: CC BY 4.0 (version of record); Europe PMC PMC13524502: \"cc by\". Re-check on the PDF.",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected, not seen: first-set Ultrasonics Sonochemistry paper E4 was 2 columns",
+        "headingNumbering": "unknown",
+        "webHeadings": "not checked",
+        "notes": [
+          "headings and layout not checked in advance: the candidate list was drawn without opening any paper"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 17 of 18 pages with body text are two-column",
+      "textFile": "text/HE2.txt",
+      "labelsFile": "labels/HE2.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "HS1",
+      "title": "IXSH-FD: integrated XGBoost-SHAP hybrid framework for SNP feature discovery",
+      "venue": "BMC Bioinformatics (2026)",
+      "publisher": "springer",
+      "doi": "10.1186/s12859-026-06664-0",
+      "otherId": null,
+      "landingUrl": "https://link.springer.com/article/10.1186/s12859-026-06664-0",
+      "sourceUrl": "owner's browser download, 2026-11-12, from https://link.springer.com/content/pdf/10.1186/s12859-026-06664-0.pdf or the article page https://link.springer.com/article/10.1186/s12859-026-06664-0 (which address was used is not recorded)",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "link.springer.com article page links creativecommons.org/licenses/by/4.0; read 2026-11-11. Crossref also CC BY 4.0. The PDF link (the page's own citation_pdf_url) answered 404 to a header-only request, which may only mean Springer refuses header requests. The extracted text (page 15) also states: \"Open Access This article is licensed under a Creative Commons Attribution 4.0 International License\" (2026-11-12); the PDF is Springer's \"Article in Press\" version.",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected, not seen: first-set BMC Bioinformatics paper S1 was 2 columns",
+        "headingNumbering": "unknown",
+        "webHeadings": "not checked",
+        "notes": [
+          "headings and layout not checked in advance: the candidate list was drawn without opening any paper"
+        ]
+      },
+      "columnCount": 1,
+      "columnCountBasis": "observed in the structured document text: 0 of 16 pages with body text are two-column",
+      "textFile": "text/HS1.txt",
+      "labelsFile": "labels/HS1.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "HS2",
+      "title": "AIS-derived port-calling opportunity modelling in conflict-affected waters",
+      "venue": "EPJ Data Science (Brief Report) (2026)",
+      "publisher": "springer",
+      "doi": "10.1140/epjds/s13688-026-00699-2",
+      "otherId": null,
+      "landingUrl": "https://link.springer.com/article/10.1140/epjds/s13688-026-00699-2",
+      "sourceUrl": "owner's browser download, 2026-11-12, from https://link.springer.com/content/pdf/10.1140/epjds/s13688-026-00699-2.pdf or the article page https://link.springer.com/article/10.1140/epjds/s13688-026-00699-2 (which address was used is not recorded)",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "link.springer.com article page links creativecommons.org/licenses/by/4.0; read 2026-11-11. Crossref CC BY 4.0. PDF link answered 404 to a header-only request (as HS1). Page 1 of the extracted text also states: \"Open Access This article is licensed under a Creative Commons Attribution 4.0 International License\" (2026-11-12); the PDF is Springer's \"Article in Press\" version.",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 1,
+        "columnsExpectedBasis": "expected, not seen: first-set EPJ Data Science paper S4 was 1 column",
+        "headingNumbering": "unknown",
+        "webHeadings": "not checked",
+        "notes": [
+          "headings and layout not checked in advance: the candidate list was drawn without opening any paper",
+          "article type Brief Report"
+        ]
+      },
+      "columnCount": 1,
+      "columnCountBasis": "observed in the structured document text: 3 of 7 pages with body text are two-column",
+      "textFile": "text/HS2.txt",
+      "labelsFile": "labels/HS2.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "HW1",
+      "title": "A Facial Foundation Model for Clinical Biomarker Prediction and Real-World Mobile Deployment",
+      "venue": "Advanced Science, e77861 (2026)",
+      "publisher": "wiley",
+      "doi": "10.1002/advs.77861",
+      "otherId": "PMC13631392",
+      "landingUrl": "https://advanced.onlinelibrary.wiley.com/doi/10.1002/advs.77861",
+      "sourceUrl": "owner's browser download, 2026-11-12, from https://advanced.onlinelibrary.wiley.com/doi/pdf/10.1002/advs.77861 or its alternative https://europepmc.org/articles/PMC13631392?pdf=render (which address was used is not recorded)",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the extracted text states: \"This is an open access article under the terms of the Creative Commons Attribution License\" (no version on the page), 2026-11-12. Before that: Wiley page answered a Cloudflare \"Just a moment...\" check, so not read. Wiley Crossref record: CC BY 4.0 (version of record); Europe PMC PMC13631392: \"cc by\". Re-check on the PDF.",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected, not seen: first-set Advanced Science papers W2, W3 were 2 columns",
+        "headingNumbering": "unknown",
+        "webHeadings": "not checked",
+        "notes": [
+          "headings and layout not checked in advance: the candidate list was drawn without opening any paper"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 15 of 16 pages with body text are two-column",
+      "textFile": "text/HW1.txt",
+      "labelsFile": "labels/HW1.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "HW2",
+      "title": "NIHSS and Large Artery Atherosclerosis Affect Efficacy of Dual Antiplatelet Therapy Versus Alteplase for Minor Stroke",
+      "venue": "Brain and Behavior 16(10), e71813 (2026)",
+      "publisher": "wiley",
+      "doi": "10.1002/brb3.71813",
+      "otherId": "PMC13639244",
+      "landingUrl": "https://onlinelibrary.wiley.com/doi/10.1002/brb3.71813",
+      "sourceUrl": "owner's browser download, 2026-11-12, from https://onlinelibrary.wiley.com/doi/pdf/10.1002/brb3.71813 or its alternative https://europepmc.org/articles/PMC13639244?pdf=render (which address was used is not recorded)",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the extracted text states: \"This is an open access article under the terms of the Creative Commons Attribution License\" (no version on the page), 2026-11-12. Before that: Wiley page bot check (not read). Wiley Crossref record CC BY 4.0 (version of record); Europe PMC PMC13639244 \"cc by\".",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected, not seen: first-set Brain and Behavior paper W4 was 2 columns",
+        "headingNumbering": "unknown",
+        "webHeadings": "not checked",
+        "notes": [
+          "headings and layout not checked in advance: the candidate list was drawn without opening any paper"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 5 of 6 pages with body text are two-column",
+      "textFile": "text/HW2.txt",
+      "labelsFile": "labels/HW2.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "HO1",
+      "title": "GROMTools: scalable individual-level GReX imputation for mega-biobank-scale cohorts",
+      "venue": "Bioinformatics 42(10), btag719 (2026)",
+      "publisher": "oup",
+      "doi": "10.1093/bioinformatics/btag719",
+      "otherId": "PMC13680095",
+      "landingUrl": "https://academic.oup.com/bioinformatics/article/doi/10.1093/bioinformatics/btag719",
+      "sourceUrl": "owner's browser download, 2026-11-12, from https://academic.oup.com/bioinformatics/article-pdf/42/10/btag719/71559977/btag719.pdf or its alternative https://europepmc.org/articles/PMC13680095?pdf=render (which address was used is not recorded)",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the extracted text states: \"Open Access article distributed under the terms of the Creative Commons Attribution License (https://creativecommons.org/licenses/by/4.0/)\", 2026-11-12. Before that: academic.oup.com answered 403 (as for O1 in the first set), so not read. OUP Crossref record CC BY 4.0 (version of record); Europe PMC PMC13680095 \"cc by\". PMC lists it as a brief report (an Applications Note, likely two pages).",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected, not seen: first-set Bioinformatics paper O4 was 2 columns",
+        "headingNumbering": "unknown",
+        "webHeadings": "not checked",
+        "notes": [
+          "headings and layout not checked in advance: the candidate list was drawn without opening any paper",
+          "PMC lists it as a brief report (an Applications Note)"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 5 of 6 pages with body text are two-column",
+      "textFile": "text/HO1.txt",
+      "labelsFile": "labels/HO1.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "HO3",
+      "title": "Structural basis of PARP2 recognition of nucleosomal DNA breaks and inhibitor trapping",
+      "venue": "Nucleic Acids Research 54(18), gkag939 (2026)",
+      "publisher": "oup",
+      "doi": "10.1093/nar/gkag939",
+      "otherId": "PMC13635751",
+      "landingUrl": "https://academic.oup.com/nar/article/doi/10.1093/nar/gkag939",
+      "sourceUrl": "owner's browser download, 2026-11-12, from https://academic.oup.com/nar/article-pdf/54/18/gkag939/71595458/gkag939.pdf or its alternative https://europepmc.org/articles/PMC13635751?pdf=render (which address was used is not recorded)",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the extracted text states: \"Open Access article distributed under the terms of the Creative Commons Attribution License (https://creativecommons.org/licenses/by/4.0/)\", 2026-11-12. Before that: As HO2: OUP Crossref CC BY 4.0 (version of record); Europe PMC PMC13635751 \"cc by\"; OUP site 403.",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected, not seen (same journal as O2)",
+        "headingNumbering": "unknown",
+        "webHeadings": "not checked",
+        "notes": [
+          "headings and layout not checked in advance: the candidate list was drawn without opening any paper",
+          "replaces HO2, which was not downloaded (plan/00 §6 item 374(a)); the next CC BY research article after HO2 in the same list"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 13 of 14 pages with body text are two-column",
+      "textFile": "text/HO3.txt",
+      "labelsFile": "labels/HO3.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "HP1",
+      "title": "Rehospitalization due to COVID-19 reinfection in Rio de Janeiro, 2020–2022: Associations with vaccination status, sociodemographic and clinical factors",
+      "venue": "PLOS ONE (2026)",
+      "publisher": "plos",
+      "doi": "10.1371/journal.pone.0332281",
+      "otherId": null,
+      "landingUrl": "https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0332281",
+      "sourceUrl": "https://journals.plos.org/plosone/article/file?id=10.1371/journal.pone.0332281&type=printable",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "PLOS article page: \"Creative Commons Attribution License\", links creativecommons.org/licenses/by/4.0; read 2026-11-11. PDF link answered 200 application/pdf to a header check (0.6 MB). The extracted text (pages 1–2) also states the Creative Commons Attribution License (2026-11-12).",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 1,
+        "columnsExpectedBasis": "expected, not seen: all four first-set PLOS papers were 1 column",
+        "headingNumbering": "unknown",
+        "webHeadings": "not checked",
+        "notes": [
+          "headings and layout not checked in advance: the candidate list was drawn without opening any paper"
+        ]
+      },
+      "columnCount": 1,
+      "columnCountBasis": "observed in the structured document text: 0 of 10 pages with body text are two-column",
+      "textFile": "text/HP1.txt",
+      "labelsFile": "labels/HP1.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "HP2",
+      "title": "Demographic changes and behavioural responses shape vulnerability to infectious disease outbreaks",
+      "venue": "PLOS Computational Biology (2026)",
+      "publisher": "plos",
+      "doi": "10.1371/journal.pcbi.1014319",
+      "otherId": null,
+      "landingUrl": "https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1014319",
+      "sourceUrl": "https://journals.plos.org/ploscompbiol/article/file?id=10.1371/journal.pcbi.1014319&type=printable",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "PLOS article page links creativecommons.org/licenses/by/4.0; read 2026-11-11. PDF header check 200 application/pdf (2.1 MB). Page 1 of the extracted text also states the Creative Commons Attribution License (2026-11-12).",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 1,
+        "columnsExpectedBasis": "expected, not seen (PLOS layout; first-set PLOS papers were 1 column)",
+        "headingNumbering": "unknown",
+        "webHeadings": "not checked",
+        "notes": [
+          "headings and layout not checked in advance: the candidate list was drawn without opening any paper"
+        ]
+      },
+      "columnCount": 1,
+      "columnCountBasis": "observed in the structured document text: 0 of 14 pages with body text are two-column",
+      "textFile": "text/HP2.txt",
+      "labelsFile": "labels/HP2.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "HN1",
+      "title": "Nationwide sustainability assessment of PFAS treatment in U.S. water utilities",
+      "venue": "Nature Communications 17, 11276 (2026)",
+      "publisher": "nature",
+      "doi": "10.1038/s41467-026-77509-w",
+      "otherId": "PMC13720099",
+      "landingUrl": "https://www.nature.com/articles/s41467-026-77509-w",
+      "sourceUrl": "https://www.nature.com/articles/s41467-026-77509-w.pdf",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "nature.com article page links creativecommons.org/licenses/by/4.0 and is the final version (not an \"unedited manuscript\"); read 2026-11-11. PDF header check 200 application/pdf (2.1 MB).",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected, not seen: first-set Nature Communications papers N1–N3 were 2 columns",
+        "headingNumbering": "unknown",
+        "webHeadings": "not checked",
+        "notes": [
+          "headings and layout not checked in advance: the candidate list was drawn without opening any paper"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 10 of 10 pages with body text are two-column",
+      "textFile": "text/HN1.txt",
+      "labelsFile": "labels/HN1.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "HN2",
+      "title": "Large-scale marine eDNA database reveals seasonal latitudinal diversity gradients in Japan driven by vagrant fish",
+      "venue": "Scientific Reports 16, 30406 (2026)",
+      "publisher": "nature",
+      "doi": "10.1038/s41598-026-52959-w",
+      "otherId": null,
+      "landingUrl": "https://www.nature.com/articles/s41598-026-52959-w",
+      "sourceUrl": "https://www.nature.com/articles/s41598-026-52959-w.pdf",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "nature.com article page links creativecommons.org/licenses/by/4.0; final version; read 2026-11-11. PDF header check 200 application/pdf (1.9 MB).",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 1,
+        "columnsExpectedBasis": "expected, not seen: first-set Scientific Reports paper N6 was observed as 1 column",
+        "headingNumbering": "unknown",
+        "webHeadings": "not checked",
+        "notes": [
+          "headings and layout not checked in advance: the candidate list was drawn without opening any paper"
+        ]
+      },
+      "columnCount": 1,
+      "columnCountBasis": "observed in the structured document text: 0 of 9 pages with body text are two-column",
+      "textFile": "text/HN2.txt",
+      "labelsFile": "labels/HN2.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "HI2",
+      "title": "An Improved Beta Burst Extraction for Chip-Based Deep Brain Stimulation With Real-Time Model Updating",
+      "venue": "IEEE Open Journal of Engineering in Medicine and Biology 7, 214–222 (2026)",
+      "publisher": "ieee",
+      "doi": "10.1109/OJEMB.2026.3695567",
+      "otherId": "PMC13278738",
+      "landingUrl": "https://ieeexplore.ieee.org/document/11534946",
+      "sourceUrl": "owner's browser download, 2026-11-12, from https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=11534946 or its alternative https://europepmc.org/articles/PMC13278738?pdf=render (which address was used is not recorded)",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "page 1 of the extracted text states: \"This work is licensed under a Creative Commons Attribution 4.0 License\" (creativecommons.org/licenses/by/4.0), 2026-11-12. Before that: IEEE Xplore not readable (bot defence). IEEE Crossref record CC BY 4.0 (version of record); Europe PMC PMC13278738 \"cc by\".",
+      "preprint": false,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 2,
+        "columnsExpectedBasis": "expected, not seen: first-set OJEMB paper I1 was 2 columns",
+        "headingNumbering": "unknown",
+        "webHeadings": "not checked",
+        "notes": [
+          "headings and layout not checked in advance: the candidate list was drawn without opening any paper"
+        ]
+      },
+      "columnCount": 2,
+      "columnCountBasis": "observed in the structured document text: 8 of 8 pages with body text are two-column",
+      "textFile": "text/HI2.txt",
+      "labelsFile": "labels/HI2.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "HA1",
+      "title": "PEDAL: Open Infrastructure for Citable AI Prompts in STEM Education and Research",
+      "venue": "arXiv (cs.DL) (2026)",
+      "publisher": "arxiv",
+      "doi": null,
+      "otherId": "arXiv:2610.00001v1",
+      "landingUrl": "https://arxiv.org/abs/2610.00001",
+      "sourceUrl": "https://arxiv.org/pdf/2610.00001v1",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "arXiv abstract page links creativecommons.org/licenses/by/4.0 (same in the arXiv OAI-PMH record); \"TeX Source\" offered, so LaTeX-typeset. PDF header check 200 (12.3 MB, large).",
+      "preprint": true,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": null,
+        "columnsExpectedBasis": "not visible without the PDF",
+        "headingNumbering": "unknown",
+        "webHeadings": "not checked",
+        "notes": [
+          "headings and layout not checked in advance: the candidate list was drawn without opening any paper",
+          "a large PDF (12.3 MB)"
+        ]
+      },
+      "columnCount": 1,
+      "columnCountBasis": "observed in the structured document text: 0 of 26 pages with body text are two-column",
+      "textFile": "text/HA1.txt",
+      "labelsFile": "labels/HA1.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "HA2",
+      "title": "Reverse Item Response Theory for Sparsity-Robust Ranking in Fragmented Cancer Drug-Response Matrices",
+      "venue": "arXiv (cs.LG) (2026)",
+      "publisher": "arxiv",
+      "doi": null,
+      "otherId": "arXiv:2610.00002v1",
+      "landingUrl": "https://arxiv.org/abs/2610.00002",
+      "sourceUrl": "https://arxiv.org/pdf/2610.00002v1",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "arXiv abstract page links creativecommons.org/licenses/by/4.0; TeX source offered. PDF header check 200 (0.3 MB).",
+      "preprint": true,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": null,
+        "columnsExpectedBasis": "not visible without the PDF",
+        "headingNumbering": "unknown",
+        "webHeadings": "not checked",
+        "notes": [
+          "headings and layout not checked in advance: the candidate list was drawn without opening any paper"
+        ]
+      },
+      "columnCount": 1,
+      "columnCountBasis": "observed in the structured document text: 0 of 4 pages with body text are two-column",
+      "textFile": "text/HA2.txt",
+      "labelsFile": "labels/HA2.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "HB1",
+      "title": "SysNDD: A Systematic Database for Neurodevelopmental Disorders",
+      "venue": "bioRxiv (genetics), v1 posted 2026-10-01",
+      "publisher": "biorxiv",
+      "doi": "10.64898/2026.09.29.755401",
+      "otherId": null,
+      "landingUrl": "https://www.biorxiv.org/content/10.64898/2026.09.29.755401v1",
+      "sourceUrl": "owner's browser download, 2026-11-12, from https://www.biorxiv.org/content/10.64898/2026.09.29.755401v1.full.pdf or the article page https://www.biorxiv.org/content/10.64898/2026.09.29.755401v1 (which address was used is not recorded)",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "the bioRxiv header on page 1 of Zotero's raw extraction (removed from the committed text as a running head) states: \"It is made available under a CC-BY 4.0 International license\", 2026-11-12. Before that: bioRxiv's own API (api.biorxiv.org details) gives license \"cc_by\"; the article page answered HTTP 429 (rate limit) and was not retried. Re-check on the PDF header line, as for B1/B2.",
+      "preprint": true,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 1,
+        "columnsExpectedBasis": "expected, not seen: all first-set bioRxiv papers were 1 column",
+        "headingNumbering": "unknown",
+        "webHeadings": "not checked",
+        "notes": [
+          "headings and layout not checked in advance: the candidate list was drawn without opening any paper"
+        ]
+      },
+      "columnCount": 1,
+      "columnCountBasis": "observed in the structured document text: 0 of 26 pages with body text are two-column",
+      "textFile": "text/HB1.txt",
+      "labelsFile": "labels/HB1.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "HB2",
+      "title": "3D confinement reshapes RNA folding and enhances circularisation in the Zika virus",
+      "venue": "bioRxiv (biophysics), v2 posted 2026-10-01",
+      "publisher": "biorxiv",
+      "doi": "10.64898/2026.01.10.698690",
+      "otherId": null,
+      "landingUrl": "https://www.biorxiv.org/content/10.64898/2026.01.10.698690v2",
+      "sourceUrl": "owner's browser download, 2026-11-12, from https://www.biorxiv.org/content/10.64898/2026.01.10.698690v2.full.pdf or the article page https://www.biorxiv.org/content/10.64898/2026.01.10.698690v2 (which address was used is not recorded)",
+      "licence": "CC BY 4.0",
+      "licenceEvidence": "the bioRxiv header on page 1 of Zotero's raw extraction (removed from the committed text as a running head) states: \"available under a CC-BY 4.0 International license\", 2026-11-12. Before that: bioRxiv API license \"cc_by\"; article page 429, not retried.",
+      "preprint": true,
+      "scanned": false,
+      "layout": {
+        "columnsExpected": 1,
+        "columnsExpectedBasis": "expected, not seen (bioRxiv layout)",
+        "headingNumbering": "unknown",
+        "webHeadings": "not checked",
+        "notes": [
+          "headings and layout not checked in advance: the candidate list was drawn without opening any paper"
+        ]
+      },
+      "columnCount": 1,
+      "columnCountBasis": "observed in the structured document text: 0 of 13 pages with body text are two-column",
+      "textFile": "text/HB2.txt",
+      "labelsFile": "labels/HB2.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "HX1",
+      "title": "Calculation of the twist distribution of wings designed for cruise at transonic speeds",
+      "venue": "NASA Technical Note D-7813 (L-9832), December 1974",
+      "publisher": "us-government",
+      "doi": null,
+      "otherId": "NTRS 19750004865",
+      "landingUrl": "https://ntrs.nasa.gov/citations/19750004865",
+      "sourceUrl": "https://ntrs.nasa.gov/api/citations/19750004865/downloads/19750004865.pdf",
+      "licence": "US government work (17 U.S.C. 105)",
+      "licenceEvidence": "page 1 of the extracted text: NASA TN D-7813, by Michael J. Mann, NASA Langley Research Center, December 1974. Before that: NTRS record (NASA's own): distribution PUBLIC, determinationType GOV_PUBLIC_USE_PERMITTED, no third-party material; author M. J. Mann, NASA Langley Research Center. PDF header check 200 (0.6 MB).",
+      "preprint": false,
+      "scanned": true,
+      "layout": {
+        "columnsExpected": 1,
+        "columnsExpectedBasis": "expected, not seen: first-set NASA TN D-7812 (XR2) was 1 column",
+        "headingNumbering": "unknown",
+        "webHeadings": "not checked",
+        "notes": [
+          "headings and layout not checked in advance: the candidate list was drawn without opening any paper"
+        ]
+      },
+      "columnCount": 1,
+      "columnCountBasis": "observed in the structured document text: 1 of 21 pages with body text are two-column",
+      "textFile": "text/HX1.txt",
+      "labelsFile": "labels/HX1.json",
+      "hasImradStructure": null
+    },
+    {
+      "id": "HX2",
+      "title": "Data on shape and location of detached shock waves on cones and spheres",
+      "venue": "NACA Technical Note 2000, 1950",
+      "publisher": "us-government",
+      "doi": null,
+      "otherId": "NTRS 19930082664",
+      "landingUrl": "https://ntrs.nasa.gov/citations/19930082664",
+      "sourceUrl": "https://ntrs.nasa.gov/api/citations/19930082664/downloads/19930082664.pdf",
+      "licence": "US government work (17 U.S.C. 105)",
+      "licenceEvidence": "page 1 of the extracted text: NACA Technical Note 2000, January 1950, by J. W. Heberle, G. P. Wood and P. B. Gooderum of the Langley Aeronautical Laboratory (NACA staff authorship confirmed, 2026-11-12). Before that: NTRS record: distribution PUBLIC, GOV_PUBLIC_USE_PERMITTED. NTRS gives no affiliation for the authors (Heberle, Wood, Gooderum); NACA staff authorship to be confirmed on page 1 after download (the lesson of X3). PDF header check 200 (14.8 MB, large scan).",
+      "preprint": false,
+      "scanned": true,
+      "layout": {
+        "columnsExpected": null,
+        "columnsExpectedBasis": "not visible",
+        "headingNumbering": "unknown",
+        "webHeadings": "not checked",
+        "notes": [
+          "headings and layout not checked in advance: the candidate list was drawn without opening any paper",
+          "the download carried a 436-byte non-PDF header before %PDF-; on the owner's approval bytes 436 onward were kept (plan/00 §6 item 373(b))"
+        ]
+      },
+      "columnCount": 1,
+      "columnCountBasis": "observed in the structured document text: 6 of 30 pages with body text are two-column",
+      "textFile": "text/HX2.txt",
+      "labelsFile": "labels/HX2.json",
+      "hasImradStructure": null
+    }
+  ]
+}

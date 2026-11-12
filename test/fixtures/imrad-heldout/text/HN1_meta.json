@@ -1,0 +1,68 @@
+{
+  "scenario": "imrad-fixture-text",
+  "id": "HN1",
+  "title": "Nationwide sustainability assessment of PFAS treatment in U.S. water utilities",
+  "venue": "Nature Communications 17, 11276 (2026)",
+  "publisher": "nature",
+  "layout": {
+    "columnsExpected": 2,
+    "columnsExpectedBasis": "expected, not seen: first-set Nature Communications papers N1–N3 were 2 columns",
+    "headingNumbering": "unknown",
+    "webHeadings": "not checked",
+    "notes": [
+      "headings and layout not checked in advance: the candidate list was drawn without opening any paper"
+    ]
+  },
+  "doi": "10.1038/s41467-026-77509-w",
+  "otherId": "PMC13720099",
+  "licence": "CC BY 4.0",
+  "licenceEvidence": "nature.com article page links creativecommons.org/licenses/by/4.0 and is the final version (not an \"unedited manuscript\"); read 2026-11-11. PDF header check 200 application/pdf (2.1 MB).",
+  "sourceUrl": "https://www.nature.com/articles/s41467-026-77509-w.pdf",
+  "landingUrl": "https://www.nature.com/articles/s41467-026-77509-w",
+  "recordedAt": "2026-11-12T09:30:10.494Z",
+  "extractedAt": "2026-11-12T09:30:10.494Z",
+  "tool": {
+    "script": "scripts/build-imrad-fixtures.ts",
+    "zotero": "10.0.3",
+    "plugin": "0.0.2",
+    "path": "acquireZoteroSource, Tier 2 (attachmentText, then cleanFullText); tryEuropePmc false; parent item without abstract"
+  },
+  "pdf": {
+    "file": "HN1.pdf",
+    "bytes": 2117257,
+    "sha256": "9d97cf562cfb8fc6d8b2e76fceb521b3d638819ecb3a91dae253eafeb2606fb4"
+  },
+  "text": {
+    "file": "HN1.txt",
+    "bytes": 49798,
+    "chars": 49657,
+    "sha256": "61d1489b6ac520f73e9418e3cc42e4b18ceb98938363525f030d4dd053358e15",
+    "encoding": "UTF-8, no BOM; \\n line breaks and \\f page separators exactly as the cleaning pass left them"
+  },
+  "extraction": {
+    "warnings": [],
+    "diagnostics": {
+      "tier": "fulltext_pdf",
+      "charCount": 49657,
+      "truncated": false,
+      "pages": 12,
+      "runningHeadLinesRemoved": 24,
+      "gutterPages": 0,
+      "referencesCut": true,
+      "referencesShare": 0.2521836033973857,
+      "supplementaryCharsRemoved": 0,
+      "ocrWords": 6447,
+      "ocrSplits": 0,
+      "ocrSplitShare": 0,
+      "nonLatinShare": 0,
+      "warnings": ""
+    },
+    "columnGeometry": {
+      "pagesWithBody": 10,
+      "twoColumnPages": 10
+    }
+  },
+  "redactions": [
+    "none: the text is the paper's own published text under the licence above"
+  ]
+}

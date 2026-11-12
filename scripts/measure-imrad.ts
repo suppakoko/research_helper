@@ -33,12 +33,25 @@
  * when it is handed the owner's own heading positions. As Markdown tables, so
  * `docs/spikes/imrad-accuracy-report.md` can carry them as printed.
  *
+ * **Which set (`P3-T40`).** `--set first` (the default) is `P3-T20`'s 40
+ * papers, and everything above is about it. `--set heldout` is the held-out
+ * set in `test/fixtures/imrad-heldout/` (`plan/00` §6 item 374), and it is
+ * **sealed**: this script refuses it, before reading any of it and before any
+ * detector runs, unless {@link FINAL_HELDOUT_FLAG} is also given. **That flag
+ * may be used only by `P3-T41`, once, after its detector change is
+ * committed**; a second run on the same held-out set needs the owner's
+ * decision. Under the flag the held-out figure is printed against the bar
+ * and is not checked against `IMRAD_MEASUREMENT`, which records the first
+ * set.
+ *
  * **Exit status.** 0 at or above the bar and not below the recorded value; 1
- * below either; 2 when the corpus is missing or a labels file does not
- * validate against its text.
+ * below either; 2 when the corpus is missing or empty, a labels file does
+ * not validate against its text, or the arguments are wrong; 3 when the
+ * held-out set is asked for without {@link FINAL_HELDOUT_FLAG}.
  *
  * **Callers.** Run by hand (`npx tsx scripts/measure-imrad.ts`), and imported
- * by `test/unit/pipeline/imradAccuracy.test.ts`, the regression test.
+ * by `test/unit/pipeline/imradAccuracy.test.ts`, the regression test, and by
+ * `test/unit/pipeline/imradHeldout.test.ts`, which tests the refusal.
  *
  * It never writes a file, never changes a label, and never calls a model.
  */
@@ -59,6 +72,8 @@ import {
 } from "../src/pipeline/summarize/imrad";
 
 import {
+  FIXTURE_SETS,
+  fixtureSetFromArgs,
   IMRAD_DIR,
   LABELS_DIR,
   MANIFEST_FILE,
@@ -66,6 +81,7 @@ import {
   readText,
   TEXT_DIR,
   validateLabels,
+  type FixtureSet,
   type LabelledSection,
   type LabelsFile,
   type ManifestPaper,
@@ -508,16 +524,22 @@ function paperTable(scores: readonly PaperScore[]): string[] {
   ];
 }
 
-/** The whole printout, as Markdown. */
+/**
+ * The whole printout, as Markdown. `record` is the value the run is checked
+ * against; `null` (the held-out set) prints no such check. `setPath` names the
+ * measured set's directory.
+ */
 export function formatMeasurement(
   measurement: Measurement,
   ceiling: Measurement,
-  record: ImradMeasurement = IMRAD_MEASUREMENT,
+  record: ImradMeasurement | null = IMRAD_MEASUREMENT,
+  setPath: string = FIXTURE_SETS.first.path,
 ): string {
   const { overall } = measurement;
-  const check = checkAgainstRecord(measurement, record);
+  const recordLine =
+    record === null ? [] : ["", recordSentence(measurement, record)];
   return [
-    `Detector: detectSectionsFromPdf(text, null), the PDF path with no document structure, over ${TEXT_DIR}/ in test/fixtures/imrad.`,
+    `Detector: detectSectionsFromPdf(text, null), the PDF path with no document structure, over ${TEXT_DIR}/ in ${setPath}.`,
     "",
     `**Overall: ${percent(overall.accuracy)}** (${String(overall.correct)} of ${String(overall.counted)} counted characters, ${String(overall.papers)} papers with IMRaD structure) against the bar of ${percent(IMRAD_ACCURACY_BAR)}: ${meetsBar(overall) ? "MEETS the bar" : "BELOW the bar"}. Mean of the papers' own figures: ${percent(overall.meanOfPapers)} (information only).`,
     "",
@@ -535,17 +557,96 @@ export function formatMeasurement(
       .filter((p) => p.hasImradStructure)
       .map((p) => `${p.id} ${percent(ratio(p.correct, p.counted))}`)
       .join(", ")}.`,
-    "",
-    `Recorded value (IMRAD_MEASUREMENT, ${record.measuredOn}): ${String(record.correctChars)} of ${String(record.countedChars)} characters over ${String(record.papers)} papers, ${percent(ratio(record.correctChars, record.countedChars))}. ${check.ok ? "This run is not below it." : `This run fails the regression check: ${check.problems.join("; ")}.`}`,
+    ...recordLine,
   ].join("\n");
+}
+
+/** The closing sentence comparing a run with the recorded value. */
+function recordSentence(
+  measurement: Measurement,
+  record: ImradMeasurement,
+): string {
+  const check = checkAgainstRecord(measurement, record);
+  return `Recorded value (IMRAD_MEASUREMENT, ${record.measuredOn}): ${String(record.correctChars)} of ${String(record.countedChars)} characters over ${String(record.papers)} papers, ${percent(ratio(record.correctChars, record.countedChars))}. ${check.ok ? "This run is not below it." : `This run fails the regression check: ${check.problems.join("; ")}.`}`;
 }
 
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
 
+/**
+ * The one flag that unseals the held-out set (module note, "Which set"). Only
+ * `P3-T41` uses it, once, after its detector change is committed.
+ */
+export const FINAL_HELDOUT_FLAG = "--final-heldout-measurement";
+
+/** Exit status when the held-out set is asked for without the flag. */
+export const SEALED_EXIT = 3;
+
+/** What a command line asks for: a set to measure, or a refusal. */
+export type MeasureRequest =
+  | {
+      readonly kind: "measure";
+      readonly set: FixtureSet;
+      /** `true` only for the held-out set under {@link FINAL_HELDOUT_FLAG}. */
+      readonly final: boolean;
+    }
+  | { readonly kind: "refuse"; readonly code: number; readonly reason: string };
+
+/**
+ * Reads the arguments, nothing else: no file is opened and no detector runs,
+ * so a refusal here is a refusal before the held-out set is touched.
+ */
+export function measureRequest(args: readonly string[]): MeasureRequest {
+  const set = fixtureSetFromArgs(args);
+  if (typeof set === "string") return { kind: "refuse", code: 2, reason: set };
+  const known = new Set(["--set", set.name, FINAL_HELDOUT_FLAG]);
+  const unknown = args.filter((arg) => !known.has(arg));
+  if (unknown.length > 0) {
+    return {
+      kind: "refuse",
+      code: 2,
+      reason: `unknown arguments: ${unknown.join(" ")}`,
+    };
+  }
+  const final = args.includes(FINAL_HELDOUT_FLAG);
+  if (set.name === "heldout" && !final) {
+    return {
+      kind: "refuse",
+      code: SEALED_EXIT,
+      reason: `the held-out set (${set.path}) is sealed: it is measured once, by P3-T41 after its detector change is committed, with ${FINAL_HELDOUT_FLAG}. Nothing was read and no detector ran.`,
+    };
+  }
+  if (set.name !== "heldout" && final) {
+    return {
+      kind: "refuse",
+      code: 2,
+      reason: `${FINAL_HELDOUT_FLAG} applies only to --set heldout`,
+    };
+  }
+  return { kind: "measure", set, final };
+}
+
+/** What {@link main} can be given instead of the defaults, for tests. */
+export interface MainOptions {
+  /** The detector to measure; {@link DETECTOR_WITHOUT_STRUCTURE} by default. */
+  readonly detector?: Detector;
+  /** The directory a set is read from; the set's own by default. */
+  readonly dirFor?: (set: FixtureSet) => string;
+}
+
 /** Measure and print; the exit status is the module note's. */
-export async function main(dir = IMRAD_DIR): Promise<number> {
+export async function main(
+  args: readonly string[] = [],
+  options: MainOptions = {},
+): Promise<number> {
+  const request = measureRequest(args);
+  if (request.kind === "refuse") {
+    process.stderr.write(`measure-imrad: ${request.reason}\n`);
+    return request.code;
+  }
+  const { set, final } = request;
+  const dir = options.dirFor?.(set) ?? set.dir;
   const absent = corpusAbsentReason(dir);
   if (absent !== null) {
     process.stderr.write(`measure-imrad: the corpus is absent: ${absent}\n`);
@@ -560,7 +661,25 @@ export async function main(dir = IMRAD_DIR): Promise<number> {
     );
     return 2;
   }
-  const measurement = measureCorpus(corpus);
+  if (final && corpus.length === 0) {
+    process.stderr.write(
+      `measure-imrad: the held-out set (${set.path}) has no papers to measure.\n`,
+    );
+    return 2;
+  }
+  const measurement = measureCorpus(
+    corpus,
+    options.detector ?? DETECTOR_WITHOUT_STRUCTURE,
+  );
+  if (final) {
+    process.stdout.write(
+      `FINAL held-out measurement (${FINAL_HELDOUT_FLAG}, ${new Date().toISOString()}): record this figure with its date and set; a second run on this set needs the owner's decision.\n\n`,
+    );
+    process.stdout.write(
+      `${formatMeasurement(measurement, tableCeiling(corpus), null, set.path)}\n`,
+    );
+    return meetsBar(measurement.overall) ? 0 : 1;
+  }
   process.stdout.write(
     `${formatMeasurement(measurement, tableCeiling(corpus))}\n`,
   );
@@ -576,4 +695,4 @@ function isEntryPoint(): boolean {
   return resolve(argv1) === resolve(fileURLToPath(import.meta.url));
 }
 
-if (isEntryPoint()) process.exitCode = await main();
+if (isEntryPoint()) process.exitCode = await main(process.argv.slice(2));
