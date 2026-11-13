@@ -1,0 +1,55 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "HB2",
+  "textFile": "text/HB2.txt",
+  "textSha256": "d43e1b7c1429b9768d1822049646cc2a8fcf825b1d98c6e2965a4f8d27f74fe8",
+  "textChars": 56913,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 1830,
+      "heading": "Significance statement",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 1853,
+      "heading": "Squeezing a polymer into a tight ball changes how it behaves: distant segments are forced into close contact, making ends more likely to meet. Similar principles apply to biopolymers, such as RNA, when confined within virus particles or other enclosures smaller than the polymer contour length, but there is no framework to model the effects of confinement on RNA folding. Here we develop such a framework, combining molecular dynamics simulations with experimental measurements of contacts within unconfined and confined RNA molecules. We find that RNA is glassy and exhibits liquid crystalline order, and that genome circularization, a long-range interaction between the two ends of the viral RNA important for virus replication, is facilitated under confinement. RNA molecules often reside inside tightly confined spaces. This is true of viral genomes enclosed within protein capsids [1], of mRNAs and lncRNAs inside phase-separated RNP granules [2], and of RNA therapeutics encapsulated within lipid nanoparticles [3]. Despite the ubiquity of such systems, there is currently no general framework for predicting how confinement affects RNA folding. Emerging experimental and theoretical evidence demonstrates that confinement can alter both the structure and the function of an RNA. The frequency and patterns of long-range interactions probed with proximity ligation assays differ between RNA virus genomes probed in cells and in virions – including Zika [1, 4],",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "owner-added"
+    },
+    {
+      "start": 6683,
+      "heading": "Results",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 38004,
+      "heading": "Discussion and conclusions",
+      "labels": [
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 44666,
+      "heading": "1 Methods",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-13"
+  }
+}

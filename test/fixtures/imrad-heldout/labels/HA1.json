@@ -1,0 +1,47 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "HA1",
+  "textFile": "text/HA1.txt",
+  "textSha256": "ad66bdcbd321d9f1adcc9bde25fc09357efea2d6a16adf4d24ee293da1f370db",
+  "textChars": 65113,
+  "hasImradStructure": false,
+  "sections": [
+    {
+      "start": 2365,
+      "heading": "1 Introduction",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 16001,
+      "heading": "3 PEDAL Platform Architecture",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 52316,
+      "heading": "11 Discussion",
+      "labels": [
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 57418,
+      "heading": "12 Conclusion",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-13"
+  }
+}

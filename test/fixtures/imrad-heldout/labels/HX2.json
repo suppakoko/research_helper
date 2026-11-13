@@ -1,0 +1,55 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "HX2",
+  "textFile": "text/HX2.txt",
+  "textSha256": "2234606d4506e03fe4aa4ae02957980e13811cd436d4f681661d3d7a142b9f7a",
+  "textChars": 14579,
+  "hasImradStructure": false,
+  "sections": [
+    {
+      "start": 996,
+      "heading": "IWRODUCTI0N",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 2604,
+      "heading": "SYMBOLS",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 3315,
+      "heading": "APP.ARATtJS",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 4879,
+      "heading": "RESULTS",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 13783,
+      "heading": "CONCLUDING REMARKS",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-13"
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "HE1",
+  "textFile": "text/HE1.txt",
+  "textSha256": "7ebe092e3d3f2f892dbb8201729061929d51bea1b733f8be0240132046ce82d2",
+  "textChars": 44040,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 158,
+      "heading": "Highlights",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 2529,
+      "heading": "INTRODUCTION",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 4981,
+      "heading": "RESULTS",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 14560,
+      "heading": "DISCUSSION",
+      "labels": [
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 25144,
+      "heading": "Lead contact",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 27265,
+      "heading": "STAR★METHODS",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-13"
+  }
+}

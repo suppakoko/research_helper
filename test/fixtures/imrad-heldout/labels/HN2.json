@@ -1,0 +1,55 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "HN2",
+  "textFile": "text/HN2.txt",
+  "textSha256": "1ed660fcc054b0946eee7689e3c3386fff1b9cc83e4391322e01e6ade937c4c8",
+  "textChars": 32635,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 6113,
+      "heading": "Understanding the spatial and temporal distribution patterns of marine biodiversity is becoming increasingly important for the management and sustainable use of fishery resources, as well as for the conservation of marine ecosystems. Fish diversity, which contributes to ecosystem functioning, is critical to the provision of all",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "owner-added"
+    },
+    {
+      "start": 12457,
+      "heading": "Results",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 17185,
+      "heading": "Discussion",
+      "labels": [
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 24534,
+      "heading": "Methods Data collection",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 32451,
+      "heading": "Data availability",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-13"
+  }
+}

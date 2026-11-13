@@ -1,0 +1,56 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "HX1",
+  "textFile": "text/HX1.txt",
+  "textSha256": "45c29dea9cafaf7ccfca4cbb6606546d45184d3ad22f72074586775e164dc226",
+  "textChars": 26643,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 2923,
+      "heading": "INTRODUCTION",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 7812,
+      "heading": "SYMBOLS",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 9299,
+      "heading": "BASIC CONCEPTS",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 14931,
+      "heading": "RESULTS AND DISCUSSION",
+      "labels": [
+        "results",
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 23187,
+      "heading": "CONCLUSIONS",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-13"
+  }
+}

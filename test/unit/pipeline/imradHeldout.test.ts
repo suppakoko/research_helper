@@ -12,7 +12,7 @@
  *    another identifier or a title with `test/fixtures/imrad/`.
  * 3. **The candidate lines and the labels** — `candidate-headings.json` is
  *    the plain line-shape rule over the committed text, and `labels/` holds
- *    only files that validate (none until the owner labels in chat).
+ *    only files that validate (the owner's, given in chat on 2026-11-12 and 2026-11-13).
  * 4. **The seal** — `scripts/measure-imrad.ts` refuses the held-out set
  *    without its final-measurement flag, before reading anything and before
  *    any detector runs. Tested with a detector double and an empty set, so
@@ -209,6 +209,22 @@ describe("held-out candidate lines and labels", () => {
         !labelled.has(paper.id),
       );
     }
+  });
+
+  // The owner's labels of 2026-11-12 and 2026-11-13, given in chat (plan/00 §6 item 375):
+  // every paper is labelled, and four have no IMRaD structure by the owner's rule (all four
+  // sections present).
+  it("holds the owner's labels for all 19 papers, 15 of them with IMRaD structure", async () => {
+    const manifest = await readManifest(IMRAD_HELDOUT_DIR);
+    expect(manifest.papers.every((p) => p.hasImradStructure !== null)).toBe(
+      true,
+    );
+    expect(
+      manifest.papers
+        .filter((p) => p.hasImradStructure === false)
+        .map((p) => p.id)
+        .sort(),
+    ).toEqual(["HA1", "HO1", "HS1", "HX2"]);
   });
 });
 

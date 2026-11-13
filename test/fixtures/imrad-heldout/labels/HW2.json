@@ -1,0 +1,55 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "HW2",
+  "textFile": "text/HW2.txt",
+  "textSha256": "6593e0649a105b002dd3ac191337198232c3f2d0199f4b9277a939e57fe320df",
+  "textChars": 32720,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 2891,
+      "heading": "1 Introduction",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 6467,
+      "heading": "2 Methods",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 12181,
+      "heading": "3 Results",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 15238,
+      "heading": "4 Discussion",
+      "labels": [
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 31077,
+      "heading": "Author Contributions",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-13"
+  }
+}

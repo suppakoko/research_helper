@@ -1,0 +1,47 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "HO1",
+  "textFile": "text/HO1.txt",
+  "textSha256": "889084ff5020b6bbcefd965f1b4ca1bf698926a48b432321e715ba4841e940e7",
+  "textChars": 24392,
+  "hasImradStructure": false,
+  "sections": [
+    {
+      "start": 3226,
+      "heading": "1 Introduction",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 6554,
+      "heading": "2 Methods",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 17182,
+      "heading": "3 Results",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 18750,
+      "heading": "4 Conclusions",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-13"
+  }
+}

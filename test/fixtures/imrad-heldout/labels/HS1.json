@@ -1,0 +1,47 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "HS1",
+  "textFile": "text/HS1.txt",
+  "textSha256": "10d6a517318f9ab11e645e015d6cb387a9e485797f1ebc882ea8086d47732506",
+  "textChars": 52284,
+  "hasImradStructure": false,
+  "sections": [
+    {
+      "start": 2070,
+      "heading": "Introduction",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 17085,
+      "heading": "Materials and methods",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 30252,
+      "heading": "Results",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 48730,
+      "heading": "Conclusion",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-13"
+  }
+}

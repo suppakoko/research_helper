@@ -1,0 +1,48 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "HN1",
+  "textFile": "text/HN1.txt",
+  "textSha256": "61d1489b6ac520f73e9418e3cc42e4b18ceb98938363525f030d4dd053358e15",
+  "textChars": 49657,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 1476,
+      "heading": "Per- and polyfluoroalkyl substances (PFAS) are highly persistent contaminants now regulated in US drinking water due to strong evidence of health risks1–4 and widespread occurrence5–8. In 2024, the US EPA set the first national PFAS limits9, with phased compliance through 203110. Supplementary Section 1 provides details on regulations. These rules acknowledge that sustainable, long-term treatment strategies are essential. As public water systems mobilize to comply with these regulations, utilities face uncertainties regarding the selection of appropriate treatment technologies tailored to their specific operational contexts and site-specific PFAS profiles. Current approaches for PFAS remediation and removal broadly encompass the two categories of separation and destruction. While destruction offers the promise of permanently eliminating PFAS, significant uncertainties persist regarding their scalability, economic feasibility, and potential byproducts11–15. Consequently, PFAS separation currently represents a more immediate and pragmatic solution for utilities, i.e., a clearer and",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "owner-added"
+    },
+    {
+      "start": 7284,
+      "heading": "Results and discussion",
+      "labels": [
+        "results",
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 36639,
+      "heading": "Methods",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 49150,
+      "heading": "Data availability",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-13"
+  }
+}

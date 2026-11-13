@@ -1,0 +1,55 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "HP1",
+  "textFile": "text/HP1.txt",
+  "textSha256": "ae688864994ad2ad28f26f296dd331bae51935feba7fa510b7ef6f543e11bee7",
+  "textChars": 29554,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 3680,
+      "heading": "Introduction",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 7890,
+      "heading": "Materials and methods",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 15673,
+      "heading": "Results",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 19837,
+      "heading": "Discussion",
+      "labels": [
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 28789,
+      "heading": "Conclusion",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-13"
+  }
+}

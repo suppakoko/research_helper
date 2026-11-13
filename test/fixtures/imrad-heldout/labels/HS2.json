@@ -1,0 +1,55 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "HS2",
+  "textFile": "text/HS2.txt",
+  "textSha256": "126256aef0125032674dfe1be36602db3392797d6785e2d888b0767bae79e787",
+  "textChars": 51198,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 3280,
+      "heading": "1 Introduction",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 16195,
+      "heading": "3 Data and Methods",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 27874,
+      "heading": "4 Results",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 37293,
+      "heading": "5 Discussion",
+      "labels": [
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 45446,
+      "heading": "6 Limitations",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-13"
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "schema": "imrad-labels-v1",
+  "id": "HA2",
+  "textFile": "text/HA2.txt",
+  "textSha256": "aa5a0b238a3ca88c8572cd239ef2d36a240858777fe86bc130c76b5bdd5b8329",
+  "textChars": 9682,
+  "hasImradStructure": true,
+  "sections": [
+    {
+      "start": 1306,
+      "heading": "1 Introduction",
+      "labels": [
+        "introduction"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 3153,
+      "heading": "2 Data",
+      "labels": [
+        "methods"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 4711,
+      "heading": "4 Results",
+      "labels": [
+        "results"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 8029,
+      "heading": "5 Discussion",
+      "labels": [
+        "discussion"
+      ],
+      "origin": "candidate"
+    },
+    {
+      "start": 8740,
+      "heading": "6 Conclusion",
+      "labels": [
+        "other"
+      ],
+      "origin": "candidate"
+    }
+  ],
+  "adjudication": {
+    "by": "owner",
+    "source": "export.json",
+    "decidedAt": "2026-11-13"
+  }
+}

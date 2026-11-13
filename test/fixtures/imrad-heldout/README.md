@@ -15,18 +15,18 @@ candidate lines and the label format); only the differences are written here.
 | `manifest.json` | One entry per paper, same schema as the first set's (`imrad-manifest-v1`); `layout.webHeadings` is `not checked` for every paper |
 | `text/<id>.txt`, `text/<id>_meta.json` | The text the plugin acquires from the PDF inside Zotero, and its sidecar |
 | `candidate-headings.json` | Every line that passes the plain line-shape rule (`isCandidateLine`), with offset, context and page — **no labels** |
-| `labels/` | The owner's ground truth, written only by `ingest --set heldout` from decisions the owner gives in chat. **Empty** (only `.gitkeep`) |
+| `labels/` | The owner's ground truth, written only by `ingest --set heldout` from decisions the owner gave in chat on 2026-11-12 and 2026-11-13 (`plan/00` §6 item 375): all 19 papers, 15 with IMRaD structure |
 
 `test/unit/pipeline/imradHeldout.test.ts` checks all of it, and that the seal below holds.
 
-## Composition: 19 papers, one pending
+## Composition: 19 papers (owner, 2026-11-12)
 
 Item 374(a) names 20 papers. **19 are in. HI1 is not**, because the file `HI1.pdf` holds a
 different paper: its first page is Nucleic Acids Research, doi 10.1093/nar/gkag934, "Size and
 sequence variation of the Lid…", which is HO2's paper, not HI1's IEEE paper. So HI1 waits until its
 PDF is the right one (`plan/00` §6 item 374(d)); its text was extracted once, found wrong, and
 removed. This also means HO2 was downloaded after all, under the name `HI1.pdf`, so item 374(a)'s
-premise that HO2 was not downloaded needs a second look.
+premise that HO2 was not downloaded needs a second look. *Decided 2026-11-12 by the owner (item 374(f)): the set stays at these 19; HI1 is not added and HO3 stays.*
 
 Columns are as observed on the PDFs during extraction (the manifest's `columnCount`). Characters,
 lines and candidate lines are counted in the committed text. No text is empty, and none contains a
@@ -113,9 +113,7 @@ npx tsx scripts/build-imrad-fixtures.ts candidates --set heldout
 npx tsx scripts/build-imrad-fixtures.ts validate --set heldout
 ```
 
-When HI1's right PDF is in: put its entry back in `manifest.json` (as item 374(a) lists it), update
-its line in `_log.txt`, run `extract --set heldout --only HI1`, and add `HI1` back to `HELDOUT_IDS`
-in the unit test.
+*(Not needed since item 374(f): the owner kept the set at 19.)*
 
 ## Labels
 
