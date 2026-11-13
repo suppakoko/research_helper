@@ -42,9 +42,15 @@
  * committed**; a second run on the same held-out set needs the owner's
  * decision. Under the flag the held-out figure is printed against the bar
  * and is not checked against `IMRAD_MEASUREMENT`, which records the first
- * set.
+ * set. *Since 2026-11-13 (`P3-T41` step 5) that one measurement is recorded
+ * as `IMRAD_HELDOUT_MEASUREMENT`, and a held-out run under the flag is checked
+ * against it the same way a first-set run is checked against
+ * `IMRAD_MEASUREMENT` ({@link recordFor}, {@link checkAgainstRecord}).* That
+ * check exists for reproducibility only: any further run on the held-out set
+ * is a second measurement and needs the owner's decision first.
  *
- * **Exit status.** 0 at or above the bar and not below the recorded value; 1
+ * **Exit status.** 0 at or above the bar and not below the recorded value
+ * of the set measured ({@link recordFor}); 1
  * below either; 2 when the corpus is missing or empty, a labels file does
  * not validate against its text, or the arguments are wrong; 3 when the
  * held-out set is asked for without {@link FINAL_HELDOUT_FLAG}. Since
@@ -69,6 +75,7 @@ import type { ImradSection } from "../src/model/summary";
 import {
   detectSectionsFromPdf,
   IMRAD_ACCURACY_BAR,
+  IMRAD_HELDOUT_MEASUREMENT,
   IMRAD_MEASUREMENT,
   labelHeading,
   type ImradMeasurement,
@@ -464,6 +471,23 @@ export function meetsBar(
 }
 
 /**
+ * The record a run on `set` is checked against: `IMRAD_MEASUREMENT` for the
+ * first set, `IMRAD_HELDOUT_MEASUREMENT` for the held-out set (`null` only
+ * while that is unmeasured, when no check is printed). A record of another
+ * set is never used.
+ */
+export function recordFor(set: FixtureSet): ImradMeasurement | null {
+  return set.name === "heldout" ? IMRAD_HELDOUT_MEASUREMENT : IMRAD_MEASUREMENT;
+}
+
+/** The constant a record lives in, for the printout. */
+function recordName(record: ImradMeasurement): string {
+  return record.set === "heldout"
+    ? "IMRAD_HELDOUT_MEASUREMENT"
+    : "IMRAD_MEASUREMENT";
+}
+
+/**
  * The regression check: the measurement covers the recorded corpus (same
  * papers, same counted characters) and its accuracy is not below the
  * recorded one. Compared in whole characters, so no rounding is involved.
@@ -530,7 +554,8 @@ function paperTable(scores: readonly PaperScore[]): string[] {
 
 /**
  * The whole printout, as Markdown. `record` is the value the run is checked
- * against; `null` (the held-out set) prints no such check. `setPath` names the
+ * against ({@link recordFor}); `null` (the held-out set before its record
+ * existed) prints no such check. `setPath` names the
  * measured set's directory.
  */
 export function formatMeasurement(
@@ -577,7 +602,8 @@ function recordSentence(
     record.set === "first"
       ? " The detector is tuned against this set, so this figure overstates real accuracy and does not validate it: IMRAD_DETECTOR_VALIDATED derives only from the held-out record."
       : "";
-  return `Recorded value (IMRAD_MEASUREMENT, ${record.measuredOn}): ${String(record.correctChars)} of ${String(record.countedChars)} characters over ${String(record.papers)} papers, ${percent(ratio(record.correctChars, record.countedChars))}. ${check.ok ? "This run is not below it." : `This run fails the regression check: ${check.problems.join("; ")}.`}${tuned}`;
+  const commit = "commit" in record ? `, commit ${String(record.commit)}` : "";
+  return `Recorded value (${recordName(record)}, ${record.measuredOn}${commit}): ${String(record.correctChars)} of ${String(record.countedChars)} characters over ${String(record.papers)} papers, ${percent(ratio(record.correctChars, record.countedChars))}. ${check.ok ? "This run is not below it." : `This run fails the regression check: ${check.problems.join("; ")}.`}${tuned}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -681,20 +707,20 @@ export async function main(
     corpus,
     options.detector ?? DETECTOR_WITHOUT_STRUCTURE,
   );
+  const record = recordFor(set);
   if (final) {
     process.stdout.write(
-      `FINAL held-out measurement (${FINAL_HELDOUT_FLAG}, ${new Date().toISOString()}): record this figure with its date and set; a second run on this set needs the owner's decision.\n\n`,
+      record === null
+        ? `FINAL held-out measurement (${FINAL_HELDOUT_FLAG}, ${new Date().toISOString()}): record this figure with its date and set; a second run on this set needs the owner's decision.\n\n`
+        : `Held-out re-run (${FINAL_HELDOUT_FLAG}, ${new Date().toISOString()}): the one held-out measurement is already recorded (${recordName(record)}, ${record.measuredOn}); this run is checked against it for reproducibility only, and a second measurement on this set needs the owner's decision.\n\n`,
     );
-    process.stdout.write(
-      `${formatMeasurement(measurement, tableCeiling(corpus), null, set.path)}\n`,
-    );
-    return meetsBar(measurement.overall) ? 0 : 1;
   }
   process.stdout.write(
-    `${formatMeasurement(measurement, tableCeiling(corpus))}\n`,
+    `${formatMeasurement(measurement, tableCeiling(corpus), record, set.path)}\n`,
   );
   const ok =
-    meetsBar(measurement.overall) && checkAgainstRecord(measurement).ok;
+    meetsBar(measurement.overall) &&
+    (record === null || checkAgainstRecord(measurement, record).ok);
   return ok ? 0 : 1;
 }
 

@@ -78,7 +78,11 @@
  * sections, whatever the detector found: `docs/06` §4.3 forbids labels the
  * detector has not been shown to justify, so `auto` runs whole-document flat
  * chunking. The detector still runs, and its own answer stays on the
- * diagnostics line (`sectionAwareDetected`, `sectionLabels`).
+ * diagnostics line (`sectionAwareDetected`, `sectionLabels`). *Since
+ * 2026-11-13 (`P3-T41`) the flag is true* — it derives from the held-out
+ * record, 92.94 % against the 85 % bar (`docs/06` §4.3, note "Measured
+ * 2026-11-13 (held-out)") — so the detector's answer is what is returned;
+ * the switch stays, for a withdrawn record and for the override below.
  *
  * ## `contentHash`
  *
@@ -243,7 +247,7 @@ export interface AcquireOptions<I = unknown> {
   /**
    * Overrides `IMRAD_DETECTOR_VALIDATED` (module note, "The degrade switch").
    * For tests of the detector's wiring only: the product never passes it, so
-   * the committed measurement decides.
+   * the committed held-out record decides (`true` since 2026-11-13).
    */
   readonly imradDetectorValidated?: boolean;
 }

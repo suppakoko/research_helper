@@ -4034,6 +4034,15 @@ done's detector line). **Callers (rule 10):** `IMRAD_DETECTOR_VALIDATED` is read
 `summarizePipeline.ts` and `trendReportPipeline.ts`; the detector is called by `acquireSource`.
 **Constructing file:** `src/pipeline/summarize/imrad.ts` holds the detector and both records.
 
+> **2026-11-13 (`plan/00` §6 items 376 and 377):** part 1 (steps 1–3) and the coordinator's one held-out
+> measurement (step 4, 92.94 %, at or above the bar, so `G-22` is not reached) are done; part 2 (steps
+> 5–6) recorded the figure, so `IMRAD_DETECTOR_VALIDATED` is true. Step 5 also touched files outside
+> **Files**, at the coordinator's brief, because they assumed the flag false: comments in
+> `src/pipeline/summarize/acquire.ts`, `summarizeItem.ts` and `src/llm/shared/chunking.ts`; the tests
+> `test/integration/zotero/imradStructure.spec.ts`, `test/unit/pipeline/summarizeItem.test.ts` (one
+> title) and `imrad.test.ts` (one comment); and `docs/11`, `docs/12`, `plan/06` and
+> `test/fixtures/imrad-heldout/README.md`. Reports: `plan/reports/P3-T41-part1.md`, `P3-T41-part2.md`.
+
 ---
 
 ## 3. Estimate reconciliation

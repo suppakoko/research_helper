@@ -34,7 +34,9 @@
  *    `G-22`; `plan/00` §6 item 300):
  *    {@link SummarizeItemDeps.imradDetectorValidated}, and on the flat path
  *    `PAPER_SUMMARY_FULLTEXT` is sent without its section-label clause
- *    ({@link fullTextPromptFor}).
+ *    ({@link fullTextPromptFor}). Since 2026-11-13 (`P3-T41`) both pipelines
+ *    pass `true` (the held-out record), so a section-aware acquisition is
+ *    chunked by section and keeps the clause.
  * 5. **The cache first** (`P3-T26`): every plan's key is looked up before any
  *    call; a hit makes none. Under the item pane's Regenerate
  *    ({@link SummarizeItemInput.bypassCache}, item 305(c)) nothing is looked
@@ -385,8 +387,9 @@ export interface SummarizeItemDeps {
   readonly modelConfirmed?: boolean;
   /**
    * `P3-T22`'s `IMRAD_DETECTOR_VALIDATED` (`./imrad.ts`), which both
-   * pipelines pass. Absent or `false`: the chunker runs flat and the full-text
-   * prompt drops its section-label clause (`plan/00` §6 item 300).
+   * pipelines pass (`true` since 2026-11-13, `P3-T41`). Absent or `false`:
+   * the chunker runs flat and the full-text prompt drops its section-label
+   * clause (`plan/00` §6 item 300).
    */
   readonly imradDetectorValidated?: boolean;
   /** The token counter; `estTokens(text, modelId)` by default. */
@@ -924,9 +927,14 @@ export async function summarizeItem(
     // `plan/00` §6 item 300).
     const sectionAware =
       deps.imradDetectorValidated === true ? source.sectionAware : false;
+    // `PAPER_SUMMARY_FULLTEXT` is sent only on the single-shot path, whose
+    // text is `source.text` with no `[SECTION: …]` label (only the chunked
+    // path labels text), so its section clause is always dropped: a prompt
+    // must not describe labels its text does not carry (`plan/00` §6 item
+    // 377(d), DECIDED 2026-11-13 by the coordinator; `docs/12` §5).
     const fullTemplate = fullTextPromptFor(
       deps.prompts.get("PAPER_SUMMARY_FULLTEXT"),
-      sectionAware,
+      false,
     );
     const mapTemplate = deps.prompts.get("CHUNK_MAP");
     const reduceTemplate = deps.prompts.get("CHUNK_REDUCE");

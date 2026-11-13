@@ -508,7 +508,8 @@ describe("P3-T21 IMRaD section detector on getStructuredDocumentText", function 
         tryEuropePmc: false,
         logger,
         // This spec measures the detector itself, so `P3-T22`'s degrade
-        // switch (`IMRAD_DETECTOR_VALIDATED`, false) is overridden here.
+        // switch is set here whatever is committed (`IMRAD_DETECTOR_VALIDATED`,
+        // true since 2026-11-13, `P3-T41`).
         imradDetectorValidated: true,
       });
       const structure = await getDocumentStructure(attachment);
@@ -573,22 +574,34 @@ describe("P3-T21 IMRaD section detector on getStructuredDocumentText", function 
         lineScanOnly.sections.some((s) => s.imrad === "methods"),
         `${name}: the line scan alone misses the Methods heading`,
       );
-      // `P3-T22`: the product default. With the degrade switch as committed
-      // (`IMRAD_DETECTOR_VALIDATED` false) the same file is acquired flat,
-      // and the detector's own answer stays on the diagnostics line.
-      const flat = captureLogger();
+      // `P3-T41`: the product default. Since the held-out record of
+      // 2026-11-13 the degrade switch as committed (`IMRAD_DETECTOR_VALIDATED`)
+      // is true, so the same file is acquired with the same sections.
       const productDefault = await acquireZoteroSource(parent, {
         estimateTokens: (text) => Math.ceil(text.length / 4),
         tryEuropePmc: false,
-        logger: flat.logger,
       });
-      assert.isFalse(productDefault.sectionAware, `${name}: flat by default`);
-      assert.deepEqual(productDefault.sections, [], `${name}: no sections`);
-      assert.strictEqual(
-        productDefault.text,
-        source.text,
-        `${name}: same text`,
+      assert.isTrue(
+        productDefault.sectionAware,
+        `${name}: section-aware by default`,
       );
+      assert.deepEqual(
+        productDefault.sections,
+        source.sections,
+        `${name}: the same sections by default`,
+      );
+      // `P3-T22`: with the switch off the same file is acquired flat, and the
+      // detector's own answer stays on the diagnostics line.
+      const flat = captureLogger();
+      const switchedOff = await acquireZoteroSource(parent, {
+        estimateTokens: (text) => Math.ceil(text.length / 4),
+        tryEuropePmc: false,
+        logger: flat.logger,
+        imradDetectorValidated: false,
+      });
+      assert.isFalse(switchedOff.sectionAware, `${name}: flat when off`);
+      assert.deepEqual(switchedOff.sections, [], `${name}: no sections`);
+      assert.strictEqual(switchedOff.text, source.text, `${name}: same text`);
       assert.strictEqual(
         flat.lines[0]?.sectionAwareDetected,
         true,

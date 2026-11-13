@@ -7,6 +7,10 @@ figure (`plan/04` `P3-T40`, `P3-T41`; `plan/00` §6 items 373 and 374). **What i
 extracted text, never a PDF.** The PDFs are in `D:\KIST\projects\research_helper-heldout\`, outside
 the repository, with their sizes and SHA-256 in that folder's `_log.txt`.
 
+*Measured once, 2026-11-13 (`P3-T41` step 4, commit 257b244): 92.94 % over the 15 papers with IMRaD
+structure, at or above the 85 % bar; recorded as `IMRAD_HELDOUT_MEASUREMENT`
+(`plan/reports/imrad-heldout-measurement-2026-11-13.md`). A second run needs the owner's decision.*
+
 The layout and the rules are the first set's (its `README.md` is the reference for the text, the
 candidate lines and the label format); only the differences are written here.
 

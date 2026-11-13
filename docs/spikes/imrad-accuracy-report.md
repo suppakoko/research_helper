@@ -17,6 +17,10 @@ at **93.61 %**, which is now the recorded first-set figure; being tuned, it vali
 `IMRAD_DETECTOR_VALIDATED` now derives only from the held-out measurement, not yet made. See the last
 section, "Tuned first-set measurement, 2026-11-13". The figures below are the untuned 2026-11-10 run.
 
+*Updated 2026-11-13 (`P3-T41` steps 4–6):* the one held-out measurement gave **92.94 %**, at or above
+the bar, and is recorded as `IMRAD_HELDOUT_MEASUREMENT`, so `IMRAD_DETECTOR_VALIDATED` is now true and
+section-aware acquisition is on. See the last section, "Held-out measurement, 2026-11-13".
+
 *Superseded 2026-11-12:* **Decided 2026-11-10 by the owner, in chat, written 2026-11-12 (`G-22`; `plan/00` §6 items 365(d) and 374):** keep whole-document chunking without section labels (what the tree does), so `summary.fullTextMode`'s default stays `auto` and `IMRAD_DETECTOR_VALIDATED` stays false; and improve the detector, measuring the improvement once on a held-out set of twenty new papers (`plan/04` `P3-T40` and `P3-T41`) rather than on the forty labels it is tuned against. *This decision was given on 2026-11-10 and not written down until 2026-11-12, when `P3-T40`'s report found it missing.*
 
 **The owner's decision at `G-22`, as this report first stood: not yet made.** The owner chooses between shipping whole-document
@@ -151,7 +155,8 @@ change, by `npx tsx scripts/measure-imrad.ts` (exit status 0). **This figure is 
 was changed against these 40 papers' labels to recover the losses of `plan/00` §6 item 365(b), so it
 overstates real accuracy and validates nothing. `IMRAD_DETECTOR_VALIDATED` no longer derives from it;
 it derives only from `IMRAD_HELDOUT_MEASUREMENT`, the one held-out measurement, which is `null` until
-`P3-T41`'s step 4 runs. So the flag is still false and every acquisition is still flat. What changed
+`P3-T41`'s step 4 runs. So the flag is still false and every acquisition is still flat *(until
+2026-11-13, when the held-out record made it true: see the last section)*. What changed
 in the detector is `docs/06` §4.3's note "Changed 2026-11-13".
 
 **Result: 93.61 % overall, tuned** (1 380 235 of 1 474 524 counted characters, 34 papers), up from
@@ -200,4 +205,64 @@ Discussion; O2 "Limitations of MD calculations" inside Results; E2 "Limitations 
 the Discussion), because the limitations row was left as it was.
 
 **The held-out figure: not yet measured.** It is made once, by `P3-T41` step 4, after this change is
-committed, and is the only figure `IMRAD_DETECTOR_VALIDATED` derives from.
+committed, and is the only figure `IMRAD_DETECTOR_VALIDATED` derives from. *(Measured 2026-11-13:
+see the next section.)*
+
+## Held-out measurement, 2026-11-13 (`P3-T41` steps 4–6)
+
+**Measured once, 2026-11-13**, by the coordinator, on commit `257b244` (the detector of the section
+above, committed), by `npx tsx scripts/measure-imrad.ts --set heldout --final-heldout-measurement`
+(exit status 0). The set is `test/fixtures/imrad-heldout/`: 19 papers new to the detector
+(`plan/00` §6 item 374(f)), labelled by the owner in chat (item 375); 15 have IMRaD structure. The
+printout, verbatim, is `plan/reports/imrad-heldout-measurement-2026-11-13.md`. Scored by the
+unchanged rules of `docs/06` §4.3's note of 2026-11-10, on the path without document structure.
+
+**Result: 92.94 % overall, not tuned, at or above the 85 % bar** (589 282 of 634 062 counted
+characters, 15 papers). Mean of the papers' own figures 90.68 % (information only). The four papers
+without IMRaD structure, apart and not pooled: 81.73 % (120 724 of 147 711). Table ceiling
+(information only): 94.35 %. No paper declared failure.
+
+**The two figures side by side.** They answer different questions and are not to be averaged.
+
+| Set | Papers counted | Accuracy | What it is |
+|---|---:|---:|---|
+| First set, `test/fixtures/imrad/` | 34 | 93.61 % | **Tuned**: the rules were changed while looking at these labels; a regression pin (`IMRAD_MEASUREMENT`) only |
+| Held-out set, `test/fixtures/imrad-heldout/` | 15 | **92.94 %** | **Not tuned**: never seen while changing the detector; the **validation figure** (`IMRAD_HELDOUT_MEASUREMENT`) |
+
+| Group | Papers | Held-out accuracy |
+|---|---:|---:|
+| wiley | 2 | 100.00 % |
+| oup | 1 | 100.00 % |
+| plos | 2 | 100.00 % |
+| ieee | 1 | 100.00 % |
+| elsevier | 2 | 98.01 % |
+| biorxiv | 2 | 94.06 % |
+| nature | 2 | 78.72 % |
+| springer | 1 | 75.63 % |
+| arxiv | 1 | 74.04 % |
+| us-government | 1 | 69.99 % |
+| 2 columns | 7 | 96.78 % |
+| 1 column | 8 | 87.96 % |
+| published | 12 | 93.02 % |
+| preprint | 3 | 92.52 % |
+
+**Per paper** (counted papers; the four without IMRaD structure in brackets): HE1 95.57, HE2 100,
+HS2 75.63, HW1 100, HW2 100, HO3 100, HP1 100, HP2 100, HN1 80.17, HN2 76.08, HI2 100, HA2 74.04,
+HB1 97.50, HB2 91.23, HX1 69.99; (HS1 100, HO1 100, HA1 62.05, HX2 76.65). Six families have one
+or two papers each, so a family figure here is a reading of one or two papers, not of the family.
+
+**What follows from it.** The record is `IMRAD_HELDOUT_MEASUREMENT` in
+`src/pipeline/summarize/imrad.ts` (`set: "heldout"`, measured 2026-11-13, commit `257b244`, 15
+papers, 634 062 counted, 589 282 correct), so `IMRAD_DETECTOR_VALIDATED` is true:
+`acquireSource` passes the detector's sections on whenever it recognizes two or more, and the
+chunker's section-aware path is reachable. The owner's `G-22` choice of 2026-11-10 (whole-document
+chunking without section labels) now stands only as the fallback. A second held-out run needs the
+owner's decision; `scripts/measure-imrad.ts` now checks one against the record, for reproducibility.
+
+**Read it with one caveat** (`plan/00` §6 item 376(e)): the agent that made the detector change had
+read item 375(a), which names some held-out headings, because its brief asked it to read item 375.
+It added no table row from them. "Related work" was already in the table, and "STAR Methods" comes
+from item 364(a); both happen to cover held-out headings (HS1's "Related work", in a paper without
+IMRaD structure, and HE1's "STAR★METHODS").
+
+**Not measured:** the outline path (the fixtures hold text only), as for the first set.

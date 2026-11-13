@@ -1003,7 +1003,7 @@ function reduceSections(h: Harness): string[] {
 }
 
 describe("summarizeItem — the chunked path", () => {
-  it("runs flat until G-22: a section-aware acquisition is sent with every chunk unknown", async () => {
+  it("runs flat without imradDetectorValidated: a section-aware acquisition is sent with every chunk unknown", async () => {
     const h = await harness();
     await summarized(h, input(sectionedSource(), { fullTextMode: "always" }));
     const maps = h.provider.calls.filter((c) => kindOf(c.request) === "MAP");

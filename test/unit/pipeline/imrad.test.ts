@@ -865,9 +865,11 @@ function port(
 }
 
 /**
- * These tests are of the detector's wiring, so they switch `P3-T22`'s degrade
- * switch off; `imradAccuracy.test.ts` covers the product default, where
- * `IMRAD_DETECTOR_VALIDATED` is false and every acquisition is flat.
+ * These tests are of the detector's wiring, so they set `P3-T22`'s degrade
+ * switch to pass sections on whatever is committed; `imradAccuracy.test.ts`
+ * covers the product default, where `IMRAD_DETECTOR_VALIDATED` is true since
+ * the held-out record of 2026-11-13 (`P3-T41`; until then it was false and
+ * every acquisition was flat).
  */
 const OPTIONS = {
   estimateTokens: (t: string) => t.length,

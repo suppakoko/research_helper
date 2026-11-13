@@ -51,12 +51,14 @@
  * {@link IMRAD_DETECTOR_VALIDATED} derives **only** from
  * {@link IMRAD_HELDOUT_MEASUREMENT}, the one measurement on the held-out set
  * (`test/fixtures/imrad-heldout/`, `P3-T40`), against
- * {@link IMRAD_ACCURACY_BAR} — see {@link detectorValidatedBy}. Callers:
- * `acquireSource` (`./acquire.ts`) returns `sectionAware: false` and no
- * sections while it is false, and the summarize and trend-report pipelines
- * pass it to `summarizeItem` as `imradDetectorValidated`.
- * `test/unit/pipeline/imradAccuracy.test.ts` re-measures and fails below the
- * recorded value.
+ * {@link IMRAD_ACCURACY_BAR} — see {@link detectorValidatedBy}. That record
+ * was made on 2026-11-13 (92.94 %, at or above the bar), so the flag is
+ * `true`. Callers: `acquireSource` (`./acquire.ts`) passes the detector's
+ * sections on while it is true (and would return `sectionAware: false` and no
+ * sections were it false), and the summarize and trend-report pipelines pass
+ * it to `summarizeItem` as `imradDetectorValidated`.
+ * `test/unit/pipeline/imradAccuracy.test.ts` re-measures the first set and
+ * fails below its recorded value, and pins the held-out record.
  */
 
 import type { AcquiredSection, ImradSection } from "../../model/summary";
@@ -124,11 +126,24 @@ export interface ImradHeldoutMeasurement extends ImradMeasurement {
 }
 
 /**
- * The one measurement on the held-out set (`P3-T41` step 4, run with
- * `--final-heldout-measurement`), or `null` until it is made. Recorded by
- * hand from that run's printout, with its date and the commit it measured.
+ * The one measurement on the held-out set (`P3-T41` step 4, run once with
+ * `--final-heldout-measurement` by the coordinator), recorded by hand from
+ * that run's printout (`plan/reports/imrad-heldout-measurement-2026-11-13.md`)
+ * with its date and the commit it measured: **92.94 %**, not tuned, the
+ * validation figure (`docs/06` §4.3, note "Measured 2026-11-13 (held-out)").
+ * `scripts/measure-imrad.ts` checks a held-out run against it; a second run
+ * on the held-out set needs the owner's decision. `null` would mean "not
+ * measured", and the flag false.
  */
-export const IMRAD_HELDOUT_MEASUREMENT: ImradHeldoutMeasurement | null = null;
+export const IMRAD_HELDOUT_MEASUREMENT: ImradHeldoutMeasurement | null = {
+  measuredOn: "2026-11-13",
+  set: "heldout",
+  path: "pdf-without-structure",
+  papers: 15,
+  countedChars: 634_062,
+  correctChars: 589_282,
+  commit: "257b244",
+};
 
 /**
  * Whether `record` validates the detector: it must be a **held-out**
@@ -148,9 +163,10 @@ export function detectorValidatedBy(record: ImradMeasurement | null): boolean {
 
 /**
  * Whether the detector met {@link IMRAD_ACCURACY_BAR} on the held-out set
- * ({@link IMRAD_HELDOUT_MEASUREMENT}); `false` while that is `null`. While it
- * is false, `auto` degrades to whole-document flat chunking and no prompt
- * claims section provenance (`docs/06` §4.3, `docs/11` R-19b).
+ * ({@link IMRAD_HELDOUT_MEASUREMENT}); `true` since that record (2026-11-13).
+ * Were it false, `auto` would degrade to whole-document flat chunking and no
+ * prompt would claim section provenance (`docs/06` §4.3, `docs/11` R-19b;
+ * the owner's `G-22` choice, which now stands only as that fallback).
  */
 export const IMRAD_DETECTOR_VALIDATED: boolean = detectorValidatedBy(
   IMRAD_HELDOUT_MEASUREMENT,

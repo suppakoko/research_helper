@@ -29,7 +29,10 @@
  *
  * `sectionAware` is taken as given. Whether the detector is good enough to
  * set it is `P3-T22`'s measurement and gate `G-22` (`plan/00` §6 item
- * 298(a)); nothing here assumes it passes.
+ * 298(a)); nothing here assumes it passes. *(It passed on the held-out set
+ * on 2026-11-13, `P3-T41`, so the product now reaches the section-aware path
+ * whenever an acquisition has two or more recognized sections; nothing in
+ * this module changed for it.)*
  *
  * ## Budgets (`docs/06` §5.2, D-06-5)
  *

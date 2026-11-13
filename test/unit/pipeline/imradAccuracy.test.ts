@@ -15,9 +15,14 @@
  *    only when the corpus is absent.
  * 3. **Where the switch comes from** (`P3-T41`): `IMRAD_DETECTOR_VALIDATED`
  *    derives from the held-out record only, never from the tuned first-set
- *    figure.
- * 4. **The degrade switch**: with `IMRAD_DETECTOR_VALIDATED` as committed, a
- *    full-text acquisition returns `sectionAware: false` and no sections.
+ *    figure; the recorded held-out figure (2026-11-13, 92.94 %) is pinned,
+ *    and `scripts/measure-imrad.ts` checks a held-out run against it.
+ * 4. **The degrade switch**: with `IMRAD_DETECTOR_VALIDATED` as committed
+ *    (true since that record) a full-text acquisition passes the detector's
+ *    sections on; with the switch off it returns `sectionAware: false` and no
+ *    sections. *Updated 2026-11-13 (`P3-T41`): this read "as committed …
+ *    returns `sectionAware: false`", true while the held-out record was
+ *    `null`.*
  * 5. **The prompt selector**: on the flat path the rendered
  *    `PAPER_SUMMARY_FULLTEXT` has no section-provenance sentence.
  *
@@ -45,6 +50,7 @@ import {
   IMRAD_DETECTOR_VALIDATED,
   IMRAD_HELDOUT_MEASUREMENT,
   IMRAD_MEASUREMENT,
+  type ImradHeldoutMeasurement,
 } from "../../../src/pipeline/summarize/imrad";
 import {
   fullTextPromptFor,
@@ -52,7 +58,10 @@ import {
 } from "../../../src/pipeline/summarize/summarizeItem";
 import { setPrefStore } from "../../../src/prefs";
 import { createPromptRegistry, renderPrompt } from "../../../src/prompts";
-import type { ManifestPaper } from "../../../scripts/build-imrad-fixtures";
+import {
+  FIXTURE_SETS,
+  type ManifestPaper,
+} from "../../../scripts/build-imrad-fixtures";
 import {
   checkAgainstRecord,
   corpusAbsentReason,
@@ -60,15 +69,19 @@ import {
   correctCharacters,
   DETECTOR_WITHOUT_STRUCTURE,
   detectedSpans,
+  formatMeasurement,
   loadCorpus,
   measureCorpus,
   meetsBar,
   pool,
+  recordFor,
   scoreKey,
   truthSpans,
   type CorpusPaper,
   type Detector,
   type DetectorAnswer,
+  type GroupScore,
+  type Measurement,
   type PaperScore,
 } from "../../../scripts/measure-imrad";
 
@@ -366,10 +379,26 @@ describe("IMRAD_DETECTOR_VALIDATED derives from the held-out record only (P3-T41
     );
   });
 
-  it("is false while no held-out measurement is recorded", () => {
-    expect(IMRAD_HELDOUT_MEASUREMENT).toBeNull();
+  it("records the one held-out measurement of 2026-11-13, and so is true", () => {
+    // plan/reports/imrad-heldout-measurement-2026-11-13.md, as printed.
+    const expected: ImradHeldoutMeasurement = {
+      measuredOn: "2026-11-13",
+      set: "heldout",
+      path: "pdf-without-structure",
+      papers: 15,
+      countedChars: 634_062,
+      correctChars: 589_282,
+      commit: "257b244",
+    };
+    expect(IMRAD_HELDOUT_MEASUREMENT).toEqual(expected);
+    // 92.94 %, at or above the bar.
+    expect(
+      ((100 * expected.correctChars) / expected.countedChars).toFixed(2),
+    ).toBe("92.94");
+    expect(detectorValidatedBy(expected)).toBe(true);
+    expect(IMRAD_DETECTOR_VALIDATED).toBe(true);
+    // Withdrawing the record would turn the switch off again.
     expect(detectorValidatedBy(null)).toBe(false);
-    expect(IMRAD_DETECTOR_VALIDATED).toBe(false);
   });
 
   it("never comes from a first-set record, even one at 100 %", () => {
@@ -385,6 +414,78 @@ describe("IMRAD_DETECTOR_VALIDATED derives from the held-out record only (P3-T41
     expect(
       detectorValidatedBy({ ...HELDOUT, countedChars: 0, correctChars: 0 }),
     ).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A held-out run is checked against the held-out record (P3-T41 step 5)
+// ---------------------------------------------------------------------------
+
+/** A measurement with the given overall totals and nothing else. */
+function measured(
+  papers: number,
+  counted: number,
+  correct: number,
+): Measurement {
+  const overall: GroupScore = {
+    group: "overall",
+    papers,
+    counted,
+    correct,
+    accuracy: counted === 0 ? 0 : correct / counted,
+    meanOfPapers: 0,
+  };
+  return {
+    overall,
+    byFamily: [],
+    byColumns: [],
+    byPublication: [],
+    excluded: pool("excluded", []),
+    papers: [],
+  };
+}
+
+describe("measure-imrad.ts checks each set against its own record (P3-T41 step 5)", () => {
+  // Synthetic totals only: nothing here reads the held-out set or runs a
+  // detector on it; a second held-out run needs the owner's decision.
+  it("uses IMRAD_MEASUREMENT for the first set and IMRAD_HELDOUT_MEASUREMENT for the held-out set", () => {
+    expect(recordFor(FIXTURE_SETS.first)).toBe(IMRAD_MEASUREMENT);
+    expect(recordFor(FIXTURE_SETS.heldout)).toBe(IMRAD_HELDOUT_MEASUREMENT);
+  });
+
+  it("passes a held-out re-run that reproduces the record, and fails one that does not", () => {
+    const record = recordFor(FIXTURE_SETS.heldout);
+    expect(record).not.toBeNull();
+    if (record === null) return;
+    expect(checkAgainstRecord(measured(15, 634_062, 589_282), record).ok).toBe(
+      true,
+    );
+    const below = checkAgainstRecord(measured(15, 634_062, 589_281), record);
+    expect(below.ok).toBe(false);
+    expect(below.problems.join(" ")).toMatch(/below the recorded/u);
+    expect(checkAgainstRecord(measured(14, 634_062, 589_282), record).ok).toBe(
+      false,
+    );
+    expect(checkAgainstRecord(measured(15, 634_063, 589_282), record).ok).toBe(
+      false,
+    );
+  });
+
+  it("prints the held-out record by its own name, date and commit, without the tuned-set sentence", () => {
+    const m = measured(15, 634_062, 589_282);
+    const heldout = formatMeasurement(
+      m,
+      m,
+      recordFor(FIXTURE_SETS.heldout),
+      FIXTURE_SETS.heldout.path,
+    );
+    expect(heldout).toContain(
+      "Recorded value (IMRAD_HELDOUT_MEASUREMENT, 2026-11-13, commit 257b244): 589282 of 634062 characters over 15 papers, 92.94 %. This run is not below it.",
+    );
+    expect(heldout).not.toMatch(/tuned against this set/u);
+    const first = formatMeasurement(m, m, recordFor(FIXTURE_SETS.first));
+    expect(first).toContain("Recorded value (IMRAD_MEASUREMENT, 2026-11-13):");
+    expect(first).toMatch(/tuned against this set/u);
   });
 });
 
@@ -428,13 +529,32 @@ const PORT: FullTextPort<AcquirableItem, AcquirableAttachment> = {
 };
 
 describe("the degrade switch (P3-T22 step 2)", () => {
-  it("returns sectionAware false and no sections by default, and logs what the detector found", async () => {
+  it("passes the detector's sections on by default, now that the held-out record validates it (P3-T41)", async () => {
+    setPrefStore(createMemoryPrefStore());
+    expect(IMRAD_DETECTOR_VALIDATED).toBe(true);
+    const source = await acquireSource(
+      ITEM,
+      { estimateTokens: (t) => t.length },
+      PORT,
+    );
+    expect(source.tier).toBe("fulltext_pdf");
+    expect(source.sectionAware).toBe(true);
+    expect(source.sections.map((s) => s.labels.join("+"))).toEqual([
+      "introduction",
+      "methods",
+      "results",
+      "discussion",
+    ]);
+  });
+
+  it("returns sectionAware false and no sections when the switch is off, and logs what the detector found", async () => {
     setPrefStore(createMemoryPrefStore());
     const lines: Record<string, unknown>[] = [];
     const source = await acquireSource(
       ITEM,
       {
         estimateTokens: (t) => t.length,
+        imradDetectorValidated: false,
         logger: {
           child: () => {
             throw new Error("unused");
@@ -450,7 +570,6 @@ describe("the degrade switch (P3-T22 step 2)", () => {
       },
       PORT,
     );
-    expect(IMRAD_DETECTOR_VALIDATED).toBe(false);
     expect(source.tier).toBe("fulltext_pdf");
     expect(source.sectionAware).toBe(false);
     expect(source.sections).toEqual([]);
