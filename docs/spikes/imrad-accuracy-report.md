@@ -12,6 +12,11 @@
 `sectionAware: false` for every paper, `auto` runs whole-document flat chunking, and the full-text
 prompt is sent without its section-label sentence.
 
+*Updated 2026-11-13 (`P3-T41` part 1):* the detector was then tuned against this set and re-measured
+at **93.61 %**, which is now the recorded first-set figure; being tuned, it validates nothing, and
+`IMRAD_DETECTOR_VALIDATED` now derives only from the held-out measurement, not yet made. See the last
+section, "Tuned first-set measurement, 2026-11-13". The figures below are the untuned 2026-11-10 run.
+
 *Superseded 2026-11-12:* **Decided 2026-11-10 by the owner, in chat, written 2026-11-12 (`G-22`; `plan/00` §6 items 365(d) and 374):** keep whole-document chunking without section labels (what the tree does), so `summary.fullTextMode`'s default stays `auto` and `IMRAD_DETECTOR_VALIDATED` stays false; and improve the detector, measuring the improvement once on a held-out set of twenty new papers (`plan/04` `P3-T40` and `P3-T41`) rather than on the forty labels it is tuned against. *This decision was given on 2026-11-10 and not written down until 2026-11-12, when `P3-T40`'s report found it missing.*
 
 **The owner's decision at `G-22`, as this report first stood: not yet made.** The owner chooses between shipping whole-document
@@ -138,3 +143,61 @@ Recorded value (IMRAD_MEASUREMENT, 2026-11-10): 1002637 of 1474524 characters ov
 The detector defects behind these figures, each with its paper and line, are listed in
 `plan/reports/P3-T22.md` for the owner; none was fixed in `P3-T22`, because tuning the detector
 against these labels would fit it to the test set.
+
+## Tuned first-set measurement, 2026-11-13 (`P3-T41` part 1)
+
+**Measured 2026-11-13**, on the tree at commit `01da6a6` plus `P3-T41` part 1's uncommitted detector
+change, by `npx tsx scripts/measure-imrad.ts` (exit status 0). **This figure is tuned:** the detector
+was changed against these 40 papers' labels to recover the losses of `plan/00` §6 item 365(b), so it
+overstates real accuracy and validates nothing. `IMRAD_DETECTOR_VALIDATED` no longer derives from it;
+it derives only from `IMRAD_HELDOUT_MEASUREMENT`, the one held-out measurement, which is `null` until
+`P3-T41`'s step 4 runs. So the flag is still false and every acquisition is still flat. What changed
+in the detector is `docs/06` §4.3's note "Changed 2026-11-13".
+
+**Result: 93.61 % overall, tuned** (1 380 235 of 1 474 524 counted characters, 34 papers), up from
+68.00 %. Mean of the papers' own figures 92.90 %. The six papers without IMRaD structure, apart:
+77.90 % (from 48.70 %). Table ceiling (the table at the owner's own heading positions, information
+only): 96.06 % (from 79.92 %). Without the four names taken from item 364(e)'s per-paper answers
+(Literature review, Implementation, Theoretical model, Data analysis) the figure is 92.35 %.
+
+| Group | Papers | 2026-11-10 (untuned) | 2026-11-13 (tuned) |
+|---|---:|---:|---:|
+| springer | 4 | 80.07 % | 94.19 % |
+| nature | 3 | 76.19 % | 77.24 % |
+| elsevier | 4 | 75.14 % | 93.87 % |
+| wiley | 5 | 63.59 % | 100.00 % |
+| plos | 4 | 84.81 % | 99.89 % |
+| oup | 4 | 76.95 % | 98.64 % |
+| ieee | 3 | 0.00 % | 100.00 % |
+| arxiv | 2 | 34.40 % | 62.85 % |
+| biorxiv | 2 | 98.33 % | 100.00 % |
+| us-government | 3 | 33.83 % | 93.29 % |
+| 2 columns | 23 | 62.66 % | 93.68 % |
+| 1 column | 11 | 78.76 % | 93.46 % |
+| published | 30 | 67.10 % | 94.68 % |
+| preprint | 4 | 74.32 % | 86.05 % |
+
+**Per paper, where the figure moved** (counted papers; excluded ones in brackets): S1 62.80 → 83.64,
+S4 72.43 → 100, N1 87.24 → 89.29, N3 88.44 → 88.87, E1 33.69 → 100, E2 91.92 → 98.25, E4 78.32 → 100,
+**E5 93.33 → 78.25**, W3 69.36 → 100, W4 61.45 → 100, W5 0 → 100, P1 79.77 → 100, P5 46.63 → 100,
+**P6 100 → 99.61**, O2 82.21 → 93.97, O3 69.74 → 100, O4 52.66 → 100, O5 99.17 → 100, I1, I3 and I4
+0 → 100, A1 0 → 66.03, A5 52.00 → 61.22, B4 95.01 → 100, X1 60.37 → 97.57, X2 13.73 → 100; (N2 82.04
+→ 82.95, E6 96.49 → 100, I5 0 → 100, A4 0 → 36.84, A6 42.25 → 57.08, B2 70.44 → 100). No paper now
+declares failure.
+
+**Two papers went down**, both by following the owner's rules: E5's boxed "Research in context" panel
+is now an `other` boundary (item 364(a) names it other), and its Methods resumes at a line that is not
+a heading (364(e)), which the detector cannot find; P6's "Ethical approval" sits inside a Methods that
+is the paper's last main heading, so 364(b)'s "after the last main heading" makes it back matter.
+
+**What is still lost**, none of it fixed because a fix would have to name a paper: the unheaded
+introductions of N1, N2, N3 and N6 and E5's resumption (item 364(c), (f)); N6's run-in "Results …"
+heading inside a 423-character line; the arXiv papers' own chapter titles (A1 "Motion distortion
+metric", "Case study", "Lessons learned"; A4 "Theory", "Numerical simulations"; A5's chapters 3–4;
+A6 "Problem definition", "GAIT"); XR2's report headings ("Test facility" and three more, and
+"Symbols"); subsections whose names are table names (S1 "Experimental results" inside Results and
+Discussion; O2 "Limitations of MD calculations" inside Results; E2 "Limitations of the study" inside
+the Discussion), because the limitations row was left as it was.
+
+**The held-out figure: not yet measured.** It is made once, by `P3-T41` step 4, after this change is
+committed, and is the only figure `IMRAD_DETECTOR_VALIDATED` derives from.

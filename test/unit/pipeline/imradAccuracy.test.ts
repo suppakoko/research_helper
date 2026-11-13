@@ -2,7 +2,7 @@
  * `P3-T22`: the IMRaD detector's accuracy harness, the 85 % bar and the
  * degrade switch.
  *
- * Pins four things:
+ * Pins five things:
  *
  * 1. **The scoring rules** of `docs/06` §4.3's note of 2026-11-10, each on a
  *    synthetic paper written here: only the body counts, labels are read in
@@ -13,9 +13,12 @@
  *    detector as shipped is not below `IMRAD_MEASUREMENT`, and a deliberately
  *    degraded test double is caught. Skipped, with the reason in the title,
  *    only when the corpus is absent.
- * 3. **The degrade switch**: with `IMRAD_DETECTOR_VALIDATED` as committed, a
+ * 3. **Where the switch comes from** (`P3-T41`): `IMRAD_DETECTOR_VALIDATED`
+ *    derives from the held-out record only, never from the tuned first-set
+ *    figure.
+ * 4. **The degrade switch**: with `IMRAD_DETECTOR_VALIDATED` as committed, a
  *    full-text acquisition returns `sectionAware: false` and no sections.
- * 4. **The prompt selector**: on the flat path the rendered
+ * 5. **The prompt selector**: on the flat path the rendered
  *    `PAPER_SUMMARY_FULLTEXT` has no section-provenance sentence.
  *
  * No network, no model; the labels are only read.
@@ -37,8 +40,10 @@ import {
   type FullTextPort,
 } from "../../../src/pipeline/summarize/acquire";
 import {
+  detectorValidatedBy,
   IMRAD_ACCURACY_BAR,
   IMRAD_DETECTOR_VALIDATED,
+  IMRAD_HELDOUT_MEASUREMENT,
   IMRAD_MEASUREMENT,
 } from "../../../src/pipeline/summarize/imrad";
 import {
@@ -261,6 +266,7 @@ describe("the scoring rules (docs/06 §4.3, note of 2026-11-10)", () => {
     );
     const record = {
       measuredOn: "2026-11-10",
+      set: "first" as const,
       path: "pdf-without-structure" as const,
       papers: 1,
       countedChars: 90,
@@ -333,16 +339,54 @@ describe.skipIf(absent !== null)(
       }
     });
 
-    it("derives IMRAD_DETECTOR_VALIDATED from the record and the bar", () => {
-      expect(IMRAD_DETECTOR_VALIDATED).toBe(
-        meetsBar({
-          correct: IMRAD_MEASUREMENT.correctChars,
-          counted: IMRAD_MEASUREMENT.countedChars,
-        }),
-      );
+    it("records the first set, tuned against, as the regression pin", () => {
+      expect(IMRAD_MEASUREMENT.set).toBe("first");
     });
   },
 );
+
+// ---------------------------------------------------------------------------
+// Where IMRAD_DETECTOR_VALIDATED comes from (P3-T41)
+// ---------------------------------------------------------------------------
+
+describe("IMRAD_DETECTOR_VALIDATED derives from the held-out record only (P3-T41)", () => {
+  const FIRST = {
+    measuredOn: "2026-11-13",
+    set: "first" as const,
+    path: "pdf-without-structure" as const,
+    papers: 34,
+    countedChars: 1000,
+    correctChars: 1000,
+  };
+  const HELDOUT = { ...FIRST, set: "heldout" as const, commit: "0000000" };
+
+  it("is the held-out record against the bar", () => {
+    expect(IMRAD_DETECTOR_VALIDATED).toBe(
+      detectorValidatedBy(IMRAD_HELDOUT_MEASUREMENT),
+    );
+  });
+
+  it("is false while no held-out measurement is recorded", () => {
+    expect(IMRAD_HELDOUT_MEASUREMENT).toBeNull();
+    expect(detectorValidatedBy(null)).toBe(false);
+    expect(IMRAD_DETECTOR_VALIDATED).toBe(false);
+  });
+
+  it("never comes from a first-set record, even one at 100 %", () => {
+    expect(meetsBar({ correct: 1000, counted: 1000 })).toBe(true);
+    expect(detectorValidatedBy(FIRST)).toBe(false);
+    expect(detectorValidatedBy(IMRAD_MEASUREMENT)).toBe(false);
+  });
+
+  it("comes from a held-out record at or above the bar, and not below it", () => {
+    expect(detectorValidatedBy(HELDOUT)).toBe(true);
+    expect(detectorValidatedBy({ ...HELDOUT, correctChars: 850 })).toBe(true);
+    expect(detectorValidatedBy({ ...HELDOUT, correctChars: 849 })).toBe(false);
+    expect(
+      detectorValidatedBy({ ...HELDOUT, countedChars: 0, correctChars: 0 }),
+    ).toBe(false);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // The degrade switch in acquireSource

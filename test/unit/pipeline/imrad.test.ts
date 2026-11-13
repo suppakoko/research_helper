@@ -10,7 +10,9 @@ import {
 import {
   detectSectionsFromJats,
   detectSectionsFromPdf,
+  headingName,
   IMRAD_HEADING_TABLE,
+  isBackMatterHeading,
   isCandidateHeadingLine,
   JATS_SEC_TYPES,
   labelHeading,
@@ -69,18 +71,86 @@ describe("the heading table (docs/06 §4.3)", () => {
     ["Limitations", ["limitations"]],
     ["4. Conclusions", ["conclusion"]],
     ["Concluding remarks", ["conclusion"]],
+    // The note of 2026-11-13: numbering of every shape is stripped first.
+    ["I. INTRODUCTION", ["introduction"]],
+    ["IV. CONCLUSION", ["conclusion"]],
+    ["XII. Discussion", ["discussion"]],
+    ["1 | INTRODUCTION", ["introduction"]],
+    ["3 | RESULTS AND DISCUSSION", ["results", "discussion"]],
+    ["5.1 Methodology", ["methods"]],
+    ["2.1. Results", ["results"]],
+    // … "&" reads as "and"; names of plan/00 §6 item 364(a) and (e).
+    ["Materials & methods", ["methods"]],
+    ["Results & Discussion", ["results", "discussion"]],
+    ["STAR+METHODS", ["methods"]],
+    ["STAR★METHODS", ["methods"]],
+    ["2. Experimental Methods", ["methods"]],
+    ["Experimental procedures", ["methods"]],
+    ["Experimental", ["methods"]],
+    ["3. Experimental Results", ["results"]],
+    ["Result", ["results"]],
+    ["2 Related Works", ["related_work"]],
+    ["Literature review", ["related_work"]],
+    ["Implementation", ["methods"]],
+    ["2. Theoretical model", ["methods"]],
+    ["3. Data Analysis", ["methods"]],
+    // … front and back matter is a boundary labelled other.
+    ["Acknowledgements", ["other"]],
+    ["ACKNOWLEDGMENTS", ["other"]],
+    ["Appendix A: Proofs", ["other"]],
+    ["Author summary", ["other"]],
+    ["Significance Statement", ["other"]],
+    ["Research in context", ["other"]],
+    ["Highlights", ["other"]],
+    ["Nomenclature", ["other"]],
+    ["Availability and requirements", ["other"]],
+    ["Data availability", ["other"]],
+    ["DATA AVAILABILITY STATEMENT", ["other"]],
+    ["Data and code availability", ["other"]],
+    ["Code availability", ["other"]],
+    ["Data sharing statement", ["other"]],
+    ["Availability of data and materials", ["other"]],
+    ["Funding", ["other"]],
+    ["AUTHOR CONTRIBUTIONS", ["other"]],
+    ["Authors' contributions", ["other"]],
+    ["Competing interests", ["other"]],
+    ["CONFLICT OF INTEREST STATEMENT", ["other"]],
+    ["Declaration of competing interest", ["other"]],
+    ["Ethics statement", ["other"]],
+    ["Ethical approval", ["other"]],
   ] as const)("%s → %j", (heading, labels) => {
     expect(labelHeading(heading)).toEqual(labels);
   });
 
   it.each([
-    "Acknowledgements",
     "Abstract and keywords", // the abstract row is anchored with `\s*$`
     "Case presentation",
-    "Data availability",
+    "Experimental Computational", // "Experimental" alone is methods only as the whole name
+    "A. Results", // letter labels number subsections and are not stripped
+    "C. Discussion",
+    "References",
     "",
   ])("%j matches no row", (heading) => {
     expect(labelHeading(heading)).toBeNull();
+  });
+
+  it("strips numbering case-sensitively and reads & as and", () => {
+    expect(headingName("  II. MATERIALS & METHODS")).toBe(
+      "MATERIALS and METHODS",
+    );
+    expect(headingName("1 | INTRODUCTION")).toBe("INTRODUCTION");
+    expect(headingName("5.2.1 Results")).toBe("Results");
+    // A lower-case "i." is not a Roman numeral heading prefix.
+    expect(headingName("i. results")).toBe("i. results");
+  });
+
+  it("marks only plan/00 §6 item 364(b)'s back matter as positional", () => {
+    expect(isBackMatterHeading("Funding")).toBe(true);
+    expect(isBackMatterHeading("2.1 Ethics statements")).toBe(true);
+    expect(isBackMatterHeading("Data availability")).toBe(true);
+    expect(isBackMatterHeading("Acknowledgements")).toBe(false);
+    expect(isBackMatterHeading("Research in context")).toBe(false);
+    expect(isBackMatterHeading("Discussion")).toBe(false);
   });
 
   it("is ordered most-specific-first: the combined row precedes the bare Results row", () => {
@@ -90,11 +160,17 @@ describe("the heading table (docs/06 §4.3)", () => {
     // Two rows match the combined heading — the combined row (4) and the bare
     // Results row (5) — so only the order makes the label right.
     expect(matching).toEqual([4, 5]);
+    // "Experimental results" is not matched by the methods row (3).
+    expect(
+      IMRAD_HEADING_TABLE.flatMap((row, i) =>
+        row.pattern.test("Experimental results") ? [i] : [],
+      ),
+    ).toEqual([5]);
     expect(labelHeading("Results and Discussion")).toEqual([
       "results",
       "discussion",
     ]);
-    expect(IMRAD_HEADING_TABLE).toHaveLength(9);
+    expect(IMRAD_HEADING_TABLE).toHaveLength(11);
   });
 
   it("applies the candidate-heading rule to the line scan", () => {
@@ -109,6 +185,91 @@ describe("the heading table (docs/06 §4.3)", () => {
     expect(isCandidateHeadingLine("Results ".repeat(12), "")).toBe(false);
     expect(isCandidateHeadingLine("Results", undefined)).toBe(true);
     expect(isCandidateHeadingLine("Results", "\fNext page")).toBe(true);
+  });
+
+  it("accepts a heading followed straight away by a numbered subheading (note of 2026-11-13, (4))", () => {
+    expect(isCandidateHeadingLine("4 Methods", "4.1 Data collection")).toBe(
+      true,
+    );
+    expect(isCandidateHeadingLine("2. Results", "2.1. Flow")).toBe(true);
+  });
+
+  it("refuses a line whose name starts lower-case: running text, not a heading", () => {
+    expect(
+      isCandidateHeadingLine("results in the following update:", "Where"),
+    ).toBe(false);
+    expect(isCandidateHeadingLine("method", "")).toBe(false);
+    expect(isCandidateHeadingLine("3. results", "")).toBe(false);
+    expect(isCandidateHeadingLine("III. RESULTS", "")).toBe(true);
+  });
+});
+
+describe("the line scan with the note of 2026-11-13", () => {
+  const body = (...lines: string[]): string => lines.join("\n");
+
+  it("finds Roman-numbered headings, which declared failure before", () => {
+    const text = body(
+      "I. INTRODUCTION",
+      "Widgets are small.",
+      "II. MATERIALS AND METHODS",
+      "Two observers counted.",
+      "III. RESULTS AND DISCUSSION",
+      "Counts rose.",
+      "IV. CONCLUSION",
+      "Done.",
+    );
+    const detection = detectSectionsFromPdf(text, null);
+    expect(detection.sectionAware).toBe(true);
+    expect(detection.sections.map((s) => s.labels)).toEqual([
+      ["introduction"],
+      ["methods"],
+      ["results", "discussion"],
+      ["conclusion"],
+    ]);
+  });
+
+  it("ends the last section at back matter, and ignores back matter before the last main heading", () => {
+    const text = body(
+      "1 Introduction",
+      "Widgets are small.",
+      "2 Methods",
+      "2.1 Ethics statement",
+      "The board approved it.",
+      "3 Results",
+      "Counts rose.",
+      "4 Discussion",
+      "The rise is small.",
+      "Funding",
+      "None.",
+      "Data availability",
+      "On request.",
+    );
+    const detection = detectSectionsFromPdf(text, null);
+    expect(
+      detection.sections.map((s) => [s.heading, s.labels.join("+")]),
+    ).toEqual([
+      ["1 Introduction", "introduction"],
+      ["2 Methods", "methods"],
+      ["3 Results", "results"],
+      ["4 Discussion", "discussion"],
+      ["Funding", "other"],
+      ["Data availability", "other"],
+    ]);
+    expect(detection.sections[1]?.text).toContain("The board approved it.");
+  });
+
+  it("does not count other boundaries towards the two-section gate", () => {
+    const text = body(
+      "Introduction",
+      "Widgets are small.",
+      "Acknowledgements",
+      "Thanks.",
+      "Funding",
+      "None.",
+    );
+    const detection = detectSectionsFromPdf(text, null);
+    expect(detection.recognized).toBe(1);
+    expect(detection.sectionAware).toBe(false);
   });
 });
 

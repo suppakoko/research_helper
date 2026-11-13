@@ -45,8 +45,13 @@
  *
  * {@link IMRAD_MEASUREMENT} is the committed result of
  * `scripts/measure-imrad.ts` over `P3-T20`'s 40-paper fixture set, scored as
- * `docs/06` §4.3's note of 2026-11-10 defines; {@link IMRAD_DETECTOR_VALIDATED}
- * is that result against {@link IMRAD_ACCURACY_BAR}. Callers:
+ * `docs/06` §4.3's note of 2026-11-10 defines. Since `P3-T41` the detector is
+ * **tuned against that set**, so its figure overstates real accuracy and
+ * validates nothing: it is a regression pin only.
+ * {@link IMRAD_DETECTOR_VALIDATED} derives **only** from
+ * {@link IMRAD_HELDOUT_MEASUREMENT}, the one measurement on the held-out set
+ * (`test/fixtures/imrad-heldout/`, `P3-T40`), against
+ * {@link IMRAD_ACCURACY_BAR} — see {@link detectorValidatedBy}. Callers:
  * `acquireSource` (`./acquire.ts`) returns `sectionAware: false` and no
  * sections while it is false, and the summarize and trend-report pipelines
  * pass it to `summarizeItem` as `imradDetectorValidated`.
@@ -77,6 +82,12 @@ export interface ImradMeasurement {
   /** The day it was measured (ISO date). */
   readonly measuredOn: string;
   /**
+   * Which fixture set was measured: `first` (`test/fixtures/imrad/`, which
+   * the detector is tuned against) or `heldout` (`test/fixtures/imrad-heldout/`,
+   * measured once, never tuned against).
+   */
+  readonly set: "first" | "heldout";
+  /**
    * What ran: the PDF path with no document structure, the only input the
    * text-only fixtures allow (`docs/06` §4.3's note of 2026-11-10, (9)).
    */
@@ -90,27 +101,60 @@ export interface ImradMeasurement {
 }
 
 /**
- * The committed measurement (`docs/spikes/imrad-accuracy-report.md`). Change
- * it only from a run of `scripts/measure-imrad.ts`, never by hand.
+ * The committed first-set measurement (`docs/spikes/imrad-accuracy-report.md`),
+ * the regression pin `test/unit/pipeline/imradAccuracy.test.ts` checks.
+ * **Tuned** (`P3-T41`): the detector was changed against these labels, so
+ * this figure is not evidence of accuracy and never validates the detector.
+ * Change it only from a run of `scripts/measure-imrad.ts`, never by hand.
  */
 export const IMRAD_MEASUREMENT: ImradMeasurement = {
-  measuredOn: "2026-11-10",
+  measuredOn: "2026-11-13",
+  set: "first",
   path: "pdf-without-structure",
   papers: 34,
   countedChars: 1_474_524,
-  correctChars: 1_002_637,
+  correctChars: 1_380_235,
 };
 
+/** The one held-out measurement: a held-out run, with the commit it measured. */
+export interface ImradHeldoutMeasurement extends ImradMeasurement {
+  readonly set: "heldout";
+  /** The commit whose detector was measured. */
+  readonly commit: string;
+}
+
 /**
- * Whether the detector met {@link IMRAD_ACCURACY_BAR} in
- * {@link IMRAD_MEASUREMENT}. While it is false, `auto` degrades to
- * whole-document flat chunking and no prompt claims section provenance
- * (`docs/06` §4.3, `docs/11` R-19b).
+ * The one measurement on the held-out set (`P3-T41` step 4, run with
+ * `--final-heldout-measurement`), or `null` until it is made. Recorded by
+ * hand from that run's printout, with its date and the commit it measured.
  */
-export const IMRAD_DETECTOR_VALIDATED: boolean =
-  IMRAD_MEASUREMENT.countedChars > 0 &&
-  IMRAD_MEASUREMENT.correctChars >=
-    IMRAD_ACCURACY_BAR * IMRAD_MEASUREMENT.countedChars;
+export const IMRAD_HELDOUT_MEASUREMENT: ImradHeldoutMeasurement | null = null;
+
+/**
+ * Whether `record` validates the detector: it must be a **held-out**
+ * measurement at or above {@link IMRAD_ACCURACY_BAR}. A first-set record never
+ * validates, whatever its figure, because the detector is tuned against that
+ * set (`P3-T41`: "do not derive `IMRAD_DETECTOR_VALIDATED` from the tuned
+ * first-set figure").
+ */
+export function detectorValidatedBy(record: ImradMeasurement | null): boolean {
+  return (
+    record !== null &&
+    record.set === "heldout" &&
+    record.countedChars > 0 &&
+    record.correctChars >= IMRAD_ACCURACY_BAR * record.countedChars
+  );
+}
+
+/**
+ * Whether the detector met {@link IMRAD_ACCURACY_BAR} on the held-out set
+ * ({@link IMRAD_HELDOUT_MEASUREMENT}); `false` while that is `null`. While it
+ * is false, `auto` degrades to whole-document flat chunking and no prompt
+ * claims section provenance (`docs/06` §4.3, `docs/11` R-19b).
+ */
+export const IMRAD_DETECTOR_VALIDATED: boolean = detectorValidatedBy(
+  IMRAD_HELDOUT_MEASUREMENT,
+);
 
 /** The order labels are listed in when a section carries more than one. */
 const LABEL_ORDER: readonly ImradSection[] = [
@@ -137,9 +181,16 @@ function inLabelOrder(labels: Iterable<ImradSection>): ImradSection[] {
 
 /** One row of §4.3's table. */
 export interface HeadingRow {
+  /** Tried, case-insensitively, against the heading's name ({@link headingName}). */
   readonly pattern: RegExp;
   /** The labels a match yields; a function where the row has two targets. */
   readonly labels: (match: RegExpExecArray) => readonly ImradSection[];
+  /**
+   * `true` for `plan/00` §6 item 364(b)'s back matter: such a heading is a
+   * boundary only **after the last main heading** (note of 2026-11-13, (3));
+   * before it ("2.1 Ethics statement" inside the Methods) it starts nothing.
+   */
+  readonly backMatter?: true;
 }
 
 const fixed =
@@ -148,69 +199,133 @@ const fixed =
     labels;
 
 /**
- * `docs/06` §4.3's table, case-insensitive, **in the documented order**. The
- * `background | related work | prior work` row splits its target by which
- * alternative matched.
+ * §4.3's numbering prefix (note of 2026-11-13, (1)), removed before a row is
+ * tried. **Case-sensitive on purpose**: an Arabic number with optional
+ * decimal parts and an optional closing period ("4", "2.", "5.1", "2.1."), or
+ * an upper-case Roman numeral from I to XXXIX with its period ("I.", "IV."),
+ * either one optionally followed by a pipe ("1 |"). Letter labels ("A.",
+ * "C.") number subsections and are not stripped. Always matches, possibly
+ * the empty string.
+ */
+export const HEADING_NUMBERING =
+  /^(?:(?:\d+(?:\.\d+)*\.?|(?=[IVX])X{0,3}(?:IX|IV|V?I{0,3})\.)(?:\s*\|)?\s*)?/u;
+
+/**
+ * A heading's *name*: leading white space and {@link HEADING_NUMBERING}
+ * removed, "&" read as "and", and white-space runs as one space (`plan/00`
+ * §6 item 364(a): "numbering and case are ignored and '&' reads as 'and'").
+ */
+export function headingName(heading: string): string {
+  return heading
+    .replace(/^[\s\f]+/u, "")
+    .replace(HEADING_NUMBERING, "")
+    .replace(/\s*&\s*/gu, " and ")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+/**
+ * `docs/06` §4.3's table, case-insensitive over {@link headingName}, **in the
+ * documented order**: tried top to bottom, first match wins. The
+ * `background | related work | prior work | literature review` row splits
+ * its target by which alternative matched. The last two rows are front and
+ * back matter, labelled `other` (note of 2026-11-13, (3)): a boundary, never
+ * a recognized section. The first of them (item 364(a)'s names) is a boundary
+ * wherever it stands; the second (item 364(b)'s back matter) only after the
+ * last main heading.
  */
 export const IMRAD_HEADING_TABLE: readonly HeadingRow[] = [
   {
-    pattern: /^\s*(\d+\.?\s*)?(abstract|summary)\s*$/i,
+    pattern: /^(abstract|summary)\s*$/i,
     labels: fixed("abstract"),
   },
   {
-    pattern: /^\s*(\d+\.?\s*)?(introduction)\b/i,
+    pattern: /^(introduction)\b/i,
     labels: fixed("introduction"),
   },
   {
-    pattern: /^\s*(\d+\.?\s*)?(background|related work|prior work)\b/i,
+    pattern: /^(background|related works?|prior work|literature review)\b/i,
     labels: (match) =>
-      (match[2] ?? "").toLowerCase() === "background"
+      (match[1] ?? "").toLowerCase() === "background"
         ? ["background"]
         : ["related_work"],
   },
   {
     pattern:
-      /^\s*(\d+\.?\s*)?(materials? and methods?|methods?|methodology|experimental( section)?|study design|patients and methods)\b/i,
+      /^(materials? and methods?|methods?|methodology|experimental (?:section|methods?|procedures?)|experimental(?=\s*$|\s+\d)|star\W*methods|study design|patients and methods|implementation|theoretical models?|data analysis)\b/i,
     labels: fixed("methods"),
   },
   {
-    pattern: /^\s*(\d+\.?\s*)?(results? and discussion)\b/i,
+    pattern: /^(results? and discussion)\b/i,
     labels: fixed("results", "discussion"),
   },
   {
-    pattern: /^\s*(\d+\.?\s*)?(results?|findings)\b/i,
+    pattern: /^(results?|findings|experimental results?)\b/i,
     labels: fixed("results"),
   },
   {
-    pattern: /^\s*(\d+\.?\s*)?(discussion)\b/i,
+    pattern: /^(discussion)\b/i,
     labels: fixed("discussion"),
   },
   {
-    pattern: /^\s*(\d+\.?\s*)?(limitations?)\b/i,
+    pattern: /^(limitations?)\b/i,
     labels: fixed("limitations"),
   },
   {
-    pattern: /^\s*(\d+\.?\s*)?(conclusions?|concluding remarks)\b/i,
+    pattern: /^(conclusions?|concluding remarks)\b/i,
     labels: fixed("conclusion"),
+  },
+  {
+    pattern:
+      /^(acknowledge?ments?|appendix|availability and requirements|author summary|research in context|significance statement|highlights|nomenclature)\b/i,
+    labels: fixed("other"),
+  },
+  {
+    pattern:
+      /^(funding|authors?'?s?'? contributions?|competing interests?|conflicts? of interests?|declarations? of (?:competing )?interests?|(?:data|code)(?: and (?:code|materials?))? (?:availability|sharing)|availability of (?:data|code)|ethics?|ethical)\b/i,
+    labels: fixed("other"),
+    backMatter: true,
   },
 ];
 
 /**
- * The labels §4.3's table gives `heading` — first matching row, top to bottom
- * — or `null` when no row matches.
+ * The labels §4.3's table gives `heading` — its {@link headingName} tried
+ * against each row, top to bottom, first match wins — or `null` when no row
+ * matches.
  */
 export function labelHeading(heading: string): readonly ImradSection[] | null {
+  return matchHeading(heading)?.labels ?? null;
+}
+
+/** The first row matching `heading`'s name, with the labels it yields. */
+function matchHeading(heading: string): {
+  readonly labels: readonly ImradSection[];
+  readonly backMatter: boolean;
+} | null {
+  const name = headingName(heading);
   for (const row of IMRAD_HEADING_TABLE) {
-    const match = row.pattern.exec(heading);
-    if (match !== null) return row.labels(match);
+    const match = row.pattern.exec(name);
+    if (match !== null) {
+      return { labels: row.labels(match), backMatter: row.backMatter === true };
+    }
   }
   return null;
 }
 
 /**
+ * `true` when §4.3's table matches `heading` on its back-matter row
+ * (`plan/00` §6 item 364(b)), which counts only after the last main heading.
+ */
+export function isBackMatterHeading(heading: string): boolean {
+  return matchHeading(heading)?.backMatter === true;
+}
+
+/**
  * §4.3's candidate-heading rule, for the line-scan fallback: shorter than
- * {@link MAX_HEADING_LINE_CHARS}, no terminal period, and followed by a blank
- * line (or the end of the page / text) or a capitalized sentence.
+ * {@link MAX_HEADING_LINE_CHARS}, no terminal period, its name (after the
+ * numbering) starting with an upper-case letter, and followed by a blank
+ * line (or the end of the page / text), a capitalized sentence, or a line
+ * starting with a digit — a numbered subheading (note of 2026-11-13, (4)).
  */
 export function isCandidateHeadingLine(
   line: string,
@@ -219,9 +334,10 @@ export function isCandidateHeadingLine(
   const trimmed = line.trim();
   if (trimmed === "" || trimmed.length >= MAX_HEADING_LINE_CHARS) return false;
   if (trimmed.endsWith(".")) return false;
+  if (!/^\p{Lu}/u.test(headingName(trimmed))) return false;
   if (nextLine === undefined) return true;
   const next = nextLine.replace(/^[\s\f]+/u, "");
-  return next === "" || /^\p{Lu}/u.test(next);
+  return next === "" || /^[\p{Lu}\p{N}]/u.test(next);
 }
 
 // ---------------------------------------------------------------------------
@@ -265,6 +381,29 @@ interface Anchor {
   readonly start: number;
   readonly heading: string;
   readonly labels: readonly ImradSection[];
+  /**
+   * `true` for a back-matter heading ({@link isBackMatterHeading}) that counts
+   * only after the last main heading ({@link dropEarlyBackMatter}).
+   */
+  readonly backMatter?: boolean;
+}
+
+/**
+ * `plan/00` §6 item 364(b): back-matter headings **after the last main
+ * heading** are `other`. A back-matter anchor before the last anchor that
+ * carries an IMRaD label (anything but `other`) starts nothing, so
+ * "2.1 Ethics statement" stays inside the Methods. `anchors` is sorted.
+ */
+function dropEarlyBackMatter(anchors: readonly Anchor[]): Anchor[] {
+  let lastMain = -1;
+  anchors.forEach((anchor) => {
+    if (anchor.labels.some((label) => label !== "other")) {
+      lastMain = anchor.start;
+    }
+  });
+  return anchors.filter(
+    (anchor) => anchor.backMatter !== true || anchor.start > lastMain,
+  );
 }
 
 /**
@@ -445,6 +584,8 @@ interface StructureCandidate {
   readonly text: string;
   readonly pageIndex: number | null;
   readonly labels: readonly ImradSection[];
+  /** A back-matter heading that is not an outline entry at the section level. */
+  readonly backMatter: boolean;
 }
 
 /**
@@ -466,8 +607,10 @@ function structureCandidates(
       labelHeading(entry.blockText ?? entry.title) ??
       (entry.blockText !== null ? labelHeading(entry.title) : null),
   );
+  // The section level counts only IMRaD labels: a back-matter row's `other`
+  // (note of 2026-11-13, (3)) does not set it.
   const depths = anchored
-    .filter((_, i) => labelled[i] !== null)
+    .filter((_, i) => (labelled[i] ?? []).some((label) => label !== "other"))
     .map((entry) => entry.depth);
   const sectionLevel = depths.length === 0 ? null : Math.min(...depths);
 
@@ -479,11 +622,14 @@ function structureCandidates(
     const labels = labelled[i] ?? null;
     if (labels === null && entry.depth !== sectionLevel) return;
     seen.add(blockIndex);
+    const text = entry.blockText ?? entry.title;
     out.push({
       blockIndex,
-      text: entry.blockText ?? entry.title,
+      text,
       pageIndex: entry.pageIndex,
       labels: labels ?? ["other"],
+      // An outline entry at the section level is a boundary wherever it is.
+      backMatter: entry.depth !== sectionLevel && isBackMatterHeading(text),
     });
   });
   for (const block of structure.headingBlocks) {
@@ -496,6 +642,7 @@ function structureCandidates(
       text: block.text,
       pageIndex: block.pageIndex,
       labels,
+      backMatter: isBackMatterHeading(block.text),
     });
   }
   return out.sort((a, b) => a.blockIndex - b.blockIndex);
@@ -512,7 +659,12 @@ function scanLines(body: string): Anchor[] {
     if (isCandidateHeadingLine(content, lines[i + 1])) {
       const labels = labelHeading(content);
       if (labels !== null) {
-        anchors.push({ start: at + lead, heading: content.trim(), labels });
+        anchors.push({
+          start: at + lead,
+          heading: content.trim(),
+          labels,
+          backMatter: isBackMatterHeading(content),
+        });
       }
     }
     at += line.length + 1;
@@ -553,6 +705,7 @@ export function detectSectionsFromPdf(
       start: found.start,
       heading: body.slice(found.start, found.end),
       labels: candidate.labels,
+      backMatter: candidate.backMatter,
     });
     cursor = found.end;
   }
@@ -565,8 +718,8 @@ export function detectSectionsFromPdf(
     (anchor) => !have.has(anchor.labels.join("+")) && !taken.has(anchor.start),
   );
 
-  const anchors = [...located, ...fallbackKept].sort(
-    (a, b) => a.start - b.start,
+  const anchors = dropEarlyBackMatter(
+    [...located, ...fallbackKept].sort((a, b) => a.start - b.start),
   );
   const detection = assemble(body, anchors, offset);
   return {

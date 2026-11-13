@@ -47,7 +47,11 @@
  * **Exit status.** 0 at or above the bar and not below the recorded value; 1
  * below either; 2 when the corpus is missing or empty, a labels file does
  * not validate against its text, or the arguments are wrong; 3 when the
- * held-out set is asked for without {@link FINAL_HELDOUT_FLAG}.
+ * held-out set is asked for without {@link FINAL_HELDOUT_FLAG}. Since
+ * `P3-T41` the detector is tuned against the first set, so 0 on the first set
+ * is a regression pass, not validation: `IMRAD_DETECTOR_VALIDATED` derives
+ * only from the held-out record (`detectorValidatedBy` in
+ * `src/pipeline/summarize/imrad.ts`).
  *
  * **Callers.** Run by hand (`npx tsx scripts/measure-imrad.ts`), and imported
  * by `test/unit/pipeline/imradAccuracy.test.ts`, the regression test, and by
@@ -567,7 +571,13 @@ function recordSentence(
   record: ImradMeasurement,
 ): string {
   const check = checkAgainstRecord(measurement, record);
-  return `Recorded value (IMRAD_MEASUREMENT, ${record.measuredOn}): ${String(record.correctChars)} of ${String(record.countedChars)} characters over ${String(record.papers)} papers, ${percent(ratio(record.correctChars, record.countedChars))}. ${check.ok ? "This run is not below it." : `This run fails the regression check: ${check.problems.join("; ")}.`}`;
+  // `P3-T41`: the detector is tuned against the first set, so its figure is a
+  // regression pin and validates nothing (`detectorValidatedBy`).
+  const tuned =
+    record.set === "first"
+      ? " The detector is tuned against this set, so this figure overstates real accuracy and does not validate it: IMRAD_DETECTOR_VALIDATED derives only from the held-out record."
+      : "";
+  return `Recorded value (IMRAD_MEASUREMENT, ${record.measuredOn}): ${String(record.correctChars)} of ${String(record.countedChars)} characters over ${String(record.papers)} papers, ${percent(ratio(record.correctChars, record.countedChars))}. ${check.ok ? "This run is not below it." : `This run fails the regression check: ${check.problems.join("; ")}.`}${tuned}`;
 }
 
 // ---------------------------------------------------------------------------
