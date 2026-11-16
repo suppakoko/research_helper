@@ -41,6 +41,13 @@ href="chrome://zotero-platform/content/zotero.css"?>
     <html:div style="max-width: 40em">
       <html:div id="rh-cost-header" />
       <html:div id="rh-cost-notices" role="alert" />
+      <!-- P6-T17 (plan/00 §6 item 384): the audio run's once-asked tier
+           question, under the notices. Hidden unless the model carries
+           `tierQuestion`; its radios are added by costConfirm.js. -->
+      <html:div id="rh-cost-tier" hidden="hidden">
+        <html:p id="rh-cost-tier-prompt" />
+        <radiogroup id="rh-cost-tier-choices" />
+      </html:div>
       <html:div id="rh-cost-plan" />
       <html:div id="rh-cost-raise" />
       <checkbox id="rh-cost-downgrade" hidden="true" />

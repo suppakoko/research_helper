@@ -1340,6 +1340,58 @@ describe("P6-T15 — the script step: the script call, then the TTS part as prov
     });
   });
 
+  it("the window script sends the chosen tier, else the pre-selected one, and nothing without a question (P6-T17)", () => {
+    const code = readFileSync(
+      resolve(process.cwd(), "addon/content/costConfirm.js"),
+      "utf8",
+    );
+    const factory = new Function(`${code}\nreturn RHCostDialog;`) as () => {
+      logic: {
+        tierAnswerFor(model: unknown, selected: unknown): string | undefined;
+      };
+    };
+    const { logic } = factory();
+    const asked = buildAudioDialogModel(
+      {
+        step: "script",
+        estimate: SCRIPT_STEP,
+        targetMinutes: 10,
+        ...audioCommon({ askTierQuestion: true }),
+      },
+      LOCALE,
+    );
+    expect(logic.tierAnswerFor(asked, "paid")).toBe("paid");
+    expect(logic.tierAnswerFor(asked, "free")).toBe("free");
+    expect(logic.tierAnswerFor(asked, "unknown")).toBe("unknown");
+    // Nothing picked, or a value the question does not offer: the pre-selected.
+    expect(logic.tierAnswerFor(asked, undefined)).toBe("unknown");
+    expect(logic.tierAnswerFor(asked, "")).toBe("unknown");
+    expect(logic.tierAnswerFor(asked, "gold")).toBe("unknown");
+    // What the window sends is what decideCostDialog takes.
+    expect(
+      decideCostDialog(asked, {
+        accepted: true,
+        tierAnswer: logic.tierAnswerFor(asked, "free") as "free",
+      }),
+    ).toMatchObject({ kind: "run", tierAnswer: "free" });
+    // No question: no answer, whatever the radio group holds.
+    const plain = buildAudioDialogModel(
+      {
+        step: "script",
+        estimate: SCRIPT_STEP,
+        targetMinutes: 10,
+        ...audioCommon(),
+      },
+      LOCALE,
+    );
+    expect(logic.tierAnswerFor(plain, "paid")).toBeUndefined();
+    expect(
+      logic.tierAnswerFor(asPreflight(preflight()), "paid"),
+    ).toBeUndefined();
+    expect(logic.tierAnswerFor(undefined, "paid")).toBeUndefined();
+    expect(code).not.toMatch(/Zotero\.Prefs|Zotero\.HTTP|fetch\(/);
+  });
+
   it("no other model carries a tier question, and no answer reports one", () => {
     const model = asPreflight(preflight());
     expect(model).not.toHaveProperty("tierQuestion");

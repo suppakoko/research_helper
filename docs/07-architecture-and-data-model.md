@@ -2109,14 +2109,21 @@ export type { AudioChunk } from "../model/audio";
 > the derivation, §17.3 the PATCH bump). Point (1) already prices a synthesis call's output at its
 > prompt's ceiling through the registry (`resolveMaxTokens`), so `planSynthesis` changes nothing in
 > code: each report reservation, and each rewrite reservation of point (5), now carries 23 000 or
-> 26 000 output tokens. **The 42-paper figures of item 309(b)'s note above, at the example's  / 5
-> and the same synthetic overheads:** with K = 5 passed, still 53 calls (11 synthesis), about **.57**
-> — .60 of summaries and **.97** of synthesis — where that note says .06 and .46; with K
-> unset, 56 calls and about **.14** (.54 of synthesis), where it says .63. The difference is the
+> 26 000 output tokens. **The 42-paper figures of item 309(b)'s note above, at the example's $3 / $15
+> and the same synthetic overheads:** with K = 5 passed, still 53 calls (11 synthesis), about **$5.57**
+> — $2.60 of summaries and **$2.97** of synthesis — where that note says $5.06 and $2.46; with K
+> unset, 56 calls and about **$6.14** ($3.54 of synthesis), where it says $5.63. The difference is the
 > two English report reservations, the report and its possible rewrite, each 17 000 output tokens
-> more at 5 per million: /usr/bin/bash.51. A run that also writes the Korean report reserves 2 × 26 000 more for
+> more at $15 per million: $0.51. A run that also writes the Korean report reserves 2 × 26 000 more for
 > it. The figures are an over-quote by design, as before: the call is billed for what it writes, not
 > for its ceiling, and `withBudget` settles each reservation at the usage the answer reports.
+>
+> *Corrected 2026-11-17 (Part 0 of `plan/reports/P6-batch4.md`): a shell
+> expansion in commit `8dbad15` had eaten every dollar amount in the paragraph above (it read "at the
+> example's  / 5", "about **.57**", "5 per million: /usr/bin/bash.51" and so on). The figures are restored
+> from item 311's own report, `plan/reports/followup-311.md` ("docs/07 §4.5 (item 311(c))": $3 / $15,
+> $5.57, $2.60, $2.97, $5.06 / $2.46, $6.14, $3.54, $5.63, $15 per million, $0.51), which agrees with item
+> 309(b)'s note above on $3 / $15, $5.06, $2.60, $2.46 and $5.63. No figure was recomputed.*
 
 > **`PipelineContext.config`. Decided 2026-10-23 (owner, plan/00 §6 item 272(a)).** The member's
 > type is `ConfigReader`, declared in `src/pipeline/types.ts`: a **read-only view of
@@ -6900,6 +6907,57 @@ Notes:
   chunk cache that would allow a resume is backlog (`plan/09` §4). A job the app quit during ends `Interrupted` under
   the shared convention above (§12's preamble) and is not resumed.
 - **Progress is one line, "chunk n of N"**, during `Synthesizing` (§7.7's choice for `audioReport`).
+
+> **DECIDED 2026-11-17 (coordinator, under `plan/00` §6 item 313; `plan/09` `P6-T16`): how the job is built.** The
+> diagram above stands; these are the choices it left open, recorded before the code
+> (`src/pipeline/audioReport/audioReportPipeline.ts`, `createAudioReportPipeline`, constructed in `buildPipelineSet`).
+>
+> 1. **Two halves, as the report job has.** `prepare(input, ctx, surface)` runs in a context with no record and makes
+>    no TTS request. `execute(prepared, ctx, surface)` runs in the record's context. The report window's session
+>    (`plan/09` `P6-T17`) enqueues the record between the two, with `audioJobInput(prepared, now)`, the input with its
+>    egress log (`withEgressLog`, §4.5's note of 2026-11-17 on `audio`). Every script and TTS request goes through a
+>    `beforeSend` hook that refuses to send when the record carries no audio egress log, so no request leaves without
+>    one.
+> 2. **`prepare`'s order.** (a) `audio.enabled` off → refused `disabled`; (b) no stored report → `no-report`; (c) a
+>    read-only library or a missing collection → `read-only` / `no-collection` (`checkAudioDestination` with mode
+>    `imported`); (d) the tier (`assertAudioAllowed`) → `tier-refused`, which the window shows as
+>    `research-helper-audio-tier-refused`; (e) no Gemini key (`GEMINI_SECRET_ID`) → `no-key`. Only then are the
+>    language, the voice and the TTS model resolved. A refusal is a value (`status: "refused"`), not a throw, and
+>    nothing is sent before it. When a script call is due, the script model (`strong`) is also put through
+>    `PrivacyPolicy.assertModelAllowed` here, before the first confirmation, as the report run does before its first
+>    synthesis call.
+> 3. **The model list.** `TTSProvider.resolveModel` is called in `prepare` (`plan/09` `P6-T16` step 1). With
+>    `tts.model` empty it reads Gemini's model list: one request carrying the key and no content, to the host the
+>    notice then names. It is made before the confirmation. The owner question is `plan/00` §6 item 385.
+> 4. **The size checks use the estimate with headroom** (`withHeadroom`, `plan/reports/P6-T10.md`): the
+>    destination check before each confirmation is run with `chooseAttachmentMode(withHeadroom(estimatedBytes))`, so
+>    a group-library report near 10 MiB is refused before synthesis (item 383, Option A), and a folder is asked for
+>    before money is spent. The dialog's import-or-link line still shows the unpadded figure's mode.
+> 5. **The companion record of a `both` run.** Nothing stored links the two records but the shared
+>    `generatedAtEpochMs` (`plan/reports/P6-T08.md`). `ReportStore.companionOf(report)` returns the other-language
+>    record of the same library, collection and instant, or `undefined`. It is looked up only when the script's
+>    language is not the report's, and handed to `writeScript`, whose `chooseScriptSource` decides. **The script and
+>    the attachment key are stored on the job's own record** (`audioScripts[language]`, `audioAttachmentKeys[language]`,
+>    both partial records), never on the companion; the stored-script check reads the job's record only.
+> 6. **`ReportStore.latestForCollection(libraryID, collectionKey)`** is the newest record by `generated_at`; the two
+>    records of a `both` run tie, and the tie goes to the smaller `id`. It is the menu entry's (`P6-T17`).
+> 7. **The key fingerprint and the first use.** The key is read once in `prepare`, from an injected source, for
+>    `audioKeyFingerprint(GEMINI_SECRET_ID, key)` only; it is never stored or logged. The known fingerprints are
+>    `knownAudioKeyFingerprints` over every stored `audioReport` job; the second confirmation therefore finds the
+>    job's own record and does not repeat the first-use notice.
+> 8. **The tier answer** a confirmed dialog carries is written by `recordTierAnswer` at once; the second confirmation
+>    reads the tier again, so it never asks twice.
+> 9. **A budget stop during synthesis** pauses the record (`budget-stop`) and asks the surface, as the report job
+>    does; "continue" raises the ceiling to `suggestedLimitUsd` over the pending chunks' reservations and re-sends
+>    the pending chunk with the finished ones reused. **Restart.** `resumable` is `false`, so `JobQueue.recover()`
+>    marks a job the app quit during `failed` with `NOT_RESUMABLE_CODE`. `plan/09` `P6-T16`'s decision of 2026-11-16
+>    says "marked cancelled"; the stored script stays either way, which is what that decision protects. Recorded as
+>    a finding in `plan/reports/P6-T16.md`, not changed here.
+> 10. **The output** carries what the window's offers need: the outcome, the refusal reason, the delivered
+>     `AudioRunOutcome`, `classifyAudioFailure`'s answer, the script text (validated or rejected) and, when only the
+>     Zotero write failed, the assembled chunks for FR-40's "Save as…". The attachment title is the surface's
+>     `title`, `defaultAudioTitle` when it gives none (English until `P6-T17`). The TTS client is the one
+>     `registerProviders` builds, handed to the pipeline's deps; `PipelineContext.tts` stays `undefined`.
 
 ---
 

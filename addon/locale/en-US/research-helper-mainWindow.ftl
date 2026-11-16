@@ -113,6 +113,12 @@ research-helper-menu-collection-recommend =
 research-helper-menu-collection-report =
     .label = Generate Research Trends Report…
 
+# P6-T17 (docs/08 §6.4's note of 2026-11-17): opens the same report window,
+# whose audio section makes the audio. Not in the menu while the hidden
+# `audio.enabled` preference is off. Korean pending review (G-41).
+research-helper-menu-collection-audio-report =
+    .label = Generate Audio Report…
+
 # FR-13's entry (P5-T15), verbatim from `docs/08` §2.4 and §10.2. It sits on the
 # item context menu, and only while the hidden `related.enabled` preference is
 # on. It opens the search window, whose strings are in
@@ -881,6 +887,14 @@ research-helper-cost-audio-tier-free =
 research-helper-cost-audio-tier-unknown =
     .label = Don't know
 research-helper-audio-tier-refused = Strict privacy mode makes no audio with this Google API key, because it may be on the free tier, where Google may use what you send to improve its products. To make audio, mark the key as paid in Research Helper's settings if its Google Cloud project is billing-linked, or choose a less strict privacy mode.
+# P6-T17: the audio attachment's title (FR-40), in Zotero's interface language.
+# `$language` is a token, never displayed; `$date` is the local date as
+# yyyy-mm-dd. Korean pending review (G-41).
+research-helper-audio-attachment-title =
+    { $language ->
+        [ko] Audio report (Korean), { $date }
+       *[en] Audio report (English), { $date }
+    }
 
 
 ## The LLM Test, the model suggestions and the user price table (P3-T14;

@@ -39,6 +39,7 @@
 import type Addon from "../../src/addon";
 import { config } from "../../package.json";
 import {
+  L10N_MENU_COLLECTION_AUDIO_REPORT,
   L10N_MENU_COLLECTION_REMOVE_NOTES,
   L10N_MENU_COLLECTION_REPORT,
   L10N_MENU_COLLECTION_RERUN,
@@ -935,6 +936,85 @@ describe("menu entry points and the window opener (P1-T19)", function () {
     );
   });
 
+  it("puts Generate Audio Report… right after the report entry only while audio.enabled is on (P6-T17)", async function () {
+    const rec = recorder();
+    const calls: { host: unknown; collectionID: number }[] = [];
+    let enabled = true;
+    const commands: SearchMenuCommands = {
+      ...rec.commands,
+      openReportWindow: () => undefined,
+      audioEnabled: () => enabled,
+      openAudioReportWindow: (host, collectionID) => {
+        calls.push({ host, collectionID });
+        return undefined;
+      },
+    };
+    const ids = (cmds: SearchMenuCommands) =>
+      (collectionMenuOptions(cmds).menus[0]?.menus ?? []).map((entry) =>
+        entry.menuType === "menuitem" ? entry.l10nID : entry.menuType,
+      );
+    assert.deepEqual(
+      ids(commands),
+      [
+        L10N_MENU_COLLECTION_REPORT,
+        L10N_MENU_COLLECTION_AUDIO_REPORT,
+        "separator",
+        L10N_MENU_COLLECTION_SEARCH_IMPORT,
+        L10N_MENU_COLLECTION_RERUN,
+      ],
+      "docs/08 §6.4's note of 2026-11-17, point 10: right after the report entry",
+    );
+    const entries = collectionMenuOptions(commands).menus[0]?.menus ?? [];
+    const audio = entries[1];
+    if (!audio?.onCommand) assert.fail("the audio entry has no onCommand");
+    const win = stubWindow([4245]);
+    audio.onCommand(new Event("command"), libraryContext(win, {}));
+    assert.strictEqual(rec.errors.length, 0, rec.errors.join("; "));
+    assert.deepEqual(calls, [{ host: win, collectionID: 4245 }]);
+    // Two selected collections: refused through onError, nothing opened.
+    audio.onCommand(
+      new Event("command"),
+      libraryContext(stubWindow([1, 2]), {}),
+    );
+    assert.strictEqual(calls.length, 1, "nothing opens for two collections");
+    assert.strictEqual(rec.errors.length, 1, "one reported refusal");
+
+    // onShowing reads the preference again: one collection and on -> shown.
+    const shown = (selection: number[]) => {
+      const probe: VisibilityProbe = {};
+      audio.onShowing?.(
+        new Event("popupshowing"),
+        libraryContext(stubWindow(selection), probe),
+      );
+      return probe.visible;
+    };
+    assert.strictEqual(shown([1]), true);
+    assert.strictEqual(shown([1, 2]), false);
+    enabled = false;
+    assert.strictEqual(shown([1]), false, "hidden once the preference is off");
+
+    // Built while off, or with no opener bound: the entry is absent.
+    assert.isFalse(
+      ids(commands).includes(L10N_MENU_COLLECTION_AUDIO_REPORT),
+      "absent while audio.enabled is off",
+    );
+    enabled = true;
+    const { openAudioReportWindow: _opener, ...noOpener } = commands;
+    assert.isFalse(
+      ids(noOpener).includes(L10N_MENU_COLLECTION_AUDIO_REPORT),
+      "absent with no opener",
+    );
+    const { audioEnabled: _reader, ...noReader } = commands;
+    assert.isFalse(
+      ids(noReader).includes(L10N_MENU_COLLECTION_AUDIO_REPORT),
+      "absent with no preference reader",
+    );
+    assert.isTrue(
+      ids(commands).includes(L10N_MENU_COLLECTION_AUDIO_REPORT),
+      "present again once on",
+    );
+  });
+
   it("asks openDialog for a modeless report window per collection, passing the session (P4-T19)", async function () {
     const win = stubWindow([]);
     const session = {
@@ -1073,8 +1153,14 @@ describe("menu entry points and the window opener (P1-T19)", function () {
             ?.getAttribute("buttonlabelcancel") ?? "",
         // Item 334(k): "Report shown" appears only for two reports and chooses
         // no model, so it is left out by name; any other menulist still counts.
-        menulists: doc.querySelectorAll("menulist:not(#rh-report-shown)")
-          .length,
+        // P6-T17: the audio section's language and voice choose no model
+        // either, and the section is hidden while audio.enabled is off.
+        menulists: [
+          ...doc.querySelectorAll("menulist:not(#rh-report-shown)"),
+        ].filter((el) => el.closest("#rh-audio") === null).length,
+        audioHidden:
+          doc.getElementById("rh-audio")?.hasAttribute("hidden") === true,
+        audioMenulists: doc.querySelectorAll("#rh-audio menulist").length,
         languageItems: [
           ...doc.querySelectorAll("#rh-report-language menuitem"),
         ].map((el) => el.getAttribute("value")),
@@ -1105,6 +1191,15 @@ describe("menu entry points and the window opener (P1-T19)", function () {
         shown.menulists,
         1,
         "one selector — the language; no model dropdown (item 286)",
+      );
+      assert.strictEqual(
+        shown.audioMenulists,
+        2,
+        "P6-T17: the audio section's language and voice",
+      );
+      assert.isTrue(
+        shown.audioHidden,
+        "P6-T17: the audio section is hidden while audio.enabled is off",
       );
       assert.strictEqual(
         doc.querySelectorAll("radiogroup, radio").length,

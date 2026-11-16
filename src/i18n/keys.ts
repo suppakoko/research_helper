@@ -178,6 +178,9 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   // FR-25's "Generate Research Trends Report…" (P4-T19), docs/08 §2.4 and
   // §10.2. The window it opens has its own bundle: REPORT_WINDOW_MESSAGE_IDS.
   "research-helper-menu-collection-report",
+  // P6-T17: "Generate Audio Report…" (docs/08 §6.4's note of 2026-11-17), behind
+  // the hidden `audio.enabled`. It opens the report window above.
+  "research-helper-menu-collection-audio-report",
   // FR-13's "Find Related Papers…" (P5-T15), docs/08 §2.4 and §10.2. The window
   // it opens is SEARCH_DIALOG_MESSAGE_IDS's.
   "research-helper-menu-item-find-related",
@@ -409,6 +412,9 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   "research-helper-cost-audio-tier-free",
   "research-helper-cost-audio-tier-unknown",
   "research-helper-audio-tier-refused",
+  // P6-T17: the audio attachment's title (FR-40), formatted by the report
+  // window's host. See L10N_AUDIO_ATTACHMENT_TITLE.
+  "research-helper-audio-attachment-title",
   // P3-T16: the cost confirmation dialog (docs/06 §5.4, docs/10 FR-24,
   // docs/09 §3.6) and the preference pane's Usage section. See
   // COST_DIALOG_L10N and USAGE_L10N in src/ui/dialogs/costConfirmDialog.ts.
@@ -775,6 +781,22 @@ export const L10N_EGRESS_AUDIO_NOTICE = "research-helper-egress-audio-notice";
 export const L10N_AUDIO_TIER_REFUSED = "research-helper-audio-tier-refused";
 
 /**
+ * FR-40's attachment title in Zotero's interface language (`P6-T17`; `docs/08`
+ * §6.4's note of 2026-11-17, point 9). Formatted by the report window's host
+ * (`createReportWindowSession`) and passed as `AudioReportSurface.title`.
+ */
+export const L10N_AUDIO_ATTACHMENT_TITLE =
+  "research-helper-audio-attachment-title";
+
+/**
+ * Collection context menu ▸ Research Helper ▸ Generate Audio Report… (`P6-T17`),
+ * behind the hidden `audio.enabled`. It opens the report window, whose audio
+ * section runs the job. Korean pending (`G-41`).
+ */
+export const L10N_MENU_COLLECTION_AUDIO_REPORT =
+  "research-helper-menu-collection-audio-report";
+
+/**
  * The warning when the model's answer could not be used, or not one line fits
  * the model, and a profile stays heuristic (`P5-T22`; `docs/12` §15's note,
  * items 4 and 6). Set as `warningId` by
@@ -1139,6 +1161,21 @@ export const REPORT_WINDOW_MESSAGE_IDS = [
   "research-helper-report-paused-job",
   // P4-T21: the selector of a two-report run (docs/08 §6.3's note of 2026-11-02).
   "research-helper-report-shown-label",
+  // P6-T17: the audio section (docs/08 §6.4's note of 2026-11-17). See
+  // AUDIO_SECTION_L10N in src/ui/viewModels/reportViewModel.ts.
+  "research-helper-report-audio-heading",
+  "research-helper-report-audio-language-label",
+  "research-helper-report-audio-voice-label",
+  "research-helper-report-audio-none",
+  "research-helper-report-audio-source",
+  "research-helper-report-audio-generate",
+  "research-helper-report-audio-cancel",
+  "research-helper-report-audio-stage",
+  "research-helper-report-audio-outcome",
+  "research-helper-report-audio-refused",
+  "research-helper-report-audio-save-script",
+  "research-helper-report-audio-save-audio",
+  "research-helper-report-audio-saved",
 ] as const satisfies readonly FluentMessageId[];
 
 export type ReportWindowMessageId = (typeof REPORT_WINDOW_MESSAGE_IDS)[number];
@@ -1421,6 +1458,25 @@ export const KO_PENDING_REVIEW = [
   "research-helper-cost-audio-tier-free",
   "research-helper-cost-audio-tier-unknown",
   "research-helper-audio-tier-refused",
+  // --- P6-T17's menu entry and attachment title (mainWindow) and the report
+  // window's audio section (reportWindow) --- commented `ko-KR` stubs with the
+  // English source and the coordinator's drafts (2026-11-17, not adopted); the
+  // owner reviews them (`G-41`).
+  "research-helper-menu-collection-audio-report",
+  "research-helper-audio-attachment-title",
+  "research-helper-report-audio-heading",
+  "research-helper-report-audio-language-label",
+  "research-helper-report-audio-voice-label",
+  "research-helper-report-audio-none",
+  "research-helper-report-audio-source",
+  "research-helper-report-audio-generate",
+  "research-helper-report-audio-cancel",
+  "research-helper-report-audio-stage",
+  "research-helper-report-audio-outcome",
+  "research-helper-report-audio-refused",
+  "research-helper-report-audio-save-script",
+  "research-helper-report-audio-save-audio",
+  "research-helper-report-audio-saved",
 ] as const satisfies readonly FluentMessageId[];
 
 /**
@@ -2149,6 +2205,18 @@ export interface FluentMessageArgsMap {
   };
   "research-helper-cost-audio-duration": { duration: string; size: string };
   "research-helper-cost-audio-attach": { mode: string };
+  // P6-T17: the attachment title (mainWindow) and the report window's audio
+  // section. Every `string` here is a token, never a path.
+  "research-helper-audio-attachment-title": { language: string; date: string };
+  "research-helper-report-audio-source": { script: string; report: string };
+  "research-helper-report-audio-stage": {
+    stage: string;
+    done: number;
+    total: number;
+  };
+  "research-helper-report-audio-outcome": { outcome: string };
+  "research-helper-report-audio-refused": { reason: string };
+  "research-helper-report-audio-saved": { kind: string; outcome: string };
   // The preference pane (P1-T44). `$count` is a plural selector; `$time` is a
   // clock time the pane script has already formatted with
   // `Intl.DateTimeFormat` over `Zotero.locale` (docs/08 §10.3). **No message
@@ -2498,6 +2566,14 @@ export const ARGUMENT_MESSAGE_IDS = [
   "research-helper-cost-audio-length-warning",
   "research-helper-cost-audio-duration",
   "research-helper-cost-audio-attach",
+  // mainWindow — the audio attachment's title (1, P6-T17)
+  "research-helper-audio-attachment-title",
+  // reportWindow — the audio section (5, P6-T17)
+  "research-helper-report-audio-source",
+  "research-helper-report-audio-stage",
+  "research-helper-report-audio-outcome",
+  "research-helper-report-audio-refused",
+  "research-helper-report-audio-saved",
   // mainWindow — the item menu entry's disabled reason (P5-T15)
   "research-helper-menu-item-find-related",
 

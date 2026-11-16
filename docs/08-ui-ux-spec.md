@@ -2042,6 +2042,54 @@ const base = `${safeBaseName(collection.name)} — trends ${new Date().toISOStri
 │     Long reports are split into segments and concatenated.       [ Cancel ]   │
 ```
 
+> **DECIDED 2026-11-17 (coordinator, under `plan/00` §6 item 313; `plan/09` `P6-T17`): the audio section and its menu
+> entry, as built.** The Stage 4 sketch's "☐ Audio (spoken report)" row and the progress sketch above become one
+> **section under the delivery buttons**, drawn from `buildAudioSectionModel` (`src/ui/viewModels/reportViewModel.ts`)
+> and driven by the report window's session (`createReportWindowSession`, `src/bootstrap/registerUI.ts`):
+>
+> ```
+> │  ── Audio (spoken report) ────────────────────────────────────────────────── │
+> │  Audio language [ 한국어 ▾ ]   Voice [ Charon ▾ ]                              │
+> │  Korean script written from the English report                               │
+> │  [ Generate audio ]                                                           │
+> │  Generating audio… chunk 4 of 9                              [ Cancel audio ] │
+> │  [ Save Script as Text… ]  [ Save Audio As… ]          (only when offered)    │
+> ```
+>
+> 1. **Hidden while `audio.enabled` is off** (`plan/08` §0.2 item 25): the section, its heading and the menu entry
+>    are absent, not disabled.
+> 2. **Which report.** The report the window's own run saved (the one shown, in a two-report run); otherwise the
+>    collection's newest stored report, `ReportStore.latestForCollection`. Both menu entries open the same window, so
+>    a window opened from either starts on the newest stored report. With none stored the section says so in one
+>    line and offers nothing.
+> 3. **Audio language** offers English and 한국어 (`tts.language`'s values without `auto`), starts on
+>    `resolveAudioLanguage(tts.language, report)` and is a per-run choice, never written back. **Voice** lists
+>    `TTSProvider.listVoices` by display name (a voice's name is not translated, §10.3), starts on `tts.voice` (the
+>    first voice when the stored name is not listed) and writes a change back to `tts.voice` at once (`plan/09` §0.4
+>    line 11).
+> 4. **The source line** shows when the chosen language is not the report's and the run left no record in that
+>    language: "Korean script written from the English report", or the reverse (`P6-T08`).
+> 5. **Generate audio** runs the `audioReport` job: the checks, then the cost dialog's two moments (`P6-T15`; the
+>    tier question as a radio group in that dialog, "Don't know" pre-selected), then the job. A refusal before any
+>    call is one line in the section, by reason; the strict-mode refusal is `research-helper-audio-tier-refused`. The
+>    report's Generate and Generate audio never run at once: each is disabled while the other runs.
+> 6. **Progress is one line**, by stage: checking, writing the spoken script, waiting for the confirmation,
+>    "Generating audio… chunk n of N", attaching, paused. **Cancel audio** stands next to it; a cancel discards the
+>    audio and keeps any script.
+> 7. **The outcome** is one line: attached, nothing generated, cancelled, interrupted, failed (the failure's own
+>    message from the main-window bundle, formatted by the host) or refused (by reason).
+> 8. **Save Script as Text…** shows when the run offers the script (FR-43), **Save Audio As…** when only the Zotero
+>    write failed (FR-40). Each opens a save dialog; the path is handed to the session once and never kept or logged
+>    (`09-…` §2.2). A larger-than-10-MiB file asks for its folder through a folder dialog in the window, chosen once
+>    and kept in `tts.linkedFileDir` by `P6-T13`; that path is never logged either.
+> 9. **The attachment's title** is localised: `research-helper-audio-attachment-title`, in Zotero's interface
+>    language, naming the audio's language and the date.
+> 10. **The menu entry** "Generate Audio Report…" (`research-helper-menu-collection-audio-report`) follows
+>     "Generate Research Trends Report…" and opens, or raises, the collection's report window. It starts nothing.
+>
+> Not built here: the pane's audio controls (§7.3's note of 2026-11-16; `W7-4`) and a player (the Read Aloud note
+> below still stands).
+
 > **Unverified:** whether Zotero 10's built-in **Read Aloud** (introduced in Zotero 9, improved in Zotero 10) exposes any plugin-facing API that we could use to play a generated report, or to register a voice. A [forum feature request asking for Read Aloud on plugin-generated text](https://forums.zotero.org/discussion/131551/read-aloud-for-plugin-generated-text) (2026-05) received no staff answer, and no `Zotero.ReadAloud`-style API appears in the Zotero 10 developer changelog. **Plan for Gemini TTS producing an audio file that becomes a normal Zotero attachment**, which the user plays with their OS player — do not design around a Read Aloud integration that may not exist.
 
 ---

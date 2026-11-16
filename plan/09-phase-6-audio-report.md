@@ -78,12 +78,14 @@ documents, `plan/reports/` and the tree:
 retired its feasibility half; what is left is Korean quality at report length and the FR-43 path on a
 real refusal.
 
-**Effort.** **20.00 developer-days over 19 cards** (§1), so the band these cards imply is
-**20.00–28 d** (20.00 × 1.4 = 28.0 → 28). Against the scaled 15–21 d `docs/11` published before this
-file, the low end is **+33 %** (20.00 ÷ 15 = 1.33) and 5 % below the scaled top (20.00 ÷ 21 = 0.95) —
+**Effort.** **20.25 developer-days over 19 cards** (§1), so the band these cards imply is
+**20.25–28 d** (20.25 × 1.4 = 28.35 → 28). Against the scaled 15–21 d `docs/11` published before this
+file, the low end is **+35 %** (20.25 ÷ 15 = 1.35) and 4 % below the scaled top (20.25 ÷ 21 = 0.96) —
 above the ~30 % `plan/README.md` §7 calls a signal to re-estimate the phase in `docs/11`, which was
 done. **Propagated 2026-11-16** to `docs/11` §1–§2, `plan/00` §1 and `plan/05` §3. §3 says where the
-days went and where the sum is still likely low.
+days went and where the sum is still likely low. *Updated 2026-11-17 (coordinator, `plan/00` §6 item
+384): `P6-T17` re-estimated 1.75 → 2.0 d for the cost dialog's tier question; this read 20.00 d,
+20.00–28 d, +33 % and 5 %. Propagated the same day to `plan/README.md` §7's five sites.*
 
 ### Phase definition of done
 
@@ -253,17 +255,18 @@ overturned by the owner.
 | `P6-T14` | Failure paths: specific errors, script as text, Save as | 1.0 | none |
 | `P6-T15` | Audio confirmation, tier question and both-host disclosure | 1.5 | none |
 | `P6-T16` | Audio pipeline: stages, job, wiring | 1.75 | none |
-| `P6-T17` | Report window audio section and menu entry | 1.75 | none |
+| `P6-T17` | Report window audio section and menu entry | 2.0 | none |
 | `P6-T18` | Prove the offline paths end to end on recorded answers | 0.75 | none |
 | `P6-T19` | Phase-6 acceptance run against the definition of done | 1.0 | **Yes** |
-| | **Total** | **20.00** | 2 gates |
+| | **Total** | **20.25** | 2 gates |
 
 **Entry points** (no `Depends on`): `P6-T01`, `P6-T02`, `P6-T03`, `P6-T06`. They are documents,
 preference rows, the recorder and two prompt files; none touches a file another entry point holds,
 except that `P6-T01` and `P6-T02` both edit `docs/07` (different sections — exact-string edits).
 
 **Critical path inside the phase:** `P6-T01` → `P6-T05` → `P6-T11` → `P6-T12` → `P6-T13` → `P6-T14` →
-`P6-T16` → `P6-T17` → `P6-T18` → `P6-T19`, **12.0 d**, computed by script over the **Depends on** rows.
+`P6-T16` → `P6-T17` → `P6-T18` → `P6-T19`, **12.25 d**, computed by script over the **Depends on** rows
+(*updated 2026-11-17, item 384: `P6-T17` at 2.0 d; it read 12.0 d*).
 The script chain (`P6-T06` → `P6-T07` → `P6-T08`, 3.25 d from the start) and the estimate and disclosure
 chain (`P6-T09` → `P6-T10` → `P6-T15`, ending at 5.25 d) finish well before `P6-T14` (6.75 d), so a second
 agent can carry them in parallel. `P6-T04` needs the owner but blocks only `P6-T18`; it should run early,
@@ -1422,7 +1425,7 @@ unchanged, since the warn-and-confirm path is the one full mode already needed.
 | Field | Value |
 |---|---|
 | **ID** | `P6-T16` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T16.md`. |
 | **Depends on** | `P6-T01`, `P6-T02`, `P6-T05`, `P6-T07`, `P6-T08`, `P6-T10`, `P6-T11`, `P6-T12`, `P6-T13`, `P6-T14`, `P6-T15` |
 | **Blocks** | `P6-T17` |
 | **Retires** | none |
@@ -1498,6 +1501,8 @@ npm run typecheck && npm run lint:check && npm run test:unit -- audioReportPipel
 **Notes.** Needs: `P4-T18` (the pattern), `P5`'s edits to the same bootstrap files — grep names before
 editing. Caller: `createReportWindowSession` (`P6-T17`).
 
+**Findings, 2026-11-17 — built, awaiting the owner's review; all four criteria pass; full report at `plan/reports/P6-T16.md`.** `src/pipeline/audioReport/audioReportPipeline.ts` holds `createAudioReportPipeline` with the report job's two halves: `prepare` refuses, in order, `disabled`, `no-report`, a read-only library or a missing collection, a refused tier and a missing key, all before any call, then prices the script step or the stored script's plan; `execute` writes and stores the script, asks the second time, synthesizes with "chunk n of N", delivers and stores the attachment key. `audioJobInput` gives the record its egress log, and a `beforeSend` hook refuses every request whose record has none. `ReportStore` gains `latestForCollection` and `companionOf` (`src/zotero/db.ts`; the database wrapper in `src/bootstrap/pluginDatabase.ts` also had to forward both, a file outside the card's Files row). `buildPipelineSet` constructs the pipeline with `createZoteroAudioLibrary`; `container.ts` passes `providers.tts`, the key reader over `GEMINI_SECRET_ID` and the price overrides; `"tts.gemini"` carries its comment. The choices are `docs/07` §12.6's note of 2026-11-17. 42 tests in `audioReportPipeline.test.ts` (the 42nd, added with `P6-T17`, covers `voices()`, the window's voice list, which sends nothing); 37 of 37 mutants killed, three of them only after four tests were added. **Findings:** (1) after a restart `JobQueue.recover()` marks the job `failed` with `NOT_RESUMABLE_CODE`, where this card's decision of 2026-11-16 says "marked cancelled"; the stored script stays either way, so nothing the decision protects is lost; not a card. (2) With `tts.model` empty, `prepare` reads Gemini's model list (a request carrying the key and no content) before the confirmation; recorded as `plan/00` §6 item 385 with a draft (not adopted). (3) `PipelineContext.tts` stays `undefined`; the TTS client reaches the pipeline through its construction deps.
+
 ---
 
 ### P6-T17 — Report window audio section and menu entry
@@ -1505,12 +1510,12 @@ editing. Caller: `createReportWindowSession` (`P6-T17`).
 | Field | Value |
 |---|---|
 | **ID** | `P6-T17` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T17.md`. |
 | **Depends on** | `P6-T02`, `P6-T16` |
 | **Blocks** | `P6-T18` |
 | **Retires** | none |
 | **Implements** | `FR-37`, `FR-38`, part of `FR-42`, part of `FR-43` |
-| **Estimate** | 1.75 d |
+| **Estimate** | 2.0 d |
 | **Human gate** | none |
 
 **Goal.** The report window has an audio section — language, voice, the source line, Generate, a
@@ -1535,6 +1540,8 @@ which opens the window on the collection's newest stored report; both hidden whi
 - modify `src/ui/menus/registerMenus.ts`
 - modify `addon/locale/{en-US,ko-KR}/research-helper-reportWindow.ftl` and `research-helper-mainWindow.ftl`
 - modify `test/unit/ui/reportViewModel.test.ts`, `test/unit/i18n/keys.test.ts`, `test/integration/menus.spec.ts` (the collection entry)
+- modify `addon/content/costConfirm.xhtml`, `addon/content/costConfirm.js` (the tier question's radio group;
+  `plan/00` §6 item 384, added 2026-11-17)
 
 **Do.**
 1. Documents first: redraw §6.4's audio row as a section under the preview — Language (English / 한국어,
@@ -1545,6 +1552,14 @@ which opens the window on the collection's newest stored report; both hidden whi
    `ReportStore.latestForCollection`; with no stored report the section says so and offers nothing.
 3. The section and the menu entry are hidden while `audio.enabled` is off (`plan/08` §0.2 item 25).
 4. Every string through Fluent in both bundles; the Korean text goes to `G-41` (§0.4 line 30).
+5. The cost dialog's window renders `PreflightDialogModel.tierQuestion` (`P6-T15`): a radio group of its
+   three choices under the notices, `preselected` ("don't know") selected, and the chosen answer sent as
+   `tierAnswer` with the accept; with no `tierQuestion` the group stays hidden and no `tierAnswer` is sent.
+
+   > **DECIDED 2026-11-17 (coordinator, under item 313; `plan/00` §6 item 384):** the window's tier
+   > question is built here, with `addon/content/costConfirm.{js,xhtml}` added to Files, rather than as a
+   > new card. Re-estimated 1.75 → 2.0 d: the window already places every other line of the model, so
+   > the step is one radio group, its answer and a check of both — a quarter-day, not nothing.
 
 **Do NOT.**
 - Do **not** add the pane's audio controls (§0.4 line 11; Phase 7's `W7-4`).
@@ -1565,7 +1580,10 @@ npm run typecheck && npm run lint:check && npm run test:unit -- reportViewModel 
 ```
 
 **Notes.** Needs: `P4-T20`, `P4-T21`. The window's audio section is also where §0.4 line 11 puts voice
-selection. Caller of the session commands: `addon/content/reportWindow.js`.
+selection. Caller of the session commands: `addon/content/reportWindow.js`. Caller of the tier radio
+group's answer: `openCostConfirmDialog` → `decideCostDialog` (`src/ui/dialogs/costConfirmDialog.ts`).
+
+**Findings, 2026-11-17 — built, awaiting the owner's review; all four criteria pass; full report at `plan/reports/P6-T17.md`.** The report window has the audio section of `docs/08` §6.4's note of 2026-11-17: `buildAudioSectionModel` and `reduceAudioSection` (`src/ui/viewModels/reportViewModel.ts`) draw it from the session's `audioDescribe`, `setAudioLanguage`, `setAudioVoice`, `startAudio`, `cancelAudio` and the two saves (`createReportWindowSession`, `src/bootstrap/registerUI.ts`), which run `prepare`, enqueue with `audioJobInput`, then `execute`; the report is the window's own run's, else `latestForCollection`; the voice is written back to `tts.voice`, the language never; the report and audio runs exclude each other; the attachment title is localised; a save's path is used once and never logged; the linked folder comes from the window's folder dialog. "Generate Audio Report…" (`audioReportItems`, `src/ui/menus/registerMenus.ts`) follows the report entry only while `audio.enabled` is on. The cost dialog's window draws the tier radio group and sends `tierAnswer` (`logic.tierAnswerFor`; item 384). 15 new strings, each a commented ko-KR draft not adopted (`G-41`). 20 view model and menu tests, one key test, one dialog test, one integration test; 43 mutants, then 7: of the first sweep's five survivors one needed a test (added) and four were equivalent guards (removed), one mutant was re-anchored, and the second sweep killed all seven. **Findings, not cards:** the first integration run failed on `P4-T19`'s menulist count, which the hidden section's two menulists broke; the test now leaves them out and checks the section is hidden; then three clean runs, 358 passed each. `audioReportPipeline.ts` (`voices()`) and `costConfirmDialog.test.ts` were outside the Files row.
 
 ---
 
@@ -1574,7 +1592,7 @@ selection. Caller of the session commands: `addon/content/reportWindow.js`.
 | Field | Value |
 |---|---|
 | **ID** | `P6-T18` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-17 on stand-ins, awaiting the owner's review (only the owner sets `DONE`); stays open until `P6-T04` has run (this card's note). Report at `plan/reports/P6-T18.md`. |
 | **Depends on** | `P6-T04`, `P6-T17` |
 | **Blocks** | `P6-T19` |
 | **Retires** | none |
@@ -1618,6 +1636,8 @@ npm run typecheck && npm run lint:check && npm run test:unit -- audioEndToEnd
 
 **Notes.** Needs: every Phase 6 card before it. If `P6-T04` has not run, the test runs on stand-ins and
 the card stays open until it has.
+
+**Findings, 2026-11-17 — built on stand-ins, awaiting the owner's review and `P6-T04`; both criteria pass on stand-ins; full report at `plan/reports/P6-T18.md`.** `test/unit/pipeline/audioEndToEnd.test.ts` (8 tests, three runs in a row, 8 passed each) drives `createAudioReportPipeline` with a real SQLite job queue and report store, the shipped prompts, `createGeminiTts` over the real `HttpClient` and `createAudioStore` over a disk in memory. Only the transport (answering from `test/fixtures/tts/gemini/` and counting every request), a router stand-in (the recorded `audio-script-{en,ko}` answers) and the Zotero attachment write are replaced; `fetch` and `XMLHttpRequest` throw throughout. Steps 1–5 pass: an English WAV whose header and length match two recorded chunks plus one gap, imported as `audio/wav` and keyed; a Korean script and WAV from the English record; `unentitled`, `model-gone` and `no-audio` on their fixtures, the script saved as text; a cancel during chunk 2 leaving no file and no key, the script kept; 1 + 2 requests, all replayed. The test reads all 8 sidecars, and each says `"synthetic": true`. The report maps all nine `docs/13` §8.6 lines (eight proved offline in part or whole, all nine need `P6-T19`). **Finding, not a card:** the run's output does not carry `sourceLanguage`, so step 2 shows it through the Korean prompt, the English record and no companion; adding it is a change to `audioReportPipeline.ts`, outside this card's Files row.
 
 ---
 
@@ -1690,7 +1710,8 @@ applies.
 
 ## 3. Estimate reconciliation
 
-Where the 20.00 d sit against `plan/05` §3.1's work areas (now §5.1):
+Where the 20.25 d sit against `plan/05` §3.1's work areas (now §5.1) (*updated 2026-11-17, item 384:
+it read 20.00 d, with W6-10 at 1.75*):
 
 | Work area | Cards | Days |
 |---|---|---|
@@ -1703,9 +1724,9 @@ Where the 20.00 d sit against `plan/05` §3.1's work areas (now §5.1):
 | W6-7 Cost estimation, duration, cancellation | `P6-T10` | 1.25 |
 | W6-8 Failure and disclosure paths | `P6-T14`, `P6-T15` | 2.5 |
 | W6-9 Offline "Read aloud" | — (item 378(d)) | 0 |
-| W6-10 Audio dialog | `P6-T17` | 1.75 |
+| W6-10 Audio dialog | `P6-T17` | 2.0 |
 | Not a work area: documents and rows, fixtures, the pipeline, the proofs | `P6-T01` (half), `P6-T02`, `P6-T03`, `P6-T04`, `P6-T16`, `P6-T18`, `P6-T19` | 5.5 |
-| | **Total** | **20.00** |
+| | **Total** | **20.25** |
 
 **Where the sum is likely low.** (1) `P6-T13`: Zotero's attachment calls have surprised this project
 before (`P0-T26`'s second copy), and a standalone attachment in a collection is a path nothing here has

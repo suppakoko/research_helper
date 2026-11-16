@@ -86,11 +86,37 @@ import {
 import type { Logger } from "../core/logger";
 import { formatValue } from "../i18n/ftl";
 import {
+  L10N_AUDIO_ATTACHMENT_TITLE,
   L10N_JOB_RESUMED,
   L10N_PROGRESS_HEADLINE,
   L10N_REPORT_PAUSED_NOTICE,
   type FluentMessageId,
 } from "../i18n/keys";
+// `P6-T17`: the report window's audio section, its host below.
+import type { AudioLanguage, AudioRunInput } from "../model/audio";
+import {
+  AUDIO_REPORT_INPUT_VERSION,
+  audioJobInput,
+  audioReportExclusivityKey,
+  type AudioConfirmAnswer,
+  type AudioConfirmRequest,
+  type AudioReportOutput,
+  type AudioReportPipeline,
+  type AudioReportSurface,
+} from "../pipeline/audioReport/audioReportPipeline";
+import {
+  audioFileStem,
+  defaultAudioTitle,
+  localDate,
+} from "../pipeline/audioReport/deliver";
+import {
+  saveAudioAs,
+  saveScriptAsText,
+  scriptTextFileName,
+} from "../pipeline/audioReport/failures";
+import { resolveAudioLanguage } from "../pipeline/audioReport/script";
+import { audioFileName as wavFileName } from "../tts/audioStore";
+import { zoteroAudioFileSystem } from "../zotero/attachments";
 import { merge } from "../model/merge";
 import type { SourceRecord } from "../model/sourceRecord";
 import type {
@@ -121,11 +147,14 @@ import {
 } from "../ui/dialogs/secretBackendDialog";
 import {
   USAGE_API_PROPERTY,
+  buildAudioDialogModel,
   buildCostDialogModel,
   createUsageHost,
   openCostConfirmDialog,
+  type AudioDialogInput,
   type CostDialogHost,
   type CostDialogInput,
+  type CostDialogModel,
   type CostDialogOutcome,
   type UsageHostApi,
 } from "../ui/dialogs/costConfirmDialog";
@@ -301,6 +330,13 @@ import {
   type ReportQuestion,
   type ReportRunEvent,
   type ReportRunState,
+  IDLE_AUDIO_SECTION,
+  buildAudioSectionModel,
+  initialAudioVoice,
+  reduceAudioSection,
+  windowAudioModel,
+  type AudioSectionEvent,
+  type AudioSectionState,
 } from "../ui/viewModels/reportViewModel";
 import type { JobRecord } from "../core/jobQueue/jobRecord";
 import type { TrendReport } from "../model/trend";
@@ -383,6 +419,11 @@ const SEARCH_MENU_COMMANDS: SearchMenuCommands = {
   // {@link publishReportWindowCommands} holds.
   openReportWindow: (host, collectionID) =>
     openReportWindowCommand(host, collectionID),
+  // `P6-T17`: "Generate Audio Report…" opens the same window, behind the hidden
+  // `audio.enabled`; the third reader is `openAudioReportWindowCommand` itself.
+  audioEnabled: () => getPref("audioEnabled"),
+  openAudioReportWindow: (host, collectionID) =>
+    openAudioReportWindowCommand(host, collectionID),
   // FR-44 (`P5-T26`): the entry's two readers of the hidden preference. The third
   // is `openRecommendWindowCommand` itself.
   recommendEnabled: () => getPref("recommendEnabled"),
@@ -1587,6 +1628,25 @@ function appLocale(): string {
 export function confirmRunCost(
   input: CostDialogInput,
 ): Promise<CostDialogOutcome> {
+  return openOverMainWindow(buildCostDialogModel(input, appLocale()));
+}
+
+/**
+ * `P6-T17`: the cost dialog for one of an audio run's two moments (`P6-T15`'s
+ * `buildAudioDialogModel`, with the tier question when it asks it), raised as
+ * {@link confirmRunCost} raises its own.
+ *
+ * @param input - the moment's figures and disclosure
+ * @returns what the user chose; rejects when no window can show the number
+ */
+function confirmAudioCost(input: AudioDialogInput): Promise<CostDialogOutcome> {
+  return openOverMainWindow(buildAudioDialogModel(input, appLocale()));
+}
+
+/** Open the cost dialog over the Zotero main window, or reject. */
+function openOverMainWindow(
+  model: CostDialogModel,
+): Promise<CostDialogOutcome> {
   const win: unknown = Services.wm.getMostRecentWindow("navigator:browser");
   if (
     typeof win !== "object" ||
@@ -1599,10 +1659,7 @@ export function confirmRunCost(
       ),
     );
   }
-  return openCostConfirmDialog(
-    win as CostDialogHost,
-    buildCostDialogModel(input, appLocale()),
-  );
+  return openCostConfirmDialog(win as CostDialogHost, model);
 }
 
 declare module "../addon" {
@@ -2411,6 +2468,20 @@ function openReportWindowCommand(
   return win;
 }
 
+/**
+ * `P6-T17`'s "Generate Audio Report…": the collection's report window, opened
+ * or raised as {@link openReportWindowCommand} does; its audio section works on
+ * the newest stored report. Opens nothing while the hidden `audio.enabled` is
+ * off, read on every call; opening it starts no job.
+ */
+function openAudioReportWindowCommand(
+  host: ReportWindowHost,
+  collectionID: number,
+): ReportWindowHandle | undefined {
+  if (!getPref("audioEnabled")) return undefined;
+  return openReportWindowCommand(host, collectionID);
+}
+
 /** `P4-T16`'s dialog over the graph, for the report run's confirmation. */
 function reportConfirmDeps(graph: ServiceGraph): ReportConfirmDeps {
   return {
@@ -2486,6 +2557,13 @@ function createReportWindowSession(
   let shown = 0;
   let resumed: ResumedReportRun | undefined;
   let detach: (() => void) | undefined;
+  // `P6-T17`: the audio section (`docs/08` §6.4's note of 2026-11-17): its
+  // state, the record it works on, its run and what that run left to save.
+  let audioState: AudioSectionState = IDLE_AUDIO_SECTION;
+  let audioReport: TrendReport | undefined;
+  let audioSource: CancellationTokenSource | undefined;
+  let audioEnded: Promise<void> | undefined;
+  let audioOutput: AudioReportOutput | undefined;
 
   // Main-bundle lines, formatted once each: the window links its own bundle
   // only (docs/08 §10.1), so a stop's reason reaches it as text.
@@ -2509,21 +2587,32 @@ function createReportWindowSession(
   const draw = (): void => {
     if (sink === undefined) return;
     const model = buildReportRunModel(state, {
-      canStart: header !== undefined && modelSet,
+      // The report and the audio never run at once (§6.4's note, point 5).
+      canStart: header !== undefined && modelSet && audioSource === undefined,
       saveNoteSetting: getPref("reportSaveNote"),
       libraryEditable: header?.editable === true,
       locale: appLocale(),
     });
+    const formatted = (line: MainWindowLine): string | undefined => {
+      const known = texts.get(JSON.stringify([line.id, line.args]));
+      if (known === undefined) {
+        void formatLine(line).then(draw, () => undefined);
+      }
+      return known;
+    };
+    const audio = audioState.enabled
+      ? windowAudioModel(
+          buildAudioSectionModel(audioState, {
+            reportRunning: state.running || source !== undefined,
+          }),
+          formatted,
+        )
+      : undefined;
     try {
-      sink.render(
-        windowRunModel(model, (line) => {
-          const known = texts.get(JSON.stringify([line.id, line.args]));
-          if (known === undefined) {
-            void formatLine(line).then(draw, () => undefined);
-          }
-          return known;
-        }),
-      );
+      sink.render({
+        ...windowRunModel(model, formatted),
+        ...(audio !== undefined && { audio }),
+      });
     } catch {
       // A window that throws loses the view, not the run.
     }
@@ -2531,6 +2620,11 @@ function createReportWindowSession(
 
   const dispatch = (event: ReportRunEvent): void => {
     state = reduceReportRun(state, event);
+    draw();
+  };
+
+  const dispatchAudio = (event: AudioSectionEvent): void => {
+    audioState = reduceAudioSection(audioState, event);
     draw();
   };
 
@@ -2689,6 +2783,8 @@ function createReportWindowSession(
         shown: showing?.report.language,
       }),
     });
+    // The audio section works on the report the run saved (§6.4's note).
+    if (showing !== undefined) void loadAudioReport(showing.report);
     // One group question for the run: its answer holds for both notes
     // (`docs/07` §12.4 reading 22).
     const ask = askOnce(askWindow);
@@ -2845,6 +2941,281 @@ function createReportWindowSession(
     dispatch({ kind: "paused-job", reason: undefined });
   };
 
+  // -------------------------------------------------------------------------
+  // `P6-T17`: the audio section (`docs/08` §6.4's note of 2026-11-17)
+  // -------------------------------------------------------------------------
+
+  const audioPipeline = (): AudioReportPipeline | undefined =>
+    graph.pipelines.get("audioReport") as AudioReportPipeline | undefined;
+
+  /** `tts.language`, narrowed: a hand-edited value reads as `auto`. */
+  const ttsLanguagePref = (): AudioLanguage | "auto" => {
+    const value = getPref("ttsLanguage");
+    return value === "en" || value === "ko" ? value : "auto";
+  };
+
+  /**
+   * The record the section works on: `fromRun` (the report the window's run
+   * saved, the one shown), else the collection's newest stored report.
+   */
+  const loadAudioReport = async (
+    fromRun: TrendReport | undefined,
+  ): Promise<void> => {
+    if (!audioState.enabled || audioSource !== undefined) return;
+    let report = fromRun;
+    let companion: TrendReport | undefined;
+    try {
+      const reports = await graph.database.reports();
+      if (reports !== undefined) {
+        if (report === undefined && header !== undefined) {
+          report = await reports.latestForCollection(
+            header.libraryID,
+            header.collectionKey,
+          );
+        }
+        if (report !== undefined) companion = await reports.companionOf(report);
+      }
+    } catch (error) {
+      logger.warn("the audio section could not read the stored reports", {
+        reason: error instanceof Error ? error.name : typeof error,
+      });
+    }
+    audioReport = report;
+    dispatchAudio({
+      kind: "audio-report",
+      report:
+        report === undefined
+          ? undefined
+          : {
+              id: report.id,
+              language: report.language,
+              companionLanguage: companion?.language,
+            },
+      language:
+        report === undefined
+          ? "en"
+          : resolveAudioLanguage(ttsLanguagePref(), report),
+    });
+  };
+
+  /** `listVoices` for `language`; the selection kept when still listed. */
+  const loadVoices = async (language: AudioLanguage): Promise<void> => {
+    const pipeline = audioPipeline();
+    if (pipeline === undefined) return;
+    const listing = createCancellationTokenSource();
+    try {
+      const voices = (await pipeline.voices(language, listing.token)).map(
+        (voice) => ({ id: voice.id, label: voice.displayName }),
+      );
+      dispatchAudio({
+        kind: "audio-voices",
+        voices,
+        voice: initialAudioVoice(
+          voices,
+          audioState.voice ?? getPref("ttsVoice"),
+        ),
+      });
+    } catch (error) {
+      logger.warn("the voice list could not be read", {
+        reason: error instanceof Error ? error.name : typeof error,
+      });
+    } finally {
+      listing.dispose();
+    }
+  };
+
+  /** Each language's attachment title, with a slot for the delivery date. */
+  const DATE_SLOT = "{{date}}";
+  const audioTitles = async (): Promise<Map<AudioLanguage, string>> => {
+    const titles = new Map<AudioLanguage, string>();
+    const l10n = new Localization([MAIN_WINDOW_FTL]);
+    for (const language of ["en", "ko"] as const) {
+      const text = await formatValue(l10n, L10N_AUDIO_ATTACHMENT_TITLE, {
+        language,
+        date: DATE_SLOT,
+      });
+      if (text !== undefined) titles.set(language, text);
+    }
+    return titles;
+  };
+
+  /** One of the run's two confirmations, in `P6-T15`'s cost dialog. */
+  const confirmAudio = async (
+    request: AudioConfirmRequest,
+  ): Promise<AudioConfirmAnswer> => {
+    const common = {
+      disclosure: request.disclosure,
+      providerName: await providerDisplayName(graph, "gemini"),
+      confirmAboveCents: getPref("summaryConfirmAboveCents"),
+      ceiling: request.ceiling,
+      session: request.session,
+      askTierQuestion: request.askTierQuestion,
+      pricesAsOfEpochMs: request.pricesAsOfEpochMs,
+    };
+    const input: AudioDialogInput =
+      request.step === "script"
+        ? {
+            ...common,
+            step: "script",
+            estimate: request.estimate,
+            targetMinutes: request.targetMinutes,
+          }
+        : {
+            ...common,
+            step: "audio",
+            plan: request.plan,
+            warnings: request.warnings,
+          };
+    const outcome = await confirmAudioCost(input);
+    settleDisclosure(
+      request.disclosure,
+      outcome.kind === "run" ? "confirmed" : "cancelled",
+    );
+    if (outcome.kind !== "run") return { kind: "cancelled" };
+    return {
+      kind: "run",
+      ...(outcome.raise !== undefined && { raise: outcome.raise }),
+      ...(outcome.tierAnswer !== undefined && {
+        tierAnswer: outcome.tierAnswer,
+      }),
+    };
+  };
+
+  /** The run's end, as the section shows it and what it leaves to save. */
+  const finishAudio = (output: AudioReportOutput): void => {
+    audioOutput = output;
+    if (output.report !== undefined) audioReport = output.report;
+    const failure = output.failure;
+    dispatchAudio({
+      kind: "audio-finished",
+      outcome: output.outcome,
+      refusal: output.refusal,
+      failure:
+        failure === undefined
+          ? undefined
+          : {
+              messageKey: failure.messageKey,
+              messageArgs: failure.messageArgs,
+            },
+      offers: {
+        script:
+          failure?.offerScriptText === true && output.script !== undefined,
+        audio: failure?.offerAudioSaveAs === true && output.audio !== undefined,
+      },
+    });
+  };
+
+  /**
+   * The `audioReport` job, as {@link runJob} runs the report's: `prepare` in a
+   * context with no record; only a confirmed run is enqueued, with its egress
+   * log (`audioJobInput`), and `execute` runs in the record's context.
+   */
+  const runAudio = async (
+    pipeline: AudioReportPipeline,
+    report: TrendReport,
+    input: AudioRunInput,
+  ): Promise<void> => {
+    const running = createCancellationTokenSource();
+    audioSource = running;
+    audioOutput = undefined;
+    dispatchAudio({ kind: "audio-started" });
+    let titles = new Map<AudioLanguage, string>();
+    const surface: AudioReportSurface = {
+      update: (view) => {
+        dispatchAudio({ kind: "audio-view", view });
+      },
+      confirm: (request) =>
+        orReleased(confirmAudio(request), { kind: "cancelled" } as const),
+      ask: askPaused,
+      pickFolder: async () => {
+        const open = sink;
+        if (open?.pickFolder === undefined) return undefined;
+        // The path is handed to the pipeline once; never kept or logged here.
+        const path = await orReleased(open.pickFolder(), "");
+        return path === "" ? undefined : path;
+      },
+      title: (language, isoDate) => {
+        const template = titles.get(language);
+        return template === undefined
+          ? defaultAudioTitle(language, isoDate)
+          : template.replace(/⁨?\{\{date\}\}⁩?/u, isoDate);
+      },
+    };
+    const collection = {
+      libraryID: report.libraryID,
+      collectionKey: report.collectionKey,
+    };
+    try {
+      titles = await audioTitles().catch(() => titles);
+      const before = await graph.pipelineContext.openJob({
+        pipelineId: "audioReport",
+        token: running.token,
+        collection,
+        openOn: "completion",
+      });
+      let prepared;
+      try {
+        prepared = await pipeline.prepare(input, before.context, surface);
+        if (prepared.status !== "run") {
+          finishAudio(
+            await pipeline.execute(prepared, before.context, surface),
+          );
+          return;
+        }
+      } finally {
+        before.dispose();
+      }
+      const record = await graph.jobs.enqueue(
+        "audioReport",
+        audioJobInput(prepared, graph.clock.now()),
+        {
+          priority: "normal",
+          exclusivityKey: audioReportExclusivityKey(input),
+          libraryID: report.libraryID,
+          inputVersion: AUDIO_REPORT_INPUT_VERSION,
+        },
+      );
+      const job = await graph.pipelineContext.openJob({
+        pipelineId: "audioReport",
+        token: running.token,
+        record,
+        collection,
+        openOn: "completion",
+      });
+      try {
+        const output = await pipeline.execute(prepared, job.context, surface);
+        job.progress.reporter.done(
+          output.outcome === "succeeded"
+            ? "succeeded"
+            : output.outcome === "failed"
+              ? "failed"
+              : "cancelled",
+        );
+        finishAudio(output);
+      } finally {
+        job.dispose();
+      }
+    } catch (error) {
+      logger.warn("the audio run stopped", {
+        reason: error instanceof Error ? error.name : typeof error,
+      });
+      dispatchAudio({
+        kind: "audio-finished",
+        outcome:
+          running.token.reason?.kind === "shutdown"
+            ? "interrupted"
+            : running.token.isCancellationRequested
+              ? "cancelled"
+              : "failed",
+        offers: { script: false, audio: false },
+      });
+    } finally {
+      if (audioSource === running) audioSource = undefined;
+      running.dispose();
+      draw();
+    }
+  };
+
   return {
     async describe() {
       header = describeCollectionForSummary(collectionID);
@@ -2927,6 +3298,7 @@ function createReportWindowSession(
       if (index < 0 || index === shown) return;
       shown = index;
       dispatch({ kind: "show-report", language });
+      void loadAudioReport(delivered[index]?.report);
     },
 
     async saveNote() {
@@ -2977,13 +3349,128 @@ function createReportWindowSession(
       detach?.();
       detach = undefined;
       source?.cancel({ kind: "user" });
+      audioSource?.cancel({ kind: "user" });
       releaseWaits();
     },
 
     async shutdown() {
       source?.cancel({ kind: "shutdown" });
+      audioSource?.cancel({ kind: "shutdown" });
       releaseWaits();
       await ended?.catch(() => undefined);
+      await audioEnded?.catch(() => undefined);
+    },
+
+    async audioDescribe() {
+      const enabled = getPref("audioEnabled");
+      dispatchAudio({ kind: "audio-enabled", enabled });
+      if (!enabled || audioPipeline() === undefined) return;
+      await graph.database.ready;
+      await loadAudioReport(delivered[shown]?.report);
+      await loadVoices(audioState.language ?? "en");
+    },
+
+    setAudioLanguage(language) {
+      if (language !== "en" && language !== "ko") return;
+      dispatchAudio({ kind: "audio-language", language });
+      void loadVoices(language);
+    },
+
+    setAudioVoice(voice) {
+      if (
+        audioSource !== undefined ||
+        !audioState.voices.some((one) => one.id === voice)
+      ) {
+        return;
+      }
+      // `plan/09` §0.4 line 11: the choice is written back at once.
+      setPref("ttsVoice", voice);
+      dispatchAudio({ kind: "audio-voice", voice });
+    },
+
+    async startAudio(options, windowSink) {
+      if (
+        audioSource !== undefined ||
+        source !== undefined ||
+        resumed !== undefined
+      ) {
+        return;
+      }
+      sink = windowSink;
+      const pipeline = audioPipeline();
+      const report = audioReport;
+      if (
+        pipeline === undefined ||
+        report === undefined ||
+        !getPref("audioEnabled")
+      ) {
+        return;
+      }
+      audioEnded = runAudio(pipeline, report, {
+        reportId: report.id,
+        language: options.language === "ko" ? "ko" : "en",
+        voice: options.voice,
+      });
+      await audioEnded;
+    },
+
+    cancelAudio() {
+      audioSource?.cancel({ kind: "user" });
+      releaseWaits();
+    },
+
+    scriptFileName() {
+      const script = audioOutput?.script;
+      return script === undefined ||
+        audioReport === undefined ||
+        !audioState.offers.script
+        ? undefined
+        : scriptTextFileName(audioReport, script.language);
+    },
+
+    async saveScript(path) {
+      const script = audioOutput?.script;
+      const report = audioReport;
+      if (script === undefined || report === undefined || path === "") return;
+      if (!audioState.offers.script) return;
+      dispatchAudio({
+        kind: "audio-saved",
+        saveKind: "script",
+        outcome: await saveScriptAsText(path, report, script, {
+          files: reportFileWriter(),
+          logger,
+        }),
+      });
+    },
+
+    audioFileName() {
+      const output = audioOutput;
+      const report = audioReport;
+      if (output?.audio === undefined || report === undefined) return undefined;
+      if (!audioState.offers.audio) return undefined;
+      return wavFileName(
+        audioFileStem(
+          report.collectionName,
+          localDate(graph.clock.now()).compact,
+          output.language ?? report.language,
+        ),
+      );
+    },
+
+    async saveAudio(path) {
+      const audio = audioOutput?.audio;
+      const report = audioReport;
+      if (audio === undefined || report === undefined || path === "") return;
+      if (!audioState.offers.audio) return;
+      dispatchAudio({
+        kind: "audio-saved",
+        saveKind: "audio",
+        outcome: await saveAudioAs(path, audio, {
+          files: zoteroAudioFileSystem(),
+          logger,
+          reportId: report.id,
+        }),
+      });
     },
   };
 }

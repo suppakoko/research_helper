@@ -26,6 +26,7 @@
 > *Updated 2026-11-16, later (`plan/00` §6 item 380): Phase 7 is decomposed (`plan/10`), so §4 is a pointer
 > too and its band is measured (28.50–40 d); no phase in this file is scaled any more.*
 > *Re-priced 2026-11-16, later still (`plan/00` §6 item 381): Phase 7 is 29.25–41 d over 32 cards after `P7-T32`; it read 28.50–40 d.*
+> *Re-priced 2026-11-17 (`plan/00` §6 item 384): Phase 6 is 20.25–28 d over 19 cards after `P6-T17` went 1.75 → 2.0 d; it read 20.00–28 d.*
 > *Re-priced 2026-11-05 (`plan/00` §6 item 344(b)): Phase 5's measured band is 36.25–51 d; it read 35.75–50 d.*
 > *Re-priced 2026-11-02 (`plan/00` §6 item 335(g)): Phase 4's measured band is 25.25–35 d; it read 23.75–33 d.*
 > *Re-priced again 2026-11-02 (`plan/00` §6 item 336(d)): it is 25.75–36 d; it read 25.25–35 d.*
@@ -179,8 +180,8 @@ under item 313. It was decomposed before §0's exit conditions (a) and (c) held 
 `P4-T24`/`P4-T25` have not run; `plan/09` §0 records which entry conditions are met. It has had no
 independent review yet.
 
-**Effort:** **20.00–28 developer-days — measured**, the sum of `plan/09`'s 19 cards (20.00 × 1.4 =
-28.0 → 28), replacing the 15–21 d **scaled ×1.50, not decomposed** figure this section quoted from
+**Effort:** **20.25–28 developer-days — measured**, the sum of `plan/09`'s 19 cards (20.25 × 1.4 =
+28.35 → 28; *re-priced 2026-11-17, `plan/00` §6 item 384: it read 20.00–28, 20.00 × 1.4 = 28.0*), replacing the 15–21 d **scaled ×1.50, not decomposed** figure this section quoted from
 2026-09-09 to 2026-11-16 (`docs/11` §1, Phase 6, and the effort summary table carry the change).
 
 **Where this section's contents went.** The work areas `W6-1`–`W6-10` (§3.1), the entry conditions

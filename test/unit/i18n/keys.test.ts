@@ -40,10 +40,14 @@ import {
 import {
   REPORT_LANGUAGES,
   REPORT_LANGUAGE_L10N,
+  REPORT_WINDOW_AUDIO_L10N,
   REPORT_WINDOW_L10N,
 } from "../../../src/ui/panes/reportWindow";
 import { KOREAN_NOT_WRITTEN_L10N } from "../../../src/pipeline/trendReport/trendReportPipeline";
-import { REPORT_RUN_L10N } from "../../../src/ui/viewModels/reportViewModel";
+import {
+  AUDIO_SECTION_L10N,
+  REPORT_RUN_L10N,
+} from "../../../src/ui/viewModels/reportViewModel";
 import { PREFS } from "../../../src/prefs/schema";
 import { mockSettings } from "../../helpers/mockLLM";
 
@@ -168,6 +172,9 @@ const ID_CONSTANTS = {
   // `P6-T15`: the audio run's notice naming both hosts, and strict mode's refusal.
   L10N_EGRESS_AUDIO_NOTICE: keys.L10N_EGRESS_AUDIO_NOTICE,
   L10N_AUDIO_TIER_REFUSED: keys.L10N_AUDIO_TIER_REFUSED,
+  // `P6-T17`: the audio entry and the attachment's localised title.
+  L10N_MENU_COLLECTION_AUDIO_REPORT: keys.L10N_MENU_COLLECTION_AUDIO_REPORT,
+  L10N_AUDIO_ATTACHMENT_TITLE: keys.L10N_AUDIO_ATTACHMENT_TITLE,
 } satisfies Record<string, string>;
 
 /** The exported `L10N_*` string constants that are not message identifiers. */
@@ -619,6 +626,67 @@ describe("src/i18n/keys.ts — the LLM error messages P3-T05 ships", () => {
     ]);
     // `rh-error-policy` stays deferred: the refusal has its own message.
     expect(read("DEFERRED_ERROR_MESSAGE_IDS")).toEqual(["rh-error-policy"]);
+  });
+
+  it("ships P6-T17's fifteen strings, each a commented ko-KR draft pending G-41", () => {
+    const ftl = (locale: string, surface: string): string =>
+      readFileSync(
+        resolve(
+          dirname(fileURLToPath(import.meta.url)),
+          `../../../addon/locale/${locale}/research-helper-${surface}.ftl`,
+        ),
+        "utf8",
+      );
+    const main = [
+      keys.L10N_MENU_COLLECTION_AUDIO_REPORT,
+      keys.L10N_AUDIO_ATTACHMENT_TITLE,
+    ];
+    const report = Object.values(AUDIO_SECTION_L10N);
+    expect(main).toHaveLength(2);
+    expect(report).toHaveLength(13);
+    expect(notIn(main, read("MAIN_WINDOW_MESSAGE_IDS"))).toEqual([]);
+    expect(notIn(report, read("REPORT_WINDOW_MESSAGE_IDS"))).toEqual([]);
+    const all = [...main, ...report];
+    expect(notIn(all, read("KO_PENDING_REVIEW"))).toEqual([]);
+    expect(sharedBy(all, read("KO_PRESENT"))).toEqual([]);
+    expect(
+      all.filter((id) => read("ARGUMENT_MESSAGE_IDS").includes(id)).sort(),
+    ).toEqual(
+      [
+        keys.L10N_AUDIO_ATTACHMENT_TITLE,
+        AUDIO_SECTION_L10N.source,
+        AUDIO_SECTION_L10N.stage,
+        AUDIO_SECTION_L10N.outcome,
+        AUDIO_SECTION_L10N.refused,
+        AUDIO_SECTION_L10N.saved,
+      ].sort(),
+    );
+    for (const [ids, surface] of [
+      [main, "mainWindow"],
+      [report, "reportWindow"],
+    ] as const) {
+      const english = ftl("en-US", surface).split(/\r?\n/);
+      const korean = ftl("ko-KR", surface).split(/\r?\n/);
+      for (const id of ids) {
+        expect(
+          english.filter((line) => line.startsWith(`${id} =`)),
+          id,
+        ).toHaveLength(1);
+        // No live Korean message until the owner adopts one (G-41)…
+        expect(
+          korean.filter((line) => line.startsWith(`${id} =`)),
+          id,
+        ).toHaveLength(0);
+        // …but a commented draft marked not adopted.
+        const at = korean.indexOf(`# ${id}`);
+        const draft = korean.findIndex((line) => line.startsWith(`# ${id} =`));
+        expect(at, id).toBeGreaterThanOrEqual(0);
+        expect(draft, id).toBeGreaterThan(at);
+        expect(korean.slice(at, draft).join("\n"), id).toContain(
+          "Draft (coordinator, 2026-11-17, not adopted):",
+        );
+      }
+    }
   });
 
   it("puts all four on KO_PRESENT once the owner reviewed the Korean (2026-10-20, G-41)", () => {
@@ -1203,15 +1271,20 @@ describe("src/i18n/keys.ts — P4-T19's report window and its menu entry (docs/0
     (id) => !run.includes(id) && id !== shownLabel,
   );
 
-  it("names ten distinct ids, and with P4-T20's twenty-five and P4-T21's label exactly the report window's surface list", () => {
+  // P6-T17's audio section keeps its own thirteen in REPORT_WINDOW_AUDIO_L10N.
+  const audio: readonly string[] = Object.values(REPORT_WINDOW_AUDIO_L10N);
+
+  it("names ten distinct ids, and with P4-T20's twenty-five, P4-T21's label and P6-T17's thirteen exactly the report window's surface list", () => {
     expect(new Set(ten).size).toBe(10);
     expect(new Set(run).size).toBe(25);
-    expect(sorted([...ten, ...run, shownLabel])).toEqual(
+    expect(new Set(audio).size).toBe(13);
+    expect(sorted([...ten, ...run, shownLabel, ...audio])).toEqual(
       sorted(read("REPORT_WINDOW_MESSAGE_IDS")),
     );
-    expect(sorted(Object.values(REPORT_WINDOW_L10N))).toEqual(
+    expect(sorted([...Object.values(REPORT_WINDOW_L10N), ...audio])).toEqual(
       sorted(read("REPORT_WINDOW_MESSAGE_IDS")),
     );
+    expect(sharedBy(audio, Object.values(REPORT_WINDOW_L10N))).toEqual([]);
   });
 
   it("declares them on the reportWindow surface only, outside the error ids; two take arguments", () => {

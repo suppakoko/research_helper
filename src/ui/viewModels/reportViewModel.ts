@@ -40,8 +40,19 @@ import type {
   MainWindowMessageId,
   ReportWindowMessageId,
 } from "../../i18n/keys";
-import { L10N_JOB_WALL_CLOCK_BUDGET } from "../../i18n/keys";
+import {
+  L10N_AUDIO_TIER_REFUSED,
+  L10N_JOB_WALL_CLOCK_BUDGET,
+  MAIN_WINDOW_MESSAGE_IDS,
+} from "../../i18n/keys";
+import type { AudioLanguage } from "../../model/audio";
 import type { ReportLanguage as RunLanguage } from "../../model/trend";
+import type {
+  AudioRefusalReason,
+  AudioReportOutcome,
+  AudioReportRunView,
+} from "../../pipeline/audioReport/audioReportPipeline";
+import type { AudioSaveOutcome } from "../../pipeline/audioReport/failures";
 import type { EgressDisclosure } from "../../pipeline/shared/egressDisclosure";
 import type { SummarizeQuestion } from "../../pipeline/summarize/summarizePipeline";
 import type { DraftDelta } from "../../pipeline/trendReport/compose";
@@ -787,6 +798,11 @@ export interface ReportWindowRunModel {
   readonly delivery: ReportWindowLineOut | undefined;
   readonly buttons: ReportButtons;
   readonly reportChoice: ReportChoice | undefined;
+  /**
+   * The audio section (`P6-T17`), from {@link windowAudioModel}; absent, the
+   * window hides it.
+   */
+  readonly audio?: AudioSectionModel<ReportWindowLineOut>;
 }
 
 /**
@@ -1013,4 +1029,390 @@ export async function settleReportNote(
   } catch {
     return "failed";
   }
+}
+
+// ===========================================================================
+// 8. The audio section (P6-T17; docs/08 §6.4's note of 2026-11-17)
+// ===========================================================================
+
+/**
+ * Every id of the audio section, in `research-helper-reportWindow.ftl`. The
+ * language items are {@link REPORT_RUN_L10N}'s neighbours `-language-en` and
+ * `-language-ko` (`REPORT_WINDOW_L10N`).
+ */
+export const AUDIO_SECTION_L10N = {
+  heading: "research-helper-report-audio-heading",
+  languageLabel: "research-helper-report-audio-language-label",
+  voiceLabel: "research-helper-report-audio-voice-label",
+  none: "research-helper-report-audio-none",
+  source: "research-helper-report-audio-source",
+  generate: "research-helper-report-audio-generate",
+  cancel: "research-helper-report-audio-cancel",
+  stage: "research-helper-report-audio-stage",
+  outcome: "research-helper-report-audio-outcome",
+  refused: "research-helper-report-audio-refused",
+  saveScript: "research-helper-report-audio-save-script",
+  saveAudio: "research-helper-report-audio-save-audio",
+  saved: "research-helper-report-audio-saved",
+} as const satisfies Record<string, ReportWindowMessageId>;
+
+/** The stored report the section works on (point 2 of the note). */
+export interface AudioSectionReport {
+  readonly id: string;
+  readonly language: AudioLanguage;
+  /** The language of the same run's other record, when one is stored. */
+  readonly companionLanguage: AudioLanguage | undefined;
+}
+
+/** One voice of `TTSProvider.listVoices`: its id and its display name. */
+export interface AudioVoiceOption {
+  readonly id: string;
+  /** Not translated (`docs/08` §10.3); placed as text. */
+  readonly label: string;
+}
+
+/** What a failed or cancelled run said, as `classifyAudioFailure` gave it. */
+export interface AudioSectionFailure {
+  readonly messageKey: string;
+  readonly messageArgs: Readonly<Record<string, string>>;
+}
+
+/** What the section has seen. */
+export interface AudioSectionState {
+  /** `audio.enabled`: off, the section is not drawn at all. */
+  readonly enabled: boolean;
+  /** The report lookup has answered. */
+  readonly loaded: boolean;
+  readonly report: AudioSectionReport | undefined;
+  /** The audio language chosen for the next run; never written back. */
+  readonly language: AudioLanguage | undefined;
+  /** The voice chosen; the host writes it back to `tts.voice`. */
+  readonly voice: string | undefined;
+  readonly voices: readonly AudioVoiceOption[];
+  readonly running: boolean;
+  readonly view: AudioReportRunView | undefined;
+  readonly outcome: AudioReportOutcome | undefined;
+  readonly refusal: AudioRefusalReason | undefined;
+  readonly failure: AudioSectionFailure | undefined;
+  /** FR-43's and FR-40's offers, as the run's output made them. */
+  readonly offers: { readonly script: boolean; readonly audio: boolean };
+  /** The last save's result; a cancelled save dialog changes nothing. */
+  readonly saved:
+    | {
+        readonly kind: "script" | "audio";
+        readonly outcome: "saved" | "failed";
+      }
+    | undefined;
+}
+
+/** Before anything is known. */
+export const IDLE_AUDIO_SECTION: AudioSectionState = Object.freeze({
+  enabled: false,
+  loaded: false,
+  report: undefined,
+  language: undefined,
+  voice: undefined,
+  voices: Object.freeze([]) as readonly AudioVoiceOption[],
+  running: false,
+  view: undefined,
+  outcome: undefined,
+  refusal: undefined,
+  failure: undefined,
+  offers: Object.freeze({ script: false, audio: false }),
+  saved: undefined,
+});
+
+/** What changes the section. */
+export type AudioSectionEvent =
+  | { readonly kind: "audio-enabled"; readonly enabled: boolean }
+  /** The report the section works on, and the language it starts on. */
+  | {
+      readonly kind: "audio-report";
+      readonly report: AudioSectionReport | undefined;
+      readonly language: AudioLanguage;
+    }
+  | {
+      readonly kind: "audio-voices";
+      readonly voices: readonly AudioVoiceOption[];
+      readonly voice: string | undefined;
+    }
+  | { readonly kind: "audio-language"; readonly language: AudioLanguage }
+  | { readonly kind: "audio-voice"; readonly voice: string }
+  | { readonly kind: "audio-started" }
+  | { readonly kind: "audio-view"; readonly view: AudioReportRunView }
+  | {
+      readonly kind: "audio-finished";
+      readonly outcome: AudioReportOutcome;
+      readonly refusal?: AudioRefusalReason | undefined;
+      readonly failure?: AudioSectionFailure | undefined;
+      readonly offers: { readonly script: boolean; readonly audio: boolean };
+    }
+  | {
+      readonly kind: "audio-saved";
+      readonly saveKind: "script" | "audio";
+      readonly outcome: AudioSaveOutcome;
+    };
+
+const NO_OFFERS = IDLE_AUDIO_SECTION.offers;
+
+/** The fields one run's end sets, cleared for the next. */
+const CLEARED_RESULT = {
+  outcome: undefined,
+  refusal: undefined,
+  failure: undefined,
+  offers: NO_OFFERS,
+  saved: undefined,
+} as const;
+
+/**
+ * The voice the selector starts on: the stored `tts.voice` when it is listed,
+ * otherwise the first voice (`docs/08` §6.4's note, point 3).
+ *
+ * @param voices - `listVoices`'s answer
+ * @param stored - `tts.voice`
+ */
+export function initialAudioVoice(
+  voices: readonly AudioVoiceOption[],
+  stored: string,
+): string | undefined {
+  return voices.some((one) => one.id === stored) ? stored : voices[0]?.id;
+}
+
+/**
+ * Fold one event into the section's state. A choice or a new report while a
+ * run is going is ignored: the run keeps the ones it started with.
+ */
+export function reduceAudioSection(
+  state: AudioSectionState,
+  event: AudioSectionEvent,
+): AudioSectionState {
+  switch (event.kind) {
+    case "audio-enabled":
+      return { ...state, enabled: event.enabled };
+    case "audio-report":
+      if (state.running) return state;
+      return {
+        ...state,
+        ...CLEARED_RESULT,
+        loaded: true,
+        report: event.report,
+        language: event.report === undefined ? undefined : event.language,
+      };
+    case "audio-voices":
+      return { ...state, voices: event.voices, voice: event.voice };
+    case "audio-language":
+      if (state.running || state.report === undefined) return state;
+      return { ...state, language: event.language };
+    case "audio-voice":
+      if (state.running || !state.voices.some((v) => v.id === event.voice)) {
+        return state;
+      }
+      return { ...state, voice: event.voice };
+    case "audio-started":
+      return { ...state, ...CLEARED_RESULT, running: true, view: undefined };
+    case "audio-view":
+      return state.running ? { ...state, view: event.view } : state;
+    case "audio-finished":
+      return {
+        ...state,
+        running: false,
+        view: undefined,
+        outcome: event.outcome,
+        refusal: event.refusal,
+        failure: event.failure,
+        offers: event.offers,
+        saved: undefined,
+      };
+    case "audio-saved":
+      if (event.outcome === "no-path") return state;
+      return {
+        ...state,
+        saved: { kind: event.saveKind, outcome: event.outcome },
+      };
+  }
+}
+
+/**
+ * The language the script is written from (`chooseScriptSource`, `P6-T08`):
+ * the report's own, or the same run's other record when it is in the chosen
+ * language.
+ */
+export function audioScriptSourceLanguage(
+  report: AudioSectionReport,
+  language: AudioLanguage,
+): AudioLanguage {
+  // The report's own language needs no test of its own: it is the fallback.
+  return report.companionLanguage === language ? language : report.language;
+}
+
+/** The section's buttons and selectors. */
+export interface AudioSectionButtons {
+  readonly generate: boolean;
+  readonly cancel: boolean;
+  /** The two selectors. */
+  readonly choose: boolean;
+  /** Shown only when offered; a new run clears the offers, so never during one. */
+  readonly saveScript: boolean;
+  readonly saveAudio: boolean;
+}
+
+/** What the window draws for the section. */
+export interface AudioSectionModel<Line = ReportModelLine> {
+  /** `audio.enabled`: hidden entirely otherwise. */
+  readonly visible: boolean;
+  readonly heading: ReportLine;
+  /** "No report is stored…", once the lookup found none. */
+  readonly none: ReportLine | undefined;
+  readonly language: AudioLanguage | undefined;
+  readonly voices: readonly AudioVoiceOption[];
+  readonly voice: string | undefined;
+  /** "Korean script written from the English report", when that applies. */
+  readonly source: ReportLine | undefined;
+  /** The one progress line, while a run is going. */
+  readonly stage: ReportLine | undefined;
+  readonly outcome: ReportLine | undefined;
+  /** Why: a refusal, or a failure's own message (main bundle). */
+  readonly reason: Line | undefined;
+  readonly saved: ReportLine | undefined;
+  readonly buttons: AudioSectionButtons;
+  /** Which save buttons exist at all (FR-43, FR-40). */
+  readonly offers: { readonly script: boolean; readonly audio: boolean };
+}
+
+/** Every refusal the section's own bundle words. */
+const WORDED_REFUSALS: ReadonlySet<string> = new Set([
+  "no-report",
+  "no-key",
+  "read-only",
+  "no-collection",
+  "linked-needs-personal-library",
+  "no-folder",
+  "disabled",
+]);
+
+const STAGE_OF_VIEW: Readonly<Record<AudioReportRunView["stage"], string>> = {
+  checking: "checking",
+  Scripting: "scripting",
+  AwaitingConfirm: "confirming",
+  Synthesizing: "synthesizing",
+  Attaching: "attaching",
+  waiting: "waiting",
+  done: "done",
+};
+
+function audioStageLine(state: AudioSectionState): ReportLine | undefined {
+  if (!state.running) return undefined;
+  const view = state.view;
+  const stage = view === undefined ? "checking" : STAGE_OF_VIEW[view.stage];
+  const chunk = stage === "synthesizing" ? view?.chunk : undefined;
+  return {
+    id: AUDIO_SECTION_L10N.stage,
+    args: { stage, done: chunk?.done ?? 0, total: chunk?.total ?? 0 },
+  };
+}
+
+function audioReasonLine(
+  state: AudioSectionState,
+): ReportModelLine | undefined {
+  // No test of `running`: `audio-started` clears the refusal and the failure.
+  const { refusal, failure } = state;
+  if (refusal === "tier-refused") {
+    return { bundle: "main", id: L10N_AUDIO_TIER_REFUSED };
+  }
+  if (refusal !== undefined) {
+    return {
+      id: AUDIO_SECTION_L10N.refused,
+      args: { reason: WORDED_REFUSALS.has(refusal) ? refusal : "other" },
+    };
+  }
+  if (state.outcome !== "failed" || failure === undefined) return undefined;
+  const known = (MAIN_WINDOW_MESSAGE_IDS as readonly string[]).includes(
+    failure.messageKey,
+  );
+  return known
+    ? {
+        bundle: "main",
+        id: failure.messageKey as MainWindowMessageId,
+        args: failure.messageArgs,
+      }
+    : { bundle: "main", id: "rh-error-tts", args: { reason: "other" } };
+}
+
+/**
+ * Build what the window draws for the audio section.
+ *
+ * @param state - from {@link reduceAudioSection}
+ * @param extras - `reportRunning`: the report's own run is going, so audio
+ *   cannot start (`docs/08` §6.4's note, point 5)
+ */
+export function buildAudioSectionModel(
+  state: AudioSectionState,
+  extras: { readonly reportRunning: boolean },
+): AudioSectionModel {
+  const { report, language, running } = state;
+  const source =
+    report === undefined || language === undefined
+      ? undefined
+      : audioScriptSourceLanguage(report, language);
+  const between = !running && report !== undefined;
+  return {
+    visible: state.enabled,
+    heading: { id: AUDIO_SECTION_L10N.heading },
+    none:
+      state.loaded && report === undefined
+        ? { id: AUDIO_SECTION_L10N.none }
+        : undefined,
+    language,
+    voices: state.voices,
+    voice: state.voice,
+    source:
+      source === undefined || source === language
+        ? undefined
+        : {
+            id: AUDIO_SECTION_L10N.source,
+            args: { script: language ?? "en", report: source },
+          },
+    stage: audioStageLine(state),
+    // `audio-started` clears the outcome and the offers, so neither shows
+    // while a run is going.
+    outcome:
+      state.outcome === undefined
+        ? undefined
+        : { id: AUDIO_SECTION_L10N.outcome, args: { outcome: state.outcome } },
+    reason: audioReasonLine(state),
+    saved:
+      state.saved === undefined
+        ? undefined
+        : {
+            id: AUDIO_SECTION_L10N.saved,
+            args: { kind: state.saved.kind, outcome: state.saved.outcome },
+          },
+    buttons: {
+      generate:
+        state.enabled &&
+        between &&
+        !extras.reportRunning &&
+        language !== undefined &&
+        state.voice !== undefined,
+      cancel: running,
+      choose: state.enabled && between,
+      saveScript: state.offers.script,
+      saveAudio: state.offers.audio,
+    },
+    offers: state.offers,
+  };
+}
+
+/**
+ * The section as the window receives it: the main-bundle reason as text, or
+ * `undefined` until the host has formatted it.
+ *
+ * @param model - from {@link buildAudioSectionModel}
+ * @param formatted - the host's text for a main-bundle line
+ */
+export function windowAudioModel(
+  model: AudioSectionModel,
+  formatted: (line: MainWindowLine) => string | undefined,
+): AudioSectionModel<ReportWindowLineOut> {
+  return { ...model, reason: windowLine(model.reason, formatted) };
 }

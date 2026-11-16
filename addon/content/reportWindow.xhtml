@@ -13,6 +13,9 @@
   (docs/08 §10.1: a window owns its bundle), every script from a chrome://
   path, no inline script, no width/height attributes.
 
+  P6-T17 added the audio section under the delivery buttons, shown only while
+  audio.enabled is on (docs/08 §6.4's note of 2026-11-17).
+
   P4-T19 built the shell: the collection line, the per-run language selector,
   the resolved report model as text and Close. P4-T20 added the run: Generate,
   the stage rows, the streamed preview, Cancel and the delivery buttons, driven
@@ -172,5 +175,74 @@ href="chrome://zotero-platform/content/zotero.css"?>
         disabled="true"
       />
     </hbox>
+
+    <!-- P6-T17: the audio section (docs/08 §6.4's note of 2026-11-17). Hidden
+         while the hidden audio.enabled preference is off; the script shows it
+         from the model's `audio` member. The voice items are the voices'
+         names, added by the script (a voice's name is not translated). -->
+    <html:div id="rh-audio" hidden="hidden">
+      <html:h3
+        id="rh-audio-heading"
+        data-l10n-id="research-helper-report-audio-heading"
+        style="font-size: 1em; margin: 0.8em 0 0.3em"
+      />
+      <html:p id="rh-audio-none" hidden="hidden" />
+      <hbox id="rh-audio-choices" align="center">
+        <label
+          id="rh-audio-language-label"
+          control="rh-audio-language"
+          data-l10n-id="research-helper-report-audio-language-label"
+        />
+        <menulist id="rh-audio-language" disabled="true">
+          <menupopup>
+            <menuitem
+              value="en"
+              data-l10n-id="research-helper-report-language-en"
+            />
+            <menuitem
+              value="ko"
+              data-l10n-id="research-helper-report-language-ko"
+            />
+          </menupopup>
+        </menulist>
+        <label
+          id="rh-audio-voice-label"
+          control="rh-audio-voice"
+          data-l10n-id="research-helper-report-audio-voice-label"
+        />
+        <menulist id="rh-audio-voice" disabled="true">
+          <menupopup id="rh-audio-voice-popup" />
+        </menulist>
+      </hbox>
+      <html:p id="rh-audio-source" hidden="hidden" />
+      <hbox id="rh-audio-run" align="center">
+        <button
+          id="rh-audio-generate"
+          data-l10n-id="research-helper-report-audio-generate"
+          disabled="true"
+        />
+        <button
+          id="rh-audio-cancel"
+          data-l10n-id="research-helper-report-audio-cancel"
+          disabled="true"
+        />
+      </hbox>
+      <html:p id="rh-audio-stage" role="status" hidden="hidden" />
+      <html:p id="rh-audio-outcome" role="status" hidden="hidden" />
+      <html:p id="rh-audio-reason" role="alert" hidden="hidden" />
+      <hbox align="center">
+        <button
+          id="rh-audio-save-script"
+          data-l10n-id="research-helper-report-audio-save-script"
+          hidden="true"
+        />
+        <button
+          id="rh-audio-save-audio"
+          data-l10n-id="research-helper-report-audio-save-audio"
+          hidden="true"
+        />
+      </hbox>
+      <html:p id="rh-audio-saved" role="status" hidden="hidden" />
+    </html:div>
   </dialog>
 </window>

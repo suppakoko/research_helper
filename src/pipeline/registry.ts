@@ -175,4 +175,12 @@ export interface PipelineSet {
    * given the adapters and the stores, which `installServices` always passes.
    */
   readonly recommend?: ErasedPipeline;
+  /**
+   * The spoken report (`P6-T16`): `createAudioReportPipeline` in
+   * `./audioReport/audioReportPipeline.ts`, erased like every member; the report
+   * window's session (`P6-T17`) narrows it to `AudioReportPipeline`.
+   * `buildPipelineSet` supplies it when given its dependencies, which
+   * `installServices` always passes. Optional like `trendReport`.
+   */
+  readonly audioReport?: ErasedPipeline;
 }

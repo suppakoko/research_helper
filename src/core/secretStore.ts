@@ -65,6 +65,9 @@ export const SECRET_IDS = [
   "llm.openai",
   "llm.gemini",
   "llm.anthropic",
+  // Unused: Gemini TTS reads the chat key, `llm.gemini` (`GEMINI_SECRET_ID`),
+  // and nothing reads or writes this id (`docs/09` §3.3; owner, `plan/00` §6
+  // item 379; `plan/09` `P6-T16` step 2). Kept so the union stays §1.7's.
   "tts.gemini",
   "source.ncbi",
   "source.semanticscholar",

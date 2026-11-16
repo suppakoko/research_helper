@@ -33,6 +33,15 @@
  * - **No literal human-readable string**, no network call, no preference
  *   write; nothing is logged but an error's name; the file chooser's path is
  *   passed on once and never kept or logged (`docs/09` §2.2).
+ *
+ * ## The audio section (P6-T17; docs/08 §6.4's note of 2026-11-17)
+ *
+ * Drawn from the model's `audio` member and hidden without it. The session's
+ * audio members are called the same way: `audioDescribe()` after `attach`,
+ * `setAudioLanguage` and `setAudioVoice` on a choice (the session writes the
+ * voice back to `tts.voice`), `startAudio`, `cancelAudio`, and the two saves,
+ * each through a save dialog opened here. A larger file's folder dialog is
+ * opened here when the session asks through the sink's `pickFolder`.
  */
 
 /* global Zotero, window, document, ChromeUtils */
@@ -64,7 +73,27 @@ var RHReportWindow = {
     saveNote: "rh-report-save-note",
     exportButton: "rh-report-export",
     copy: "rh-report-copy",
+    // P6-T17: the audio section.
+    audio: "rh-audio",
+    audioNone: "rh-audio-none",
+    audioChoices: "rh-audio-choices",
+    audioLanguage: "rh-audio-language",
+    audioVoice: "rh-audio-voice",
+    audioVoicePopup: "rh-audio-voice-popup",
+    audioSource: "rh-audio-source",
+    audioRun: "rh-audio-run",
+    audioGenerate: "rh-audio-generate",
+    audioCancel: "rh-audio-cancel",
+    audioStage: "rh-audio-stage",
+    audioOutcome: "rh-audio-outcome",
+    audioReason: "rh-audio-reason",
+    audioSaveScript: "rh-audio-save-script",
+    audioSaveAudio: "rh-audio-save-audio",
+    audioSaved: "rh-audio-saved",
   },
+
+  /** The audio section's languages (`tts.language` without `auto`). */
+  audioLanguages: ["en", "ko"],
 
   filePickerModule: "chrome://zotero/content/modules/filePicker.mjs",
 
@@ -79,6 +108,10 @@ var RHReportWindow = {
     previewText: "",
     /** Each element's last line, so an unchanged line is not set again. */
     placed: new Map(),
+    /** P6-T17: an audio run is going (from the model's Cancel audio). */
+    audioRunning: false,
+    /** The voice list last drawn, so it is rebuilt only when it changes. */
+    voicesKey: "",
   },
 
   /** `window.arguments[0]`, or an empty object when opened without one. */
@@ -107,6 +140,22 @@ var RHReportWindow = {
     this.on(this.spec.exportButton, () => this.settle(this.exportMarkdown()));
     this.on(this.spec.copy, () => this.copy());
     this.on(this.spec.shown, () => this.showReport());
+    this.on(this.spec.audioGenerate, () => this.startAudio());
+    this.on(this.spec.audioCancel, () => {
+      this.answer("cancel");
+      this.call("cancelAudio");
+    });
+    this.on(this.spec.audioLanguage, () =>
+      this.callWith("setAudioLanguage", this.selectedAudioLanguage()),
+    );
+    this.on(this.spec.audioVoice, () => {
+      const list = this.el(this.spec.audioVoice);
+      if (list && list.value) {
+        this.callWith("setAudioVoice", list.value);
+      }
+    });
+    this.on(this.spec.audioSaveScript, () => this.settle(this.saveScript()));
+    this.on(this.spec.audioSaveAudio, () => this.settle(this.saveAudio()));
     window.addEventListener(
       "unload",
       () => {
@@ -129,6 +178,11 @@ var RHReportWindow = {
           if (typeof session.attach === "function") {
             this.settle(session.attach(this.sink()));
           }
+          // P6-T17: the audio section reads its report and voices; it is not
+          // waited for, because attach can wait on a paused job's question.
+          if (typeof session.audioDescribe === "function") {
+            this.settle(session.audioDescribe());
+          }
         });
     } else {
       this.ready = Promise.resolve();
@@ -140,6 +194,7 @@ var RHReportWindow = {
     return {
       render: (model) => this.renderRun(model),
       ask: (question) => this.ask(question),
+      pickFolder: () => this.pickFolder(),
     };
   },
 
@@ -178,6 +233,187 @@ var RHReportWindow = {
     this.setDisabled(this.spec.copy, buttons.copy !== true);
     this.setDisabled(this.spec.language, running);
     this.renderReportChoice(model.reportChoice);
+    this.renderAudio(model.audio);
+  },
+
+  /**
+   * P6-T17: the audio section (docs/08 §6.4's note of 2026-11-17). Hidden
+   * when the model has none or says so (`audio.enabled` off).
+   */
+  renderAudio(audio) {
+    const box = this.el(this.spec.audio);
+    if (!box) {
+      return;
+    }
+    box.hidden = !audio || audio.visible !== true;
+    if (box.hidden) {
+      return;
+    }
+    const none = Boolean(audio.none);
+    this.place(this.el(this.spec.audioNone), audio.none);
+    for (const id of [this.spec.audioChoices, this.spec.audioRun]) {
+      const row = this.el(id);
+      if (row) {
+        row.hidden = none;
+      }
+    }
+    this.renderVoices(audio.voices || [], audio.voice);
+    const language = this.el(this.spec.audioLanguage);
+    if (
+      language &&
+      this.audioLanguages.includes(audio.language) &&
+      language.value !== audio.language
+    ) {
+      language.value = audio.language;
+    }
+    this.place(this.el(this.spec.audioSource), audio.source);
+    this.place(this.el(this.spec.audioStage), audio.stage);
+    this.place(this.el(this.spec.audioOutcome), audio.outcome);
+    this.place(this.el(this.spec.audioReason), audio.reason);
+    this.place(this.el(this.spec.audioSaved), audio.saved);
+    const buttons = audio.buttons || {};
+    const offers = audio.offers || {};
+    this.state.audioRunning = buttons.cancel === true;
+    this.setDisabled(this.spec.audioGenerate, buttons.generate !== true);
+    this.setDisabled(this.spec.audioCancel, buttons.cancel !== true);
+    this.setDisabled(this.spec.audioLanguage, buttons.choose !== true);
+    this.setDisabled(this.spec.audioVoice, buttons.choose !== true);
+    this.setOffer(this.spec.audioSaveScript, offers.script, buttons.saveScript);
+    this.setOffer(this.spec.audioSaveAudio, offers.audio, buttons.saveAudio);
+  },
+
+  /** A save button: shown only when offered, enabled only between runs. */
+  setOffer(id, offered, enabled) {
+    const button = this.el(id);
+    if (button) {
+      button.hidden = offered !== true;
+      button.disabled = enabled !== true;
+    }
+  },
+
+  /** The voice list, rebuilt only when it changed; the names are data. */
+  renderVoices(voices, selected) {
+    const list = this.el(this.spec.audioVoice);
+    const popup = this.el(this.spec.audioVoicePopup);
+    if (!list || !popup) {
+      return;
+    }
+    const key = JSON.stringify(voices);
+    if (this.state.voicesKey !== key) {
+      this.state.voicesKey = key;
+      while (popup.firstChild) {
+        popup.firstChild.remove();
+      }
+      for (const voice of voices) {
+        const item = document.createXULElement("menuitem");
+        item.setAttribute("value", String(voice.id));
+        item.setAttribute("label", String(voice.label));
+        popup.appendChild(item);
+      }
+    }
+    if (selected && list.value !== selected) {
+      list.value = selected;
+    }
+  },
+
+  /** "Generate audio": the session runs the job; the model redraws. */
+  startAudio() {
+    const session = this.io.session;
+    if (
+      this.state.audioRunning ||
+      !session ||
+      typeof session.startAudio !== "function"
+    ) {
+      return;
+    }
+    const voiceList = this.el(this.spec.audioVoice);
+    const voice = voiceList ? voiceList.value : "";
+    if (!voice) {
+      return;
+    }
+    this.state.audioRunning = true;
+    this.setDisabled(this.spec.audioGenerate, true);
+    this.settle(
+      session.startAudio(
+        { language: this.selectedAudioLanguage(), voice },
+        this.sink(),
+      ),
+    );
+  },
+
+  /** The audio language chosen, one of {@link audioLanguages}. */
+  selectedAudioLanguage() {
+    const list = this.el(this.spec.audioLanguage);
+    const value = list ? list.value : undefined;
+    return this.audioLanguages.includes(value) ? value : "en";
+  },
+
+  /** FR-43: the script as a text file, to a path chosen here, passed once. */
+  async saveScript() {
+    const session = this.io.session;
+    if (!session || typeof session.saveScript !== "function") {
+      return;
+    }
+    const path = await this.pickSavePath({
+      suggested:
+        typeof session.scriptFileName === "function"
+          ? session.scriptFileName()
+          : undefined,
+      buttonId: this.spec.audioSaveScript,
+      extension: "txt",
+      textFilter: true,
+    });
+    if (path) {
+      await session.saveScript(path);
+    }
+  },
+
+  /** FR-40: the held audio as a WAV file, to a path chosen here, passed once. */
+  async saveAudio() {
+    const session = this.io.session;
+    if (!session || typeof session.saveAudio !== "function") {
+      return;
+    }
+    const path = await this.pickSavePath({
+      suggested:
+        typeof session.audioFileName === "function"
+          ? session.audioFileName()
+          : undefined,
+      buttonId: this.spec.audioSaveAudio,
+      // "WAV" is a format name and is not translated (`docs/08` §10.3).
+      filterName: "WAV",
+      filter: "*.wav",
+      extension: "wav",
+    });
+    if (path) {
+      await session.saveAudio(path);
+    }
+  },
+
+  /**
+   * P6-T13 step 4: the folder for a linked audio file. Every failure and a
+   * cancel are `""`; nothing is logged, because a picker's message can quote
+   * the path, and the path is not kept here.
+   */
+  async pickFolder() {
+    try {
+      const Picker = this.filePickerClass();
+      if (!Picker) {
+        return "";
+      }
+      const picker = new Picker();
+      const button = this.el(this.spec.audioGenerate);
+      const title =
+        (button && button.getAttribute("label")) || document.title || "";
+      picker.init(window, title, picker.modeGetFolder);
+      const result = await picker.show();
+      if (result !== picker.returnOK) {
+        return "";
+      }
+      return typeof picker.file === "string" ? picker.file : "";
+    } catch {
+      return "";
+    }
   },
 
   /** "Report shown": only when a run gave two reports (docs/08 §6.3). */
@@ -332,27 +568,53 @@ var RHReportWindow = {
    * picker's message can quote the path.
    */
   async pickExportPath(suggested) {
+    return this.pickSavePath({
+      suggested,
+      buttonId: this.spec.exportButton,
+      // "Markdown" is a format name and is not translated (`docs/08` §10.3).
+      filterName: "Markdown",
+      filter: "*.md",
+      extension: "md",
+    });
+  },
+
+  /** Zotero's `FilePicker` class, or `undefined` outside a chrome window. */
+  filePickerClass() {
+    const utils = typeof ChromeUtils === "undefined" ? undefined : ChromeUtils;
+    if (!utils || typeof utils.importESModule !== "function") {
+      return undefined;
+    }
+    const module = utils.importESModule(this.filePickerModule);
+    const Picker = module ? module.FilePicker : undefined;
+    return typeof Picker === "function" ? Picker : undefined;
+  },
+
+  /**
+   * One save dialog (the export, and since P6-T17 the script and the audio):
+   * the title is the button's label; a named filter, or the picker's own
+   * text-file filter, which it labels itself. Every failure is `""`.
+   */
+  async pickSavePath(options) {
     try {
-      const utils =
-        typeof ChromeUtils === "undefined" ? undefined : ChromeUtils;
-      if (!utils || typeof utils.importESModule !== "function") {
-        return "";
-      }
-      const module = utils.importESModule(this.filePickerModule);
-      const Picker = module ? module.FilePicker : undefined;
-      if (typeof Picker !== "function") {
+      const Picker = this.filePickerClass();
+      if (!Picker) {
         return "";
       }
       const picker = new Picker();
-      const button = this.el(this.spec.exportButton);
+      const button = this.el(options.buttonId);
       const title =
         (button && button.getAttribute("label")) || document.title || "";
       picker.init(window, title, picker.modeSave);
-      // "Markdown" is a format name and is not translated (`docs/08` §10.3).
-      picker.appendFilter("Markdown", "*.md");
-      picker.defaultExtension = "md";
-      if (suggested) {
-        picker.defaultString = suggested;
+      if (options.textFilter === true) {
+        if (typeof picker.appendFilters === "function") {
+          picker.appendFilters(picker.filterText);
+        }
+      } else if (options.filterName && options.filter) {
+        picker.appendFilter(options.filterName, options.filter);
+      }
+      picker.defaultExtension = options.extension;
+      if (options.suggested) {
+        picker.defaultString = options.suggested;
       }
       const result = await picker.show();
       if (result !== picker.returnOK && result !== picker.returnReplace) {
@@ -478,6 +740,18 @@ var RHReportWindow = {
     try {
       if (session && typeof session[name] === "function") {
         session[name]();
+      }
+    } catch (error) {
+      this.debug("session." + name + " threw", error);
+    }
+  },
+
+  /** Call a session member with one argument; a throw is logged by name. */
+  callWith(name, value) {
+    const session = this.io.session;
+    try {
+      if (session && typeof session[name] === "function") {
+        session[name](value);
       }
     } catch (error) {
       this.debug("session." + name + " threw", error);

@@ -998,6 +998,34 @@ export interface ReportStore {
    * @throws StorageError when the row is not a report or its file is gone
    */
   get(id: string): Promise<TrendReport | undefined>;
+  /**
+   * The newest stored report of a collection, by `generatedAtEpochMs`: the
+   * two records of a `both` run tie, and the smaller `id` wins. `undefined`
+   * when the collection has none. Reader: the collection menu's "Generate
+   * Audio Report…" (`plan/09` `P6-T16` step 5, `P6-T17`).
+   *
+   * @throws StorageError as {@link ReportStore.get} does
+   */
+  latestForCollection(
+    libraryID: number,
+    collectionKey: string,
+  ): Promise<TrendReport | undefined>;
+  /**
+   * The other record of `report`'s `reportLanguage` `both` run: the same
+   * library, collection and `generatedAtEpochMs`, another id and another
+   * language (`docs/07` §12.6's note of 2026-11-17, point 5); `undefined`
+   * when there is none. Nothing else links the two records
+   * (`plan/reports/P6-T08.md`). Reader: the audio job
+   * (`src/pipeline/audioReport/audioReportPipeline.ts`, `P6-T16`).
+   *
+   * @throws StorageError as {@link ReportStore.get} does
+   */
+  companionOf(
+    report: Pick<
+      TrendReport,
+      "id" | "libraryID" | "collectionKey" | "generatedAtEpochMs" | "language"
+    >,
+  ): Promise<TrendReport | undefined>;
 }
 
 const UPSERT_REPORT =
@@ -1009,6 +1037,19 @@ const UPSERT_REPORT =
   "generated_at = excluded.generated_at";
 
 const SELECT_REPORT = "SELECT json FROM report WHERE id = ?";
+
+const SELECT_LATEST_REPORT =
+  "SELECT id FROM report WHERE library_id = ? AND collection_key = ? " +
+  "ORDER BY generated_at DESC, id ASC LIMIT 1";
+
+const SELECT_SAME_RUN_REPORTS =
+  "SELECT id FROM report WHERE library_id = ? AND collection_key = ? " +
+  "AND generated_at = ? AND id <> ? ORDER BY id ASC";
+
+/** A row's `id` column, as a string. */
+function reportIdOf(row: unknown): string {
+  return String((row as Record<string, unknown>)["id"]);
+}
 
 /** A parsed `json` column, checked for the members every reader needs. */
 function storedReportFrom(result: unknown): Omit<TrendReport, "markdown"> {
@@ -1057,7 +1098,7 @@ export function createReportStore(
   db: SqlConnection,
   files: ReportMarkdownFiles = createReportMarkdownFiles(),
 ): ReportStore {
-  return {
+  const store: ReportStore = {
     async put(report: TrendReport): Promise<TrendReport> {
       if (!isReportId(report.id) || report.collectionKey === "") {
         throw new RangeError(
@@ -1104,7 +1145,45 @@ export function createReportStore(
       }
       return { ...record, markdown };
     },
+
+    async latestForCollection(
+      libraryID: number,
+      collectionKey: string,
+    ): Promise<TrendReport | undefined> {
+      const rows = resultRows(
+        await db.queryAsync(
+          SELECT_LATEST_REPORT,
+          [libraryID, collectionKey],
+          QUIET,
+        ),
+      );
+      const first = rows[0];
+      return first === undefined ? undefined : store.get(reportIdOf(first));
+    },
+
+    async companionOf(report): Promise<TrendReport | undefined> {
+      const rows = resultRows(
+        await db.queryAsync(
+          SELECT_SAME_RUN_REPORTS,
+          [
+            report.libraryID,
+            report.collectionKey,
+            report.generatedAtEpochMs,
+            report.id,
+          ],
+          QUIET,
+        ),
+      );
+      for (const row of rows) {
+        const other = await store.get(reportIdOf(row));
+        if (other !== undefined && other.language !== report.language) {
+          return other;
+        }
+      }
+      return undefined;
+    },
   };
+  return store;
 }
 
 // ---------------------------------------------------------------------------

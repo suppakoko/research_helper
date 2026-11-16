@@ -222,6 +222,7 @@ import {
   type HostLimiterRegistry,
 } from "../core/rateLimit/hostLimiter";
 import type { SecretStore } from "../core/secretStore";
+import { GEMINI_SECRET_ID } from "../llm/gemini/geminiProvider";
 import type { SecretBackendChoice } from "../ui/dialogs/secretBackendDialog";
 import type { PipelineRegistry } from "../pipeline/registry";
 import type { OpenRouterProvider } from "../llm/openrouter/openRouterProvider";
@@ -2326,6 +2327,16 @@ export async function installServices(
       // runs on a deferred surface a report window can attach to; a pause
       // waits for that window instead of being answered "stop".
       surfaces: (jobId) => resumedRunner.surfaceOf(jobId),
+    },
+    // `P6-T16`: the report store, the TTS client `registerProviders` built
+    // (the one construction site, `plan/09` §0.2), the chat key's secret id
+    // for the fingerprint only (owner, `plan/00` §6 item 379), and the user's
+    // price overrides; the queue and the rest are the summarize deps'.
+    audioReport: {
+      reports: () => database.reports(),
+      tts: providers.tts,
+      ttsKey: async () => secrets?.get(GEMINI_SECRET_ID),
+      priceOverrides: () => database.prices.list(),
     },
   });
   // The per-job context factory is built after step 8, because a queued

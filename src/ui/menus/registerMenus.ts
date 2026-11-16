@@ -90,6 +90,7 @@
 
 import { config } from "../../../package.json";
 import {
+  L10N_MENU_COLLECTION_AUDIO_REPORT,
   L10N_MENU_COLLECTION_RECOMMEND,
   L10N_MENU_COLLECTION_REMOVE_NOTES,
   L10N_MENU_COLLECTION_REPORT,
@@ -207,6 +208,22 @@ export interface SearchMenuCommands {
    * (`src/ui/panes/reportWindow.ts`). Absent, the entry is not in the submenu.
    */
   readonly openReportWindow?: (
+    host: MenuHostWindow,
+    collectionID: number,
+  ) => unknown;
+  /**
+   * The hidden `audio.enabled` (`P6-T17`; `docs/07` §8.5). Read when the
+   * options are built and at each `onShowing`, as {@link recommendEnabled}.
+   * Absent or false, "Generate Audio Report…" is not in the submenu.
+   */
+  readonly audioEnabled?: () => boolean;
+  /**
+   * "Generate Audio Report…" (`P6-T17`; `docs/08` §6.4's note of 2026-11-17):
+   * opens, or raises, the collection's report window, whose audio section
+   * works on the newest stored report; it starts no job. `src/bootstrap/registerUI.ts`
+   * binds it. Absent, the entry is not in the submenu.
+   */
+  readonly openAudioReportWindow?: (
     host: MenuHostWindow,
     collectionID: number,
   ) => unknown;
@@ -535,6 +552,41 @@ function recommendItems(
 }
 
 /**
+ * "Generate Audio Report…" (`P6-T17`), right after the report entry, while
+ * `audio.enabled` is on and something can open the window: absent otherwise,
+ * not disabled (`plan/08` §0.2 item 25). `onShowing` reads the preference
+ * again, for a change since registration, as {@link recommendItem} does.
+ */
+function audioReportItems(
+  commands: SearchMenuCommands,
+): readonly _ZoteroTypes.MenuManager.MenuData<_ZoteroTypes.MenuManager.LibraryMenuContext>[] {
+  const openWindow = commands.openAudioReportWindow;
+  if (openWindow === undefined || commands.audioEnabled?.() !== true) {
+    return [];
+  }
+  return [
+    {
+      ...collectionCommandItem(
+        commands,
+        L10N_MENU_COLLECTION_AUDIO_REPORT,
+        "Generate Audio Report",
+        openWindow,
+      ),
+      onShowing: (_event, context) => {
+        try {
+          context.setVisible(
+            commands.audioEnabled?.() === true &&
+              singleCollectionId(context) !== undefined,
+          );
+        } catch (error) {
+          commands.onError("Audio report entry visibility check failed", error);
+        }
+      },
+    },
+  ];
+}
+
+/**
  * One of the two LLM-job entries above the separator (`P3-T29`; `docs/08`
  * §2.5's note of 2026-10-29): the command with the one selected collection
  * and the window that owns the clicked element. The same exactly-one refusal
@@ -600,6 +652,7 @@ function llmJobItems(
       ),
     );
   }
+  items.push(...audioReportItems(commands));
   if (commands.openSummarizeWindow !== undefined) {
     items.push(
       collectionCommandItem(

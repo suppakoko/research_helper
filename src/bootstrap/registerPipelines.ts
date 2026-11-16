@@ -164,6 +164,18 @@ import {
   type SummaryRunCollection,
   type SummaryRunItemSnapshot,
 } from "../zotero/notes";
+import {
+  createZoteroAudioAttachments,
+  type ZoteroAudioAttachments,
+} from "../zotero/attachments";
+import {
+  createAudioReportPipeline,
+  type AudioReportPipelineDeps,
+} from "../pipeline/audioReport/audioReportPipeline";
+import type {
+  CitationAuthorRecord,
+  CitationSource,
+} from "../pipeline/audioReport/citationMap";
 
 export { DEFAULT_CHUNK_SIZE };
 
@@ -719,6 +731,66 @@ export interface PipelineConstructionDeps {
    * unit test of the graph, and then no `recommend` pipeline is registered.
    */
   readonly recommend?: RecommendConstructionDeps;
+  /**
+   * The audio job's dependencies (`P6-T16`): the report store, the TTS client
+   * `registerProviders` built, the Gemini key source, the price overrides and the
+   * window's surfaces; the queue, prices, base URLs and model descriptions are the
+   * summarize pipeline's. Absent in a unit test of the graph, and then no
+   * `audioReport` pipeline is registered.
+   */
+  readonly audioReport?: AudioReportConstructionDeps;
+}
+
+/** {@link PipelineConstructionDeps.audioReport}. */
+export interface AudioReportConstructionDeps extends Pick<
+  AudioReportPipelineDeps,
+  | "reports"
+  | "tts"
+  | "ttsKey"
+  | "priceOverrides"
+  | "egressAcknowledged"
+  | "tierPrefs"
+  | "tierWriter"
+  | "linkedFolder"
+  | "surfaces"
+> {
+  /** The Zotero port; {@link createZoteroAudioLibrary} by default. */
+  readonly library?: ZoteroAudioLibrary;
+}
+
+/** The audio job's Zotero port: the citation map's read and the attachment writer. */
+export interface ZoteroAudioLibrary {
+  readonly citations: CitationSource;
+  /** Built on first use: the adapter reads `Zotero.DataDirectory.dir`. */
+  readonly attachments: () => ZoteroAudioAttachments;
+}
+
+/**
+ * The audio job's Zotero port (`P6-T16`): the cited items' first author, creator
+ * count and year through `readItemsForSummary` (`src/zotero/notes.ts`), and
+ * `P6-T13`'s `createZoteroAudioAttachments`, built once, on first use. Here, so
+ * the pipeline names no `Zotero` global.
+ */
+export function createZoteroAudioLibrary(): ZoteroAudioLibrary {
+  let attachments: ZoteroAudioAttachments | undefined;
+  return {
+    citations: {
+      async readCitations(libraryID, itemKeys) {
+        const read = await readItemsForSummary(libraryID, itemKeys);
+        const out = new Map<string, CitationAuthorRecord>();
+        for (const item of read.items) {
+          out.set(item.key, {
+            itemKey: item.key,
+            firstAuthorSurname: item.firstAuthorFamily,
+            authorCount: item.creators.length,
+            year: yearOf(item.date),
+          });
+        }
+        return out;
+      },
+    },
+    attachments: () => (attachments ??= createZoteroAudioAttachments()),
+  };
 }
 
 /** {@link PipelineConstructionDeps.recommend}. */
@@ -850,6 +922,51 @@ export function buildPipelineSet(deps: PipelineConstructionDeps): PipelineSet {
       recommend: createRecommendPipeline(
         recommendDepsFrom(deps.recommend, pools),
       ),
+    }),
+    // `P6-T16`: the audio job's one construction site.
+    ...(deps.audioReport !== undefined && {
+      audioReport: createAudioReportPipeline(
+        audioReportDepsFrom(deps.audioReport, deps.summarize, pools),
+      ),
+    }),
+  };
+}
+
+/**
+ * The audio job's deps from the composition root's: its own, beside the summarize
+ * pipeline's queue (with `list`, for the first-use fingerprints), prompts, prices,
+ * base URLs and model descriptions, and the `llm` pool and job admission.
+ */
+function audioReportDepsFrom(
+  given: AudioReportConstructionDeps,
+  shared: SummarizeConstructionDeps | undefined,
+  pools: WorkerPools,
+): AudioReportPipelineDeps {
+  const summarize = summarizeDepsFrom(shared, pools);
+  const { library, ...own } = given;
+  const zotero = library ?? createZoteroAudioLibrary();
+  const list: JobQueue["list"] = (filter) => {
+    if (shared === undefined) {
+      return Promise.reject(
+        new ConfigurationError(
+          "the audio pipeline was built without a job queue; nothing was sent",
+        ),
+      );
+    }
+    return shared.jobs().list(filter);
+  };
+  return {
+    ...own,
+    prompts: summarize.prompts,
+    queue: { ...summarize.queue, list },
+    citations: zotero.citations,
+    attachments: zotero.attachments,
+    prices: summarize.prices,
+    baseUrls: summarize.baseUrls,
+    pool: pools.llm,
+    admission: pools.admission,
+    ...(summarize.modelInfo !== undefined && {
+      modelInfo: summarize.modelInfo,
     }),
   };
 }

@@ -14,6 +14,11 @@
  *   {@link openReportWindow}.
  * - `addon/content/reportWindow.js` (the window) calls the session through
  *   `window.arguments[0]`.
+ * - *Since `P6-T17`:* the collection menu's "Generate Audio Report…"
+ *   (`SearchMenuCommands.openAudioReportWindow`, behind the hidden
+ *   `audio.enabled`) opens this same window; its audio section is
+ *   `../viewModels/reportViewModel.ts`'s `buildAudioSectionModel`, driven by
+ *   the session's audio members.
  *
  * ## The run (`P4-T20`, 2026-11-02)
  *
@@ -30,13 +35,17 @@
 
 import { config } from "../../../package.json";
 import type { ReportWindowMessageId } from "../../i18n/keys";
+import type { AudioLanguage } from "../../model/audio";
 import type {
   ReportLanguageChoice,
   ReportQuestion,
   ReportWindowLineOut,
   ReportWindowRunModel,
 } from "../viewModels/reportViewModel";
-import { REPORT_RUN_L10N } from "../viewModels/reportViewModel";
+import {
+  AUDIO_SECTION_L10N,
+  REPORT_RUN_L10N,
+} from "../viewModels/reportViewModel";
 
 // ===========================================================================
 // 1. Strings and window constants
@@ -64,6 +73,13 @@ export const REPORT_WINDOW_L10N = {
   // `P4-T20`: the run's ids (`reportViewModel.ts`).
   ...REPORT_RUN_L10N,
 } as const satisfies Record<string, ReportWindowMessageId>;
+
+/**
+ * The audio section's ids (`P6-T17`; `docs/08` §6.4's note of 2026-11-17),
+ * kept apart from {@link REPORT_WINDOW_L10N} because two of its keys (`cancel`,
+ * `generate`) would collide with the run's.
+ */
+export const REPORT_WINDOW_AUDIO_L10N = AUDIO_SECTION_L10N;
 
 /** The document the window loads (`addon/content/reportWindow.xhtml`). */
 export const REPORT_WINDOW_URL = `chrome://${config.addonRef}/content/reportWindow.xhtml`;
@@ -190,6 +206,18 @@ export interface ReportWindowSink {
   ask(
     question: ReportQuestion<ReportWindowLineOut>,
   ): Promise<"resume" | "cancel">;
+  /**
+   * The folder dialog for a linked audio file (`P6-T13` step 4; `P6-T17`):
+   * the chosen folder, or `""` when the user cancels. The path is handed on
+   * once and never kept or logged. Absent, no folder can be chosen.
+   */
+  pickFolder?(): Promise<string>;
+}
+
+/** What "Generate audio" sends: the section's two choices. */
+export interface AudioStartOptions {
+  readonly language: AudioLanguage;
+  readonly voice: string;
 }
 
 /**
@@ -233,6 +261,32 @@ export interface ReportWindowSession {
    * paused job goes on waiting for the next window.
    */
   closed(): void;
+
+  // --- The audio section (`P6-T17`; `docs/08` §6.4's note of 2026-11-17).
+  // Every member is optional for the window, which checks before calling.
+
+  /**
+   * Read what the section needs: `audio.enabled`, the report it works on (the
+   * window's run's, else `ReportStore.latestForCollection`) and the voices;
+   * then draw. Called by the window once the session is attached.
+   */
+  audioDescribe(): Promise<void>;
+  /** The audio language changed: the source line follows; never written back. */
+  setAudioLanguage(language: AudioLanguage): void;
+  /** The voice changed: written back to `tts.voice` at once. */
+  setAudioVoice(voice: string): void;
+  /** "Generate audio": the `audioReport` job; resolves when it has ended. */
+  startAudio(options: AudioStartOptions, sink: ReportWindowSink): Promise<void>;
+  /** "Cancel audio": the audio is discarded, a written script is kept. */
+  cancelAudio(): void;
+  /** The save dialog's suggested name for the script, once one is offered. */
+  scriptFileName(): string | undefined;
+  /** FR-43: write the script to a path the user chose; never kept or logged. */
+  saveScript(path: string): Promise<void>;
+  /** The save dialog's suggested name for the audio, once it is offered. */
+  audioFileName(): string | undefined;
+  /** FR-40: write the held audio to a path the user chose; never kept or logged. */
+  saveAudio(path: string): Promise<void>;
 }
 
 /** What the window receives as `window.arguments[0]`. */
@@ -241,7 +295,6 @@ export interface ReportWindowArgs {
   /** The ids the script needs for its own chrome (title, Close). */
   readonly l10n: typeof REPORT_WINDOW_L10N;
 }
-
 /** The window `openDialog` returns: focused here, closed by the host. */
 export interface ReportWindowHandle {
   focus(): void;

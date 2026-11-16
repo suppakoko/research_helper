@@ -16,10 +16,38 @@ import {
   type TrendReportStageKey,
 } from "../../../src/pipeline/trendReport/trendReportPipeline";
 import {
+  L10N_AUDIO_TIER_REFUSED,
+  L10N_MENU_COLLECTION_AUDIO_REPORT,
+  L10N_MENU_COLLECTION_REPORT,
+  L10N_MENU_COLLECTION_RERUN,
+  L10N_MENU_COLLECTION_SEARCH_IMPORT,
+  REPORT_WINDOW_MESSAGE_IDS,
+} from "../../../src/i18n/keys";
+import {
+  collectionMenuOptions,
+  type SearchMenuCommands,
+} from "../../../src/ui/menus/registerMenus";
+import type {
+  AudioRefusalReason,
+  AudioReportRunView,
+} from "../../../src/pipeline/audioReport/audioReportPipeline";
+import {
+  REPORT_WINDOW_AUDIO_L10N,
   REPORT_WINDOW_L10N,
   type ReportWindowSink,
 } from "../../../src/ui/panes/reportWindow";
 import {
+  AUDIO_SECTION_L10N,
+  IDLE_AUDIO_SECTION,
+  audioScriptSourceLanguage,
+  buildAudioSectionModel,
+  initialAudioVoice,
+  reduceAudioSection,
+  windowAudioModel,
+  type AudioSectionEvent,
+  type AudioSectionReport,
+  type AudioSectionState,
+  type AudioVoiceOption,
   IDLE_REPORT_RUN,
   REPORT_ROW_STAGES,
   REPORT_RUN_L10N,
@@ -969,5 +997,520 @@ describe("P4-T20 — the window's ids", () => {
       ask: () => Promise.resolve("cancel"),
     };
     expect(typeof sink.render).toBe("function");
+  });
+});
+
+describe("P6-T17 — the audio section (docs/08 §6.4's note of 2026-11-17)", () => {
+  const REPORT_EN: AudioSectionReport = {
+    id: "report-en",
+    language: "en",
+    companionLanguage: undefined,
+  };
+  const VOICES: readonly AudioVoiceOption[] = [
+    { id: "Charon", label: "Charon" },
+    { id: "Kore", label: "Kore" },
+  ];
+  const NONE = { script: false, audio: false };
+  const NO_BUTTONS = {
+    generate: false,
+    cancel: false,
+    choose: false,
+    saveScript: false,
+    saveAudio: false,
+  };
+  const IDLE = { reportRunning: false };
+
+  function fold(
+    from: AudioSectionState,
+    ...events: AudioSectionEvent[]
+  ): AudioSectionState {
+    return events.reduce(reduceAudioSection, from);
+  }
+
+  /** `null`: the lookup found no stored report. */
+  function ready(
+    found: AudioSectionReport | null = REPORT_EN,
+  ): AudioSectionState {
+    const report = found ?? undefined;
+    return fold(
+      IDLE_AUDIO_SECTION,
+      { kind: "audio-enabled", enabled: true },
+      { kind: "audio-report", report, language: "en" },
+      { kind: "audio-voices", voices: VOICES, voice: "Kore" },
+    );
+  }
+
+  function synthesizing(done: number, total: number): AudioReportRunView {
+    return { stage: "Synthesizing", language: "ko", chunk: { done, total } };
+  }
+
+  it("is hidden while audio.enabled is off, and offers nothing", () => {
+    const off = reduceAudioSection(ready(), {
+      kind: "audio-enabled",
+      enabled: false,
+    });
+    expect(off.enabled).toBe(false);
+    const model = buildAudioSectionModel(off, IDLE);
+    expect(model.visible).toBe(false);
+    expect(model.buttons).toEqual(NO_BUTTONS);
+    expect(
+      buildAudioSectionModel(IDLE_AUDIO_SECTION, IDLE).visible,
+      "off until the session says otherwise",
+    ).toBe(false);
+  });
+
+  it("with no stored report it says so and offers nothing (Do step 2)", () => {
+    const state = ready(null);
+    const model = buildAudioSectionModel(state, IDLE);
+    expect(model.visible).toBe(true);
+    expect(model.none).toEqual({ id: AUDIO_SECTION_L10N.none });
+    expect(model.language).toBeUndefined();
+    expect(model.source).toBeUndefined();
+    expect(model.buttons).toEqual(NO_BUTTONS);
+    // A language chosen without a report changes nothing.
+    expect(
+      reduceAudioSection(state, { kind: "audio-language", language: "ko" }),
+    ).toBe(state);
+  });
+
+  it("says nothing about a missing report before the lookup answers", () => {
+    const state = fold(IDLE_AUDIO_SECTION, {
+      kind: "audio-enabled",
+      enabled: true,
+    });
+    expect(buildAudioSectionModel(state, IDLE).none).toBeUndefined();
+  });
+
+  it("a stored English report with ko chosen shows the source line", () => {
+    const english = buildAudioSectionModel(ready(), IDLE);
+    expect(english.source).toBeUndefined();
+    expect(english.none).toBeUndefined();
+    expect(english.buttons.generate).toBe(true);
+    expect(english.buttons.choose).toBe(true);
+
+    const korean = buildAudioSectionModel(
+      reduceAudioSection(ready(), { kind: "audio-language", language: "ko" }),
+      IDLE,
+    );
+    expect(korean.language).toBe("ko");
+    expect(korean.source).toEqual({
+      id: AUDIO_SECTION_L10N.source,
+      args: { script: "ko", report: "en" },
+    });
+  });
+
+  it("no source line when the same run stored a report in the chosen language", () => {
+    const companion: AudioSectionReport = {
+      ...REPORT_EN,
+      companionLanguage: "ko",
+    };
+    const model = buildAudioSectionModel(
+      reduceAudioSection(ready(companion), {
+        kind: "audio-language",
+        language: "ko",
+      }),
+      IDLE,
+    );
+    expect(model.source).toBeUndefined();
+    expect(audioScriptSourceLanguage(companion, "ko")).toBe("ko");
+    expect(audioScriptSourceLanguage(REPORT_EN, "ko")).toBe("en");
+    expect(audioScriptSourceLanguage(REPORT_EN, "en")).toBe("en");
+    expect(
+      audioScriptSourceLanguage(
+        { id: "r", language: "ko", companionLanguage: "en" },
+        "en",
+      ),
+    ).toBe("en");
+  });
+
+  it("starts the voice on tts.voice when listed, else the first voice", () => {
+    expect(initialAudioVoice(VOICES, "Kore")).toBe("Kore");
+    expect(initialAudioVoice(VOICES, "Puck")).toBe("Charon");
+    expect(initialAudioVoice([], "Kore")).toBeUndefined();
+    // A voice not listed is refused; a listed one is taken.
+    const state = ready();
+    expect(
+      reduceAudioSection(state, { kind: "audio-voice", voice: "Puck" }),
+    ).toBe(state);
+    expect(
+      reduceAudioSection(state, { kind: "audio-voice", voice: "Charon" }).voice,
+    ).toBe("Charon");
+  });
+
+  it("generate waits for a voice", () => {
+    const noVoice = fold(
+      IDLE_AUDIO_SECTION,
+      { kind: "audio-enabled", enabled: true },
+      { kind: "audio-report", report: REPORT_EN, language: "en" },
+    );
+    const model = buildAudioSectionModel(noVoice, IDLE);
+    expect(model.buttons.generate).toBe(false);
+    expect(model.buttons.choose).toBe(true);
+  });
+
+  it("generate is disabled while the report's own run is going (point 5)", () => {
+    const model = buildAudioSectionModel(ready(), { reportRunning: true });
+    expect(model.buttons.generate).toBe(false);
+    expect(model.buttons.choose).toBe(true);
+  });
+
+  it("progress: one line by stage, chunk n of N while synthesizing", () => {
+    const started = reduceAudioSection(ready(), { kind: "audio-started" });
+    const first = buildAudioSectionModel(started, IDLE);
+    expect(first.stage).toEqual({
+      id: AUDIO_SECTION_L10N.stage,
+      args: { stage: "checking", done: 0, total: 0 },
+    });
+    expect(first.buttons).toEqual({ ...NO_BUTTONS, cancel: true });
+    const chunk = buildAudioSectionModel(
+      reduceAudioSection(started, {
+        kind: "audio-view",
+        view: synthesizing(2, 5),
+      }),
+      IDLE,
+    );
+    expect(chunk.stage).toEqual({
+      id: AUDIO_SECTION_L10N.stage,
+      args: { stage: "synthesizing", done: 2, total: 5 },
+    });
+    for (const [stage, key] of [
+      ["checking", "checking"],
+      ["Scripting", "scripting"],
+      ["AwaitingConfirm", "confirming"],
+      ["Attaching", "attaching"],
+      ["waiting", "waiting"],
+      ["done", "done"],
+    ] as const) {
+      const line = buildAudioSectionModel(
+        reduceAudioSection(started, {
+          kind: "audio-view",
+          // A chunk outside Synthesizing is not shown.
+          view: { stage, language: "en", chunk: { done: 1, total: 3 } },
+        }),
+        IDLE,
+      ).stage;
+      expect(line).toEqual({
+        id: AUDIO_SECTION_L10N.stage,
+        args: { stage: key, done: 0, total: 0 },
+      });
+    }
+    // A view after the end is ignored, and the end has no progress line.
+    const ended = reduceAudioSection(started, {
+      kind: "audio-finished",
+      outcome: "succeeded",
+      offers: NONE,
+    });
+    expect(
+      reduceAudioSection(ended, {
+        kind: "audio-view",
+        view: synthesizing(1, 2),
+      }),
+    ).toBe(ended);
+    const done = buildAudioSectionModel(ended, IDLE);
+    expect(done.stage).toBeUndefined();
+    expect(done.outcome).toEqual({
+      id: AUDIO_SECTION_L10N.outcome,
+      args: { outcome: "succeeded" },
+    });
+    expect(done.reason).toBeUndefined();
+  });
+
+  it("choices and a new report while running are ignored", () => {
+    const started = reduceAudioSection(ready(), { kind: "audio-started" });
+    expect(
+      reduceAudioSection(started, { kind: "audio-language", language: "ko" }),
+    ).toBe(started);
+    expect(
+      reduceAudioSection(started, { kind: "audio-voice", voice: "Charon" }),
+    ).toBe(started);
+    expect(
+      reduceAudioSection(started, {
+        kind: "audio-report",
+        report: undefined,
+        language: "en",
+      }),
+    ).toBe(started);
+  });
+
+  it("cancel: the outcome line, no reason, and the offers the run made", () => {
+    const cancelled = fold(
+      ready(),
+      { kind: "audio-started" },
+      { kind: "audio-view", view: synthesizing(3, 5) },
+      {
+        kind: "audio-finished",
+        outcome: "cancelled",
+        failure: { messageKey: "rh-error-cancelled", messageArgs: {} },
+        offers: { script: true, audio: false },
+      },
+    );
+    const model = buildAudioSectionModel(cancelled, IDLE);
+    expect(model.stage).toBeUndefined();
+    expect(model.outcome).toEqual({
+      id: AUDIO_SECTION_L10N.outcome,
+      args: { outcome: "cancelled" },
+    });
+    expect(model.reason).toBeUndefined();
+    expect(model.offers).toEqual({ script: true, audio: false });
+    expect(model.buttons).toEqual({
+      generate: true,
+      cancel: false,
+      choose: true,
+      saveScript: true,
+      saveAudio: false,
+    });
+  });
+
+  it("each save offer, its result line, and a cancelled save dialog", () => {
+    const failed = fold(
+      ready(),
+      { kind: "audio-started" },
+      {
+        kind: "audio-finished",
+        outcome: "failed",
+        failure: {
+          messageKey: "rh-error-tts",
+          messageArgs: { reason: "attach" },
+        },
+        offers: { script: true, audio: true },
+      },
+    );
+    const offered = buildAudioSectionModel(failed, IDLE);
+    expect(offered.buttons.saveScript).toBe(true);
+    expect(offered.buttons.saveAudio).toBe(true);
+    expect(offered.saved).toBeUndefined();
+    expect(offered.reason).toEqual({
+      bundle: "main",
+      id: "rh-error-tts",
+      args: { reason: "attach" },
+    });
+
+    const script = reduceAudioSection(failed, {
+      kind: "audio-saved",
+      saveKind: "script",
+      outcome: "saved",
+    });
+    expect(buildAudioSectionModel(script, IDLE).saved).toEqual({
+      id: AUDIO_SECTION_L10N.saved,
+      args: { kind: "script", outcome: "saved" },
+    });
+    const audio = reduceAudioSection(script, {
+      kind: "audio-saved",
+      saveKind: "audio",
+      outcome: "failed",
+    });
+    expect(buildAudioSectionModel(audio, IDLE).saved).toEqual({
+      id: AUDIO_SECTION_L10N.saved,
+      args: { kind: "audio", outcome: "failed" },
+    });
+    // The save dialog cancelled: nothing changes.
+    expect(
+      reduceAudioSection(audio, {
+        kind: "audio-saved",
+        saveKind: "audio",
+        outcome: "no-path",
+      }),
+    ).toBe(audio);
+    // The next run clears the offers and the saved line.
+    const next = buildAudioSectionModel(
+      reduceAudioSection(audio, { kind: "audio-started" }),
+      IDLE,
+    );
+    expect(next.offers).toEqual(NONE);
+    expect(next.saved).toBeUndefined();
+    expect(next.outcome).toBeUndefined();
+    expect(next.buttons.saveScript).toBe(false);
+    // A new report clears them too.
+    const fresh = reduceAudioSection(audio, {
+      kind: "audio-report",
+      report: REPORT_EN,
+      language: "en",
+    });
+    expect(fresh.offers).toEqual(NONE);
+    expect(fresh.saved).toBeUndefined();
+    expect(fresh.outcome).toBeUndefined();
+  });
+
+  it("a failure's unknown message falls back to rh-error-tts", () => {
+    const state = reduceAudioSection(ready(), {
+      kind: "audio-finished",
+      outcome: "failed",
+      failure: { messageKey: "not-an-id", messageArgs: { x: "y" } },
+      offers: NONE,
+    });
+    expect(buildAudioSectionModel(state, IDLE).reason).toEqual({
+      bundle: "main",
+      id: "rh-error-tts",
+      args: { reason: "other" },
+    });
+    // A failure's message shows only for a failed outcome.
+    expect(
+      buildAudioSectionModel({ ...state, outcome: "declined" }, IDLE).reason,
+    ).toBeUndefined();
+  });
+
+  it("the tier refusal is the main bundle's line; other refusals are worded here", () => {
+    const refuse = (refusal: AudioRefusalReason) =>
+      buildAudioSectionModel(
+        reduceAudioSection(ready(), {
+          kind: "audio-finished",
+          outcome: "refused",
+          refusal,
+          offers: NONE,
+        }),
+        IDLE,
+      ).reason;
+    expect(refuse("tier-refused")).toEqual({
+      bundle: "main",
+      id: L10N_AUDIO_TIER_REFUSED,
+    });
+    for (const reason of [
+      "no-report",
+      "no-key",
+      "read-only",
+      "no-collection",
+      "linked-needs-personal-library",
+      "no-folder",
+      "disabled",
+    ] as const) {
+      expect(refuse(reason)).toEqual({
+        id: AUDIO_SECTION_L10N.refused,
+        args: { reason },
+      });
+    }
+    // Any other refusal reads "other".
+    expect(refuse("something-else" as AudioRefusalReason)).toEqual({
+      id: AUDIO_SECTION_L10N.refused,
+      args: { reason: "other" },
+    });
+  });
+
+  it("windowAudioModel hands the window the main-bundle reason as text", () => {
+    const model = buildAudioSectionModel(
+      reduceAudioSection(ready(), {
+        kind: "audio-finished",
+        outcome: "refused",
+        refusal: "tier-refused",
+        offers: NONE,
+      }),
+      IDLE,
+    );
+    const out = windowAudioModel(model, (line) =>
+      line.id === L10N_AUDIO_TIER_REFUSED ? "refused text" : undefined,
+    );
+    expect(out.reason).toEqual({ text: "refused text" });
+    expect(out.outcome).toEqual(model.outcome);
+  });
+
+  it("every audio id is on the report window's surface list", () => {
+    for (const id of Object.values(AUDIO_SECTION_L10N)) {
+      expect(REPORT_WINDOW_MESSAGE_IDS).toContain(id);
+    }
+    expect(REPORT_WINDOW_AUDIO_L10N).toBe(AUDIO_SECTION_L10N);
+  });
+});
+
+describe("P6-T17 — Generate Audio Report… on the collection menu", () => {
+  /** The context a menu hook gets, over a window with this selection. */
+  function contextOf(ids: readonly number[]) {
+    const host = {
+      openDialog: () => undefined,
+      ZoteroPane: {
+        getSelectedCollections: () => ids.map((id) => ({ id })),
+      },
+    };
+    const seen: boolean[] = [];
+    const context = {
+      menuElem: { ownerDocument: { defaultView: host } },
+      setVisible: (visible: boolean) => seen.push(visible),
+    } as unknown as _ZoteroTypes.MenuManager.LibraryMenuContext;
+    return { host, seen, context };
+  }
+
+  function entriesOf(commands: Partial<SearchMenuCommands>) {
+    return (
+      collectionMenuOptions({
+        openSearchWindow: () => undefined,
+        onError: () => undefined,
+        ...commands,
+      }).menus[0]?.menus ?? []
+    );
+  }
+  const isAudio = (entry: { readonly l10nID?: string }): boolean =>
+    entry.l10nID === L10N_MENU_COLLECTION_AUDIO_REPORT;
+  const open = () => undefined;
+
+  it("is left out while audio.enabled is off, or nothing can open the window", () => {
+    expect(
+      entriesOf({
+        audioEnabled: () => false,
+        openAudioReportWindow: open,
+      }).some(isAudio),
+    ).toBe(false);
+    expect(entriesOf({ openAudioReportWindow: open }).some(isAudio)).toBe(
+      false,
+    );
+    expect(entriesOf({ audioEnabled: () => true }).some(isAudio)).toBe(false);
+  });
+
+  it("sits right after the report entry when on", () => {
+    const entries = entriesOf({
+      openReportWindow: open,
+      audioEnabled: () => true,
+      openAudioReportWindow: open,
+    });
+    expect(entries.map((entry) => entry.l10nID ?? entry.menuType)).toEqual([
+      L10N_MENU_COLLECTION_REPORT,
+      L10N_MENU_COLLECTION_AUDIO_REPORT,
+      "separator",
+      L10N_MENU_COLLECTION_SEARCH_IMPORT,
+      L10N_MENU_COLLECTION_RERUN,
+    ]);
+  });
+
+  it("shows for one collection only, and goes when the preference goes off", () => {
+    let enabled = true;
+    const [entry] = entriesOf({
+      audioEnabled: () => enabled,
+      openAudioReportWindow: open,
+    }).filter(isAudio);
+    const shown = (ids: readonly number[]) => {
+      const { seen, context } = contextOf(ids);
+      entry?.onShowing?.(new Event("popupshowing"), context);
+      return seen;
+    };
+    expect(shown([1])).toStrictEqual([true]);
+    expect(shown([1, 2])).toStrictEqual([false]);
+    expect(shown([])).toStrictEqual([false]);
+    enabled = false;
+    expect(shown([1])).toStrictEqual([false]);
+  });
+
+  it("opens the window on the one collection, and reports a failed visibility check", () => {
+    const calls: unknown[][] = [];
+    const errors: string[] = [];
+    const [entry] = entriesOf({
+      audioEnabled: () => {
+        if (calls.length > 0) throw new Error("no preference store");
+        return true;
+      },
+      openAudioReportWindow: (host, collectionID) => {
+        calls.push([host, collectionID]);
+      },
+      onError: (text) => {
+        errors.push(text);
+      },
+    }).filter(isAudio);
+    const { host, context } = contextOf([4245]);
+    entry?.onCommand?.(new Event("command"), context);
+    expect(calls).toStrictEqual([[host, 4245]]);
+    entry?.onShowing?.(new Event("popupshowing"), context);
+    expect(errors).toStrictEqual([
+      "Audio report entry visibility check failed",
+    ]);
+    // Two collections: refused, nothing opened.
+    entry?.onCommand?.(new Event("command"), contextOf([1, 2]).context);
+    expect(calls).toHaveLength(1);
+    expect(errors).toHaveLength(2);
   });
 });

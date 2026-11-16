@@ -83,6 +83,13 @@ research-helper-menu-collection-summarize-all =
 research-helper-menu-collection-report =
     .label = 최신 연구 동향 보고서 생성…
 
+# research-helper-menu-collection-audio-report
+# English source:
+#   .label = Generate Audio Report…
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-menu-collection-audio-report =
+#     .label = 오디오 보고서 생성…
+
 # P5-T15: FR-13's entry. Korean drafted by the coordinator and reviewed by the owner on 2026-11-02 (G-41, plan/00 §6 item 334).
 research-helper-menu-item-find-related =
     .label = 관련 논문 찾기…
@@ -333,6 +340,18 @@ rh-error-recommend-too-few-items = 이 컬렉션에는 항목이 { $count }개 �
 #   Strict privacy mode makes no audio with this Google API key, because it may be on the free tier, where Google may use what you send to improve its products. To make audio, mark the key as paid in Research Helper's settings if its Google Cloud project is billing-linked, or choose a less strict privacy mode.
 # Draft (coordinator, 2026-11-17, not adopted):
 # research-helper-audio-tier-refused = 엄격 개인정보 보호 모드에서는 이 Google API 키로 오디오를 만들지 않습니다. 이 키가 무료 등급일 수 있고, 무료 등급에서는 Google이 전송된 내용을 자사 제품 개선에 사용할 수 있기 때문입니다. 오디오를 만들려면 Google Cloud 프로젝트에 결제가 연결된 경우 Research Helper 설정에서 이 키를 유료로 표시하거나, 덜 엄격한 개인정보 보호 모드를 선택하세요.
+# research-helper-audio-attachment-title
+# English source:
+#   { $language ->
+#   [ko] Audio report (Korean), { $date }
+#   *[en] Audio report (English), { $date }
+#   }
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-audio-attachment-title =
+#     { $language ->
+#         [ko] 오디오 보고서 (한국어), { $date }
+#        *[en] 오디오 보고서 (영어), { $date }
+#     }
 
 
 ## The preference pane's key-storage badge (docs/09 §1.9; P1-T44, P2-T34)

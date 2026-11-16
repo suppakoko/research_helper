@@ -189,3 +189,88 @@ research-helper-report-paused-job =
         [wall-clock-budget] A report run for this collection was paused at its time limit.
        *[other] A report run for this collection was paused.
     } Everything it had done is kept. Continue it, or stop it?
+
+## P6-T17: the audio section (docs/08 §6.4's note of 2026-11-17). Shown only
+## while the hidden `audio.enabled` preference is on. Its language items are
+## the two language entries above; a voice's name is not translated
+## (docs/08 §10.3). A failure's own message and the strict-mode refusal are
+## main-window strings, formatted by the window's host and placed as text.
+## Korean pending review (G-41).
+
+research-helper-report-audio-heading = Audio (spoken report)
+research-helper-report-audio-language-label =
+    .value = Audio language
+research-helper-report-audio-voice-label =
+    .value = Voice
+research-helper-report-audio-none = No report is stored for this collection yet. Generate a report first, then make its audio.
+
+# `$script` and `$report` are language tokens, never displayed.
+research-helper-report-audio-source =
+    { $script ->
+        [ko]
+            { $report ->
+                [ko] Korean script written from the Korean report
+               *[en] Korean script written from the English report
+            }
+       *[en]
+            { $report ->
+                [ko] English script written from the Korean report
+               *[en] English script written from the English report
+            }
+    }
+research-helper-report-audio-generate =
+    .label = Generate audio
+research-helper-report-audio-cancel =
+    .label = Cancel audio
+
+# `$stage` is a token, never displayed; `$done` and `$total` count the parts
+# of the spoken script and are 0 outside `synthesizing`.
+research-helper-report-audio-stage =
+    { $stage ->
+        [checking] Checking the report, the library and the key…
+        [scripting] Writing the spoken script…
+        [confirming] Waiting for your confirmation…
+        [synthesizing] Generating audio… part { $done } of { $total }
+        [attaching] Attaching the audio to the collection…
+        [waiting] Paused — waiting for your answer.
+       *[done] Done.
+    }
+
+# `$outcome` is a token, never displayed.
+research-helper-report-audio-outcome =
+    { $outcome ->
+        [succeeded] The audio is attached to the report's collection.
+        [declined] Nothing was generated.
+        [cancelled] Cancelled. No audio was kept; a spoken script already written is kept.
+        [interrupted] Zotero closed during the run. No audio was kept; a spoken script already written is kept.
+        [refused] No audio was generated.
+       *[failed] The audio could not be generated.
+    }
+
+# `$reason` is a token, never displayed.
+research-helper-report-audio-refused =
+    { $reason ->
+        [no-report] The report is no longer stored. Generate a report first.
+        [no-key] No Google Gemini API key is set. Add it in Research Helper's preferences.
+        [read-only] This library cannot be written to, so no audio can be attached to it.
+        [no-collection] The report's collection is gone or in the trash.
+        [linked-needs-personal-library] The audio file would be too large to store in a group library, and only your personal library can link a file instead.
+        [no-folder] No folder was chosen for the audio file.
+        [disabled] Audio reports are turned off.
+       *[other] No audio was generated.
+    }
+research-helper-report-audio-save-script =
+    .label = Save Script as Text…
+research-helper-report-audio-save-audio =
+    .label = Save Audio As…
+
+# `$kind` and `$outcome` are tokens, never displayed. No path is shown.
+research-helper-report-audio-saved =
+    { $outcome ->
+        [saved]
+            { $kind ->
+                [audio] Audio saved.
+               *[script] Spoken script saved.
+            }
+       *[failed] The file could not be written.
+    }

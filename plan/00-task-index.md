@@ -28,9 +28,18 @@ Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0
 | **Phases 0–3** | **162** | **114.00 d** | **114.00–160 d** | 39–52 d (+119% over the top of the band) |
 | 4 — Trend report | 25 | 25.75 d | 25.75–36 d | 8–11 d (+134%) |
 | 5 — Related + recommendations | 32 | 36.25 d | 36.25–51 d | 10–14 d (+159%) |
-| 6 — TTS audio report | 19 | 20.00 d | 20.00–28 d | 7–10 d (+100%) |
+| 6 — TTS audio report | 19 | 20.25 d | 20.25–28 d | 7–10 d (+103%) |
 | 7 — Polish, i18n, release | 32 | 29.25 d | 29.25–41 d | 10–14 d (+109%) |
-| **All phases** | **270** | **225.25 d** | **225.25–316 d** | 74–101 d |
+| **All phases** | **270** | **225.50 d** | **225.50–316 d** | 74–101 d |
+
+**2026-11-17: `P6-T17` re-estimated 1.75 → 2.0 d, Phase 6 19 cards, 20.25 d** (§6 item 384). The cost dialog's
+window gains the audio tier question's radio group inside `P6-T17` rather than a new card; 20.25 × 1.4 = 28.35 → 28,
+so the band is 20.25–28 d (was 20.00–28). The last column is 20.25 ÷ 10 = 2.025 → +103% (was +100%). The project total
+is 114.00 + 25.75 + 36.25 + 20.25 + 29.25 = **225.50 d** low and 160 + 36 + 51 + 28 + 41 = **316 d** high (was
+225.25–316), still ≈ 11–15 months at 21 working days (225.50 ÷ 21 ≈ 10.7; 316 ÷ 21 ≈ 15.05). The critical path
+P0 → P1 → P2 → P4 → P6 → P7 becomes **157.25–220** (was 157.00–220) and the Phase 3 route 154.25–216, so the 3 d / 4 d
+margin is unchanged; Phase 5's float grows to **9.75–13 d** (was 9.5–13), because Phase 6 lies on the critical path
+and not on Phase 5's route.
 
 **2026-11-16, later still: `P7-T32` added, Phase 7 32 cards, 29.25 d** (§6 item 381). The owner's answer to `plan/10`
 §0.4 line 20 (Gemini chat in balanced mode follows the audio rule) is carded as `P7-T32` at 0.75 d; 29.25 × 1.4 = 40.95 →
@@ -573,7 +582,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | `P6-T14` | Failure paths: specific errors, script as text, Save as | `P6-T07`, `P6-T13` | 1.0 d |  |
 | `P6-T15` | Audio confirmation, tier question and both-host disclosure | `P6-T02`, `P6-T05`, `P6-T10` | 1.5 d |  |
 | `P6-T16` | Audio pipeline: stages, job, wiring | `P6-T01`, `P6-T02`, `P6-T05`, `P6-T07`, `P6-T08`, `P6-T10`, `P6-T11`, `P6-T12`, `P6-T13`, `P6-T14`, `P6-T15` | 1.75 d |  |
-| `P6-T17` | Report window audio section and menu entry | `P6-T02`, `P6-T16` | 1.75 d |  |
+| `P6-T17` | Report window audio section and menu entry | `P6-T02`, `P6-T16` | 2.0 d |  |
 | `P6-T18` | Prove the offline paths end to end on recorded answers | `P6-T04`, `P6-T17` | 0.75 d |  |
 | `P6-T19` | Phase-6 acceptance run against the definition of done | `P6-T18` | 1.0 d | 🔒 |
 
@@ -3469,9 +3478,13 @@ the caller of what the card builds; if it does not, the caller is added with a d
     - (b) **What is built.** `checkAudioDestination` and `deliverAudio` (`src/pipeline/audioReport/deliver.ts`) refuse a linked file outside the personal library, with the reason `linked-needs-personal-library`. `P6-T16` calls the check before synthesis, so nothing is spent. An import into a group library (a WAV of at most 10 MiB) is not affected.
     - (c) **The question, with a draft answer (not adopted).** Option A, as built: refuse before synthesis, and let `P6-T14`'s message offer "Save as" instead. Option B: in a group library, import the file whatever its size. This puts up to about 29 MB per 10-minute report into the group's storage quota and sync. The draft recommends A, because it spends nothing and changes no decided rule. B is the owner's to choose, since it moves cost onto the group's storage owner.
     - (d) **DECIDED 2026-11-17 (coordinator, under item 313): Option A, as built.** A report in a group library whose WAV would be over 10 MiB is refused before synthesis, so nothing is spent; `P6-T14`'s message names the reason and offers the script as text. **Option B** (import into the group whatever the size) is recorded as a **later-release candidate**, with no card; the owner may overturn this. Recorded in `docs/07` §6.5 and `plan/09` §0.4 line 6 (notes of this date). No code changed.
-384. **Open — raised 2026-11-17: no card renders the audio tier question in the cost dialog's window** (`plan/09` `P6-T15`; `plan/reports/P6-T15.md`). Tag: Phase 6. This does not block any `Done when` line of `P6-T15`, whose criteria are met in the dialog's model; it blocks the tier question being answerable inside Zotero, which `P6-T19`'s acceptance needs.
+384. **Decided 2026-11-17 (coordinator) — raised 2026-11-17: no card renders the audio tier question in the cost dialog's window** (`plan/09` `P6-T15`; `plan/reports/P6-T15.md`). Tag: Phase 6. This does not block any `Done when` line of `P6-T15`, whose criteria are met in the dialog's model; it blocks the tier question being answerable inside Zotero, which `P6-T19`'s acceptance needs.
     - (a) **The finding.** `P6-T15` builds the question as data: `PreflightDialogModel.tierQuestion` (three choices, "Don't know" pre-selected) and `CostDialogAnswer.tierAnswer`, checked again by `decideCostDialog` (`src/ui/dialogs/costConfirmDialog.ts`). The window that renders the model, `addon/content/costConfirm.js` with `costConfirm.xhtml`, places every other line unchanged, but has no radio group for the question and does not report a `tierAnswer`. Neither file is in the Files row of `P6-T15`, `P6-T16` or `P6-T17`. Until it is built, a confirmed audio dialog records the pre-selected "don't know", which is the conservative answer.
     - (b) **The question, with a draft answer (not adopted).** Add `addon/content/costConfirm.js` and `addon/content/costConfirm.xhtml` to `P6-T17`'s Files (the card that builds the audio surfaces), with one step: render `tierQuestion` as a radio group under the notices, pre-select `preselected`, and send the chosen answer as `tierAnswer` with the accept. The draft keeps `P6-T17`'s estimate, because the window already renders the rest of the model. The alternative is a new card of 0.25 d.
+    - (c) **DECIDED 2026-11-17 (coordinator, under item 313): the draft's placement, with an honest estimate.** `addon/content/costConfirm.js` and `addon/content/costConfirm.xhtml` are in `P6-T17`'s Files, with a step 5 that renders `tierQuestion` as a radio group of its three choices, "don't know" pre-selected, and sends the choice as `tierAnswer` with the accept (dated note on the card). **`P6-T17` is re-estimated 1.75 → 2.0 d**: the step is small but not free (a radio group, its answer and a check of both), so the draft's "keeps the estimate" is not adopted. Phase 6 is **20.25 d** (20.25–28 d); propagated the same day to `plan/README` §7's five sites: `plan/09` (§1, §3, the Effort prose, the in-phase critical path 12.25 d), `docs/11` §1 (Phase 6 row, Phases 4–7 subtotal **111.50–156**, total **225.50–316 d**, the Gantt node, Phase 6's Effort paragraph, the months and reserve lines, unchanged in whole units) and §2 (critical path **157.25–220**, Phase 3 route 154.25–216, Phase 5's float **9.75–13 d**), `plan/00` §1 (the Phase 6 row, +103 %, and the "All phases" row), and `plan/05` (the header note and §3's Effort line). The owner may overturn this.
+385. **Open — raised 2026-11-17: the audio job reads Gemini's model list before the confirmation** (`plan/09` `P6-T16`; `plan/reports/P6-T16.md`; `docs/07` §12.6's note of 2026-11-17, point 3). Tag: Phase 6, security. This does not block a `Done when` line of `P6-T16`.
+    - (a) **The finding.** `P6-T16` step 1 resolves the TTS model in `prepare`, because the estimate and the notice need it. With `tts.model` empty (its shipped value, `docs/04` §12), `TTSProvider.resolveModel` reads Gemini's model list: one `GET` that carries the Gemini key and no user content, to the host the notice then names. It is sent before the user has confirmed, and `docs/07` §12.6 says "No request reaches Google before it is answered". The tier refusal and the read-only refusals come first, so strict mode with a free or unknown key sends nothing.
+    - (b) **The question, with a draft answer (not adopted).** Accept the list read before the confirmation, as built, and reword `docs/07` §12.6's line to "no content reaches Google before it is answered". The alternative is to price the first confirmation with `tts.model`, or the marked fallback id when it is empty, and resolve the live model after the confirmation, re-asking when the two differ in price.
 
 
 

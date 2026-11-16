@@ -408,6 +408,10 @@ export function installPluginDatabase(
     return {
       put: (report) => tracked(store.put(report)),
       get: (id) => tracked(store.get(id)),
+      // `P6-T16`: the menu entry's lookup and the audio job's companion record.
+      latestForCollection: (libraryID, collectionKey) =>
+        tracked(store.latestForCollection(libraryID, collectionKey)),
+      companionOf: (report) => tracked(store.companionOf(report)),
     };
   };
 

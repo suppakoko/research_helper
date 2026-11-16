@@ -12,7 +12,10 @@
  * line is a Fluent id with arguments already formatted there — and reports
  * one answer through `window.arguments[0].onAnswer`:
  *
- * - **accept** → `{ accepted: true, downgrade, acknowledged, dontAskAgain }`;
+ * - **accept** → `{ accepted: true, downgrade, acknowledged, dontAskAgain }`,
+ *   with `tierAnswer` when the model asked the audio tier question (P6-T17;
+ *   the radio group's choice, the pre-selected one when nothing else was
+ *   picked);
  * - **cancel**, Escape, or closing the window → `{ accepted: false }`.
  *
  * Only the first report counts. The privileged side checks the answer again
@@ -45,6 +48,10 @@ var RHCostDialog = {
     acknowledge: "rh-cost-acknowledge",
     footer: "rh-cost-footer",
     dontAsk: "rh-cost-dont-ask",
+    // P6-T17: the audio run's tier question (plan/00 §6 item 384).
+    tier: "rh-cost-tier",
+    tierPrompt: "rh-cost-tier-prompt",
+    tierChoices: "rh-cost-tier-choices",
   },
 
   state: {
@@ -87,6 +94,24 @@ var RHCostDialog = {
       const view = this.viewFor(model, downgrade);
       return !view.acknowledge || acknowledged === true;
     },
+
+    /**
+     * P6-T17: the tier answer to send with the accept — the choice selected,
+     * or the model's pre-selected one; `undefined` when the model asked no
+     * question, so nothing is sent.
+     *
+     * @param {object} model
+     * @param {string | undefined} selected - the radio group's value
+     * @returns {string | undefined}
+     */
+    tierAnswerFor(model, selected) {
+      const question = model && model.tierQuestion;
+      if (!question) {
+        return undefined;
+      }
+      const offered = (question.choices || []).map((choice) => choice.answer);
+      return offered.includes(selected) ? selected : question.preselected;
+    },
   },
 
   /** Called from `onload` and from the `load` fallback below; once. */
@@ -128,14 +153,23 @@ var RHCostDialog = {
     });
   },
 
-  /** The current answer, read from the three boxes. */
+  /** The current answer, read from the three boxes and the tier question. */
   answer(accepted) {
-    return {
+    const answer = {
       accepted,
       downgrade: this.checked(this.spec.downgrade),
       acknowledged: this.checked(this.spec.acknowledge),
       dontAskAgain: this.checked(this.spec.dontAsk),
     };
+    const group = document.getElementById(this.spec.tierChoices);
+    const tierAnswer = this.logic.tierAnswerFor(
+      this.io.model,
+      group ? group.value : undefined,
+    );
+    if (accepted && tierAnswer !== undefined) {
+      answer.tierAnswer = tierAnswer;
+    }
+    return answer;
   },
 
   checked(id) {
@@ -179,7 +213,36 @@ var RHCostDialog = {
     if (acknowledge) {
       acknowledge.addEventListener("command", () => this.updateAccept());
     }
+    this.renderTierQuestion(model.tierQuestion);
     this.renderPlan(model);
+  },
+
+  /**
+   * P6-T17 (plan/00 §6 item 384): the tier question as a radio group of its
+   * choices, the pre-selected one ("don't know") selected. Absent from the
+   * model, the group stays hidden and no answer is sent.
+   */
+  renderTierQuestion(question) {
+    const box = document.getElementById(this.spec.tier);
+    const group = document.getElementById(this.spec.tierChoices);
+    if (!box || !group || !question) {
+      return;
+    }
+    this.setL10n(
+      document.getElementById(this.spec.tierPrompt),
+      question.prompt,
+    );
+    while (group.firstChild) {
+      group.firstChild.remove();
+    }
+    for (const choice of question.choices || []) {
+      const radio = document.createXULElement("radio");
+      radio.setAttribute("value", String(choice.answer));
+      this.setL10n(radio, choice.label);
+      group.appendChild(radio);
+    }
+    group.value = question.preselected;
+    box.hidden = false;
   },
 
   /** The plan view in force: its figures, its raise, its acknowledgement. */

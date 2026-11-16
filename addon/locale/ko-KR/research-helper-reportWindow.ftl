@@ -131,3 +131,157 @@ research-helper-report-paused-job =
 # Korean drafted by the coordinator and reviewed by the owner on 2026-11-02 (G-41, plan/00 §6 item 334).
 research-helper-report-shown-label =
     .value = 표시할 보고서
+
+## P6-T17: the audio section (docs/08 §6.4's note of 2026-11-17). Commented
+## stubs with the English source and the coordinator's drafts (2026-11-17, not
+## adopted); the owner reviews them (G-41). Until then these resolve from
+## en-US.
+
+# research-helper-report-audio-heading
+# English source:
+#   Audio (spoken report)
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-report-audio-heading = 오디오 (음성 보고서)
+# research-helper-report-audio-language-label
+# English source:
+#   .value = Audio language
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-report-audio-language-label =
+#     .value = 오디오 언어
+# research-helper-report-audio-voice-label
+# English source:
+#   .value = Voice
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-report-audio-voice-label =
+#     .value = 음성
+# research-helper-report-audio-none
+# English source:
+#   No report is stored for this collection yet. Generate a report first, then make its audio.
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-report-audio-none = 이 컬렉션에 저장된 보고서가 아직 없습니다. 먼저 보고서를 생성한 뒤 오디오를 만드세요.
+# research-helper-report-audio-source
+# English source:
+#   { $script ->
+#   [ko] { $report -> [ko] Korean script written from the Korean report *[en] Korean script written from the English report }
+#   *[en] { $report -> [ko] English script written from the Korean report *[en] English script written from the English report }
+#   }
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-report-audio-source =
+#     { $script ->
+#         [ko]
+#             { $report ->
+#                 [ko] 한국어 보고서로 쓴 한국어 대본
+#                *[en] 영어 보고서로 쓴 한국어 대본
+#             }
+#        *[en]
+#             { $report ->
+#                 [ko] 한국어 보고서로 쓴 영어 대본
+#                *[en] 영어 보고서로 쓴 영어 대본
+#             }
+#     }
+# research-helper-report-audio-generate
+# English source:
+#   .label = Generate audio
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-report-audio-generate =
+#     .label = 오디오 생성
+# research-helper-report-audio-cancel
+# English source:
+#   .label = Cancel audio
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-report-audio-cancel =
+#     .label = 오디오 취소
+# research-helper-report-audio-stage
+# English source:
+#   { $stage ->
+#   [checking] Checking the report, the library and the key…
+#   [scripting] Writing the spoken script…
+#   [confirming] Waiting for your confirmation…
+#   [synthesizing] Generating audio… part { $done } of { $total }
+#   [attaching] Attaching the audio to the collection…
+#   [waiting] Paused — waiting for your answer.
+#   *[done] Done.
+#   }
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-report-audio-stage =
+#     { $stage ->
+#         [checking] 보고서, 라이브러리, 키를 확인하는 중…
+#         [scripting] 음성 대본을 쓰는 중…
+#         [confirming] 확인을 기다리는 중…
+#         [synthesizing] 오디오 생성 중… { $total }개 중 { $done }번째
+#         [attaching] 컬렉션에 오디오를 첨부하는 중…
+#         [waiting] 일시 중지 — 답을 기다리는 중입니다.
+#        *[done] 완료.
+#     }
+# research-helper-report-audio-outcome
+# English source:
+#   { $outcome ->
+#   [succeeded] The audio is attached to the report's collection.
+#   [declined] Nothing was generated.
+#   [cancelled] Cancelled. No audio was kept; a spoken script already written is kept.
+#   [interrupted] Zotero closed during the run. No audio was kept; a spoken script already written is kept.
+#   [refused] No audio was generated.
+#   *[failed] The audio could not be generated.
+#   }
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-report-audio-outcome =
+#     { $outcome ->
+#         [succeeded] 보고서의 컬렉션에 오디오를 첨부했습니다.
+#         [declined] 아무것도 생성하지 않았습니다.
+#         [cancelled] 취소했습니다. 오디오는 남기지 않았고, 이미 쓴 음성 대본은 남아 있습니다.
+#         [interrupted] 실행 중에 Zotero가 닫혔습니다. 오디오는 남기지 않았고, 이미 쓴 음성 대본은 남아 있습니다.
+#         [refused] 오디오를 생성하지 않았습니다.
+#        *[failed] 오디오를 생성하지 못했습니다.
+#     }
+# research-helper-report-audio-refused
+# English source:
+#   { $reason ->
+#   [no-report] The report is no longer stored. Generate a report first.
+#   [no-key] No Google Gemini API key is set. Add it in Research Helper's preferences.
+#   [read-only] This library cannot be written to, so no audio can be attached to it.
+#   [no-collection] The report's collection is gone or in the trash.
+#   [linked-needs-personal-library] The audio file would be too large to store in a group library, and only your personal library can link a file instead.
+#   [no-folder] No folder was chosen for the audio file.
+#   [disabled] Audio reports are turned off.
+#   *[other] No audio was generated.
+#   }
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-report-audio-refused =
+#     { $reason ->
+#         [no-report] 보고서가 더 이상 저장되어 있지 않습니다. 먼저 보고서를 생성하세요.
+#         [no-key] Google Gemini API 키가 설정되지 않았습니다. Research Helper 설정에서 추가하세요.
+#         [read-only] 이 라이브러리에는 쓸 수 없어 오디오를 첨부할 수 없습니다.
+#         [no-collection] 보고서의 컬렉션이 없어졌거나 휴지통에 있습니다.
+#         [linked-needs-personal-library] 오디오 파일이 너무 커서 그룹 라이브러리에 저장할 수 없고, 파일 링크는 내 라이브러리에서만 할 수 있습니다.
+#         [no-folder] 오디오 파일을 저장할 폴더를 고르지 않았습니다.
+#         [disabled] 오디오 보고서가 꺼져 있습니다.
+#        *[other] 오디오를 생성하지 않았습니다.
+#     }
+# research-helper-report-audio-save-script
+# English source:
+#   .label = Save Script as Text…
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-report-audio-save-script =
+#     .label = 대본을 텍스트로 저장…
+# research-helper-report-audio-save-audio
+# English source:
+#   .label = Save Audio As…
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-report-audio-save-audio =
+#     .label = 오디오를 다른 이름으로 저장…
+# research-helper-report-audio-saved
+# English source:
+#   { $outcome ->
+#   [saved] { $kind -> [audio] Audio saved. *[script] Spoken script saved. }
+#   *[failed] The file could not be written.
+#   }
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-report-audio-saved =
+#     { $outcome ->
+#         [saved]
+#             { $kind ->
+#                 [audio] 오디오를 저장했습니다.
+#                *[script] 음성 대본을 저장했습니다.
+#             }
+#        *[failed] 파일을 쓰지 못했습니다.
+#     }
