@@ -56,6 +56,23 @@
  * `itemCount` and `modelId`, so it needs no member of its own. Like the report's,
  * it forces nothing.
  *
+ * ## An audio run's own notice (`P6-T15`)
+ *
+ * An audio run sends to **two** hosts (`docs/09` §3 row 5, clarified
+ * 2026-11-16): the provider of `reportModel`, only when a script call is due,
+ * and Gemini's TTS host, which receives the spoken script. Its disclosure has
+ * provider `gemini`, the TTS model and no items, so the Gemini warning or the
+ * declared-paid reminder comes from the rule above, unchanged. Given an
+ * `audio` input, {@link buildEgressDisclosure} puts
+ * {@link L10N_EGRESS_AUDIO_NOTICE} first among the notices and adds an
+ * {@link AudioEgressNotice}: the script call's effective host, the key's
+ * fingerprint, and whether this is the first audio use with that key
+ * (`docs/09` §3.4 rule 5), which {@link mustAskConfirmation} turns into the
+ * reason `first-audio-key`. The fingerprint is
+ * `src/pipeline/audioReport/disclosure.ts`'s; `docs/07` §4.5's note of
+ * 2026-11-17 records why it is safe to store. Without an `audio` input the
+ * disclosure is exactly what it was.
+ *
  * ## The egress log
  *
  * §3.6 item 4: the plugin's own job records say which provider received how
@@ -70,6 +87,7 @@
 import type { JobRecord } from "../../core/jobQueue/jobRecord";
 import type { ResumeVerdict } from "../../core/jobQueue/queue";
 import {
+  L10N_EGRESS_AUDIO_NOTICE,
   L10N_EGRESS_FIRST_JOB_NOTICE,
   L10N_EGRESS_GEMINI_DECLARED_PAID,
   L10N_EGRESS_GEMINI_FREE_TIER,
@@ -96,6 +114,7 @@ export type EgressContentScope = { readonly [K in InputScopeKind]: number };
 
 /** One notice the dialog shows, as its Fluent id. */
 export type EgressNoticeId =
+  | typeof L10N_EGRESS_AUDIO_NOTICE
   | typeof L10N_EGRESS_REPORT_NOTICE
   | typeof L10N_EGRESS_PROFILE_NOTICE
   | typeof L10N_EGRESS_FIRST_JOB_NOTICE
@@ -126,6 +145,32 @@ export interface ReportEgressNotice {
   readonly modelIds: readonly string[];
 }
 
+/** The script call of an audio run, when one is due (`P6-T15`). */
+export interface AudioScriptCall {
+  /** The provider of `reportModel`. */
+  readonly providerId: ProviderId;
+  readonly modelId: string;
+}
+
+/** What an audio run's notice is built from (`docs/09` §3 row 5, §3.4 rule 5). */
+export interface AudioEgressInput {
+  /** Absent when the script for the language is stored: no script call. */
+  readonly scriptCall?: AudioScriptCall;
+  /** `audioKeyFingerprint` of the Gemini key the run will use. */
+  readonly keyFingerprint: string;
+  /** The fingerprints earlier audio jobs' egress logs hold. */
+  readonly knownKeyFingerprints: readonly string[];
+}
+
+/** An audio run's notice, as data; also its egress log's `audio` member. */
+export interface AudioEgressNotice {
+  /** The script call and the host it goes to (an override's, when one is set). */
+  readonly scriptCall?: AudioScriptCall & { readonly host: string };
+  readonly keyFingerprint: string;
+  /** No earlier audio job used this key (`docs/09` §3.4 rule 5). */
+  readonly firstUseWithKey: boolean;
+}
+
 /** What a disclosure is built from. */
 export interface EgressDisclosureInput {
   readonly providerId: ProviderId;
@@ -147,6 +192,12 @@ export interface EgressDisclosureInput {
    * `metadata-only` per line sent. Caller: `planProfileCall`.
    */
   readonly profileNotice?: boolean;
+  /**
+   * An audio run (`P6-T15`): its own notice naming both hosts. `providerId`
+   * is `gemini`, `modelId` the TTS model and `items` empty. Caller:
+   * `audioEgressNotice` (`src/pipeline/audioReport/disclosure.ts`).
+   */
+  readonly audio?: AudioEgressInput;
 }
 
 /** The disclosure, as data (`docs/09` §3.6 item 1). */
@@ -174,6 +225,8 @@ export interface EgressDisclosure {
   readonly noticeIds: readonly EgressNoticeId[];
   /** A report run's notice; the member is absent for every other job. */
   readonly report?: ReportEgressNotice;
+  /** An audio run's notice; the member is absent for every other job. */
+  readonly audio?: AudioEgressNotice;
 }
 
 /** What {@link buildEgressDisclosure} reads. */
@@ -209,6 +262,28 @@ function reportNotice(input: ReportEgressInput): ReportEgressNotice {
   return { papers: input.papers, modelIds };
 }
 
+/** An audio run's notice: the script call's effective host, and the key's first use. */
+function audioNotice(
+  input: AudioEgressInput,
+  baseUrls: Pick<BaseUrlResolver, "effectiveHost">,
+): AudioEgressNotice {
+  const notice: AudioEgressNotice = {
+    keyFingerprint: input.keyFingerprint,
+    firstUseWithKey: !input.knownKeyFingerprints.includes(input.keyFingerprint),
+  };
+  const call = input.scriptCall;
+  return call === undefined
+    ? notice
+    : {
+        scriptCall: {
+          providerId: call.providerId,
+          modelId: call.modelId,
+          host: baseUrls.effectiveHost(call.providerId),
+        },
+        ...notice,
+      };
+}
+
 /**
  * Build the disclosure the cost dialog embeds (`docs/09` §3.6 item 1):
  * provider and model, the **effective** host, the item count, what is sent
@@ -240,6 +315,7 @@ export function buildEgressDisclosure(
     gemini && !geminiDeclaredPaidReminder && input.geminiTier !== "paid";
   const noticeIds: EgressNoticeId[] = [];
   // Before the first-job notice, whose "the content listed above" includes it.
+  if (input.audio !== undefined) noticeIds.push(L10N_EGRESS_AUDIO_NOTICE);
   if (input.report !== undefined) noticeIds.push(L10N_EGRESS_REPORT_NOTICE);
   if (input.profileNotice === true) noticeIds.push(L10N_EGRESS_PROFILE_NOTICE);
   if (firstJobNotice) noticeIds.push(L10N_EGRESS_FIRST_JOB_NOTICE);
@@ -259,11 +335,15 @@ export function buildEgressDisclosure(
     geminiDeclaredPaidReminder,
     noticeIds,
   };
-  // The member exists only for a report run, so every other disclosure is
-  // byte-identical to what it was before P4-T16.
-  return input.report === undefined
-    ? disclosure
-    : { ...disclosure, report: reportNotice(input.report) };
+  // Each member exists only for its own run, so every other disclosure is
+  // byte-identical to what it was before P4-T16 and P6-T15.
+  const withReport =
+    input.report === undefined
+      ? disclosure
+      : { ...disclosure, report: reportNotice(input.report) };
+  return input.audio === undefined
+    ? withReport
+    : { ...withReport, audio: audioNotice(input.audio, deps.baseUrls) };
 }
 
 /** What {@link settleDisclosure} writes through. */
@@ -306,7 +386,9 @@ export type ConfirmationReason =
   | "first-full-text"
   | "gemini-free-tier"
   | "gemini-declared-paid"
-  | "first-job-notice";
+  | "first-job-notice"
+  // P6-T15: the first audio run with a given Gemini key (docs/09 §3.4 rule 5).
+  | "first-audio-key";
 
 /** Whether to ask, and every reason that forces it. */
 export interface ConfirmationDecision {
@@ -357,6 +439,9 @@ export function mustAskConfirmation(
     reasons.push("gemini-declared-paid");
   }
   if (disclosure.firstJobNotice) reasons.push("first-job-notice");
+  if (disclosure.audio?.firstUseWithKey === true) {
+    reasons.push("first-audio-key");
+  }
   return { ask: reasons.length > 0, reasons };
 }
 
@@ -393,6 +478,11 @@ export interface EgressLogEntry {
   readonly confirmedAtEpochMs: number;
   /** A report run's notice: every model it sent to (`P4-T16`). */
   readonly report?: ReportEgressNotice;
+  /**
+   * An audio run's notice (`P6-T15`): the script call's host and the key's
+   * fingerprint, which is the first-use record `docs/09` §3.4 rule 5 needs.
+   */
+  readonly audio?: AudioEgressNotice;
 }
 
 /**
@@ -415,13 +505,27 @@ export function egressLogEntry(
     privacyMode: disclosure.privacyMode,
     confirmedAtEpochMs,
   };
-  return disclosure.report === undefined
-    ? entry
+  const withReport: EgressLogEntry =
+    disclosure.report === undefined
+      ? entry
+      : {
+          ...entry,
+          report: {
+            papers: disclosure.report.papers,
+            modelIds: [...disclosure.report.modelIds],
+          },
+        };
+  const audio = disclosure.audio;
+  return audio === undefined
+    ? withReport
     : {
-        ...entry,
-        report: {
-          papers: disclosure.report.papers,
-          modelIds: [...disclosure.report.modelIds],
+        ...withReport,
+        audio: {
+          ...(audio.scriptCall !== undefined && {
+            scriptCall: { ...audio.scriptCall },
+          }),
+          keyFingerprint: audio.keyFingerprint,
+          firstUseWithKey: audio.firstUseWithKey,
         },
       };
 }

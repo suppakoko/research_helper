@@ -98,6 +98,11 @@ import themeMergeSchemaV1 from "./schemas/theme-merge.v1.json";
  * decided 2026-10-26, owner, `plan/00` §6 item 290(b)). `THEME_MERGE` and
  * `CLUSTER_REDUCE_MERGE` are approved as drafted (2026-10-26, owner,
  * `plan/00` §6 item 290(a)).
+ *
+ * `AUDIO_SCRIPT_EN` and `AUDIO_SCRIPT_KO` (`docs/12` §13–§14) joined on
+ * 2026-11-17, once the owner moved the target length out of their system
+ * texts (one sentence in each, version still 1.0.0; `plan/00` §6 item 382).
+ * They are appended, not placed in §1.2's order, so no earlier index moves.
  */
 export const PROMPT_IDS = [
   "RELEVANCE_SCREEN",
@@ -113,6 +118,8 @@ export const PROMPT_IDS = [
   "COLLECTION_PROFILE",
   "THEME_MERGE",
   "CLUSTER_REDUCE_MERGE",
+  "AUDIO_SCRIPT_EN",
+  "AUDIO_SCRIPT_KO",
 ] as const;
 
 export type PromptId = (typeof PROMPT_IDS)[number];
@@ -143,6 +150,8 @@ export const PROMPT_FILE_NAMES: Readonly<Record<PromptId, string>> =
     COLLECTION_PROFILE: "collection-profile.v1.0.0.md",
     THEME_MERGE: "theme-merge.v1.0.0.md",
     CLUSTER_REDUCE_MERGE: "cluster-reduce-merge.v1.0.0.md",
+    AUDIO_SCRIPT_EN: "audio-script-en.v1.0.0.md",
+    AUDIO_SCRIPT_KO: "audio-script-ko.v1.0.0.md",
   });
 
 /** A JSON Schema document, as parsed. */

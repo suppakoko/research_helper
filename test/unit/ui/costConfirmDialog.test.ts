@@ -11,6 +11,14 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { L10N_AUDIO_TIER_REFUSED } from "../../../src/i18n/keys";
+import type { AudioPlan } from "../../../src/model/audio";
+import { audioEgressNotice } from "../../../src/pipeline/audioReport/disclosure";
+import {
+  estimateAudioPlan,
+  type ScriptStepEstimate,
+} from "../../../src/pipeline/audioReport/estimate";
+import { chunkScript } from "../../../src/tts/chunk";
 import {
   ZERO_SPEND,
   type CeilingStop,
@@ -39,18 +47,24 @@ import {
 import { estTokens } from "../../../src/llm/shared/tokenEstimate";
 import type { ModelPrices } from "../../../src/llm/shared/pricing";
 import {
+  AUDIO_COST_L10N,
   COST_DIALOG_L10N,
   COST_DIALOG_URL,
   REPORT_COST_L10N,
   USAGE_L10N,
+  buildAudioDialogModel,
   buildCostDialogModel,
   createUsageHost,
   decideCostDialog,
+  formatCount,
+  formatMegabytes,
+  formatMinutes,
   formatUsd,
   openCostConfirmDialog,
   shouldOpenCostDialog,
   skippedNoticeLine,
   usageReadout,
+  type AudioPlanDialogInput,
   type CostDialogArgs,
   type PreflightDialogInput,
   type PreflightDialogModel,
@@ -955,5 +969,457 @@ describe("P4-T16 — a report run's estimate in the same dialog", () => {
         expect(entry(line.id), `${line.id} $${arg}`).toContain(`{ $${arg} }`);
       }
     }
+  });
+});
+
+// ===========================================================================
+// P6-T15 — an audio run's two moments in the same dialog (plan/09 §0.4 line 13)
+// ===========================================================================
+
+const TTS_PRICES: ModelPrices = {
+  ...PRICES,
+  inputPerMTokUsd: 0.5,
+  outputPerMTokUsd: 10,
+};
+
+/** Fifty 18-character sentences: two chunks, SYNTHETIC text. */
+const AUDIO_SCRIPT = Array.from(
+  { length: 50 },
+  () => "Tides rise slowly.",
+).join(" ");
+
+function audioPlan(prices: ModelPrices | null = TTS_PRICES): AudioPlan {
+  return estimateAudioPlan({
+    reportId: "r-1",
+    script: { text: AUDIO_SCRIPT, language: "en" },
+    chunks: chunkScript(AUDIO_SCRIPT, { language: "en" }),
+    model: "mock-tts",
+    voice: "Charon",
+    stylePrefix: "Read this aloud.",
+    prices: prices ?? undefined,
+    atEpochMs: Date.UTC(2026, 10, 17),
+  });
+}
+
+function audioDisclosure(scriptDue = true): EgressDisclosure {
+  return audioEgressNotice(
+    {
+      privacyMode: "balanced",
+      ttsModelId: "mock-tts",
+      scriptCall: scriptDue
+        ? { providerId: "openrouter", modelId: "mock-report" }
+        : undefined,
+      keyFingerprint: "0123456789abcdef",
+      knownKeyFingerprints: ["0123456789abcdef"],
+    },
+    {
+      baseUrls: {
+        effectiveHost: (id) =>
+          id === "gemini"
+            ? "generativelanguage.googleapis.com"
+            : "openrouter.ai",
+      },
+      egressAcknowledged: () => true,
+      geminiPaidTier: () => false,
+    },
+  );
+}
+
+const SCRIPT_STEP: ScriptStepEstimate = {
+  script: {
+    modelId: "mock-report",
+    calls: 2,
+    inputTokens: 9_000,
+    outputTokens: 6_000,
+    costUsd: 0.117,
+    pricesAsOfEpochMs: Date.UTC(2026, 8, 8),
+  },
+  tts: {
+    provisional: true,
+    usd: 0.1741,
+    inputTokens: 2_800,
+    outputTokens: 17_250,
+    rateMeasuredOnModel: true,
+    totalChars: 8_991,
+    chunks: 10,
+    estimatedSeconds: 600,
+    estimatedBytes: 28_800_044,
+    mode: "linked",
+  },
+  calls: 12,
+  costUsd: 0.2911,
+};
+
+function audioCommon(
+  overrides: Partial<
+    Omit<AudioPlanDialogInput, "step" | "plan" | "warnings">
+  > = {},
+) {
+  return {
+    disclosure: audioDisclosure(),
+    providerName: "Google Gemini",
+    confirmAboveCents: 200,
+    ceiling: undefined,
+    session: ZERO_SPEND,
+    askTierQuestion: false,
+    pricesAsOfEpochMs: Date.UTC(2026, 8, 8),
+    ...overrides,
+  };
+}
+
+const idsOf = (lines: readonly { id: string }[]) => lines.map((l) => l.id);
+
+describe("P6-T15 — the audio step: FR-42's figures from the real script", () => {
+  it("shows characters, chunks, duration, size, import-or-link and cost", () => {
+    const plan = audioPlan();
+    expect(plan.chunks.length).toBe(2);
+    const model = buildAudioDialogModel(
+      { step: "audio", plan, warnings: [], ...audioCommon() },
+      LOCALE,
+    );
+    expect(model.mode).toBe("preflight");
+    expect(model.selected.lines).toEqual([
+      { id: COST_DIALOG_L10N.calls, args: { calls: 2 } },
+      {
+        id: AUDIO_COST_L10N.length,
+        args: { chars: formatCount(plan.totalChars, LOCALE), chunks: 2 },
+      },
+      {
+        id: AUDIO_COST_L10N.duration,
+        args: {
+          duration: formatMinutes(plan.estimatedSeconds, LOCALE),
+          size: formatMegabytes(plan.estimatedBytes, LOCALE),
+        },
+      },
+      { id: AUDIO_COST_L10N.attach, args: { mode: "imported" } },
+      {
+        id: COST_DIALOG_L10N.total,
+        args: { cost: formatUsd(plan.cost.usd ?? -1, LOCALE) },
+      },
+      { id: AUDIO_COST_L10N.rateUnmeasured },
+    ]);
+    expect(model.header).toEqual([
+      {
+        id: COST_DIALOG_L10N.destination,
+        args: {
+          provider: "Google Gemini",
+          host: "generativelanguage.googleapis.com",
+          model: "mock-tts",
+          mode: "balanced",
+        },
+      },
+    ]);
+    expect(model.downgrade).toBeUndefined();
+    expect(model.dontAskAgain).toBeUndefined();
+    expect(model.tierQuestion).toBeUndefined();
+    expect(model.selected.acknowledge).toBeUndefined();
+    expect(idsOf(model.footer)).toEqual([
+      COST_DIALOG_L10N.usageSession,
+      COST_DIALOG_L10N.disclaimer,
+    ]);
+  });
+
+  it("formats a duration in whole minutes (at least one) and a size in decimal MB", () => {
+    expect(formatMinutes(600, LOCALE)).toBe("10 minutes");
+    expect(formatMinutes(20, LOCALE)).toBe("1 minute");
+    expect(formatMinutes(89, LOCALE)).toBe("1 minute");
+    expect(formatMinutes(91, LOCALE)).toBe("2 minutes");
+    expect(formatMegabytes(28_800_044, LOCALE)).toBe("28.8 MB");
+    expect(formatMegabytes(144_044, LOCALE)).toBe("0.1 MB");
+  });
+
+  it("names a linked file, each length warning, and the unmeasured rate only when so", () => {
+    const plan = { ...audioPlan(), mode: "linked" as const };
+    const measured = {
+      ...plan,
+      cost: { ...plan.cost, rateMeasuredOnModel: true },
+    };
+    const model = buildAudioDialogModel(
+      {
+        step: "audio",
+        plan: measured,
+        warnings: [
+          {
+            kind: "length-out-of-band",
+            length: { unit: "words", count: 2_400, target: 1_500 },
+          },
+          {
+            kind: "length-out-of-band",
+            length: { unit: "hangul-syllables", count: 1_234, target: 3_300 },
+          },
+        ],
+        ...audioCommon(),
+      },
+      LOCALE,
+    );
+    const lines = model.selected.lines;
+    expect(lines.find((l) => l.id === AUDIO_COST_L10N.attach)?.args).toEqual({
+      mode: "linked",
+    });
+    expect(
+      lines
+        .filter((l) => l.id === AUDIO_COST_L10N.lengthWarning)
+        .map((l) => l.args),
+    ).toEqual([
+      { unit: "words", count: "2,400", target: "1,500" },
+      { unit: "syllables", count: "1,234", target: "3,300" },
+    ]);
+    expect(idsOf(lines)).not.toContain(AUDIO_COST_L10N.rateUnmeasured);
+  });
+
+  it("an unknown TTS price names the model and needs the second acknowledgement", () => {
+    const model = buildAudioDialogModel(
+      { step: "audio", plan: audioPlan(null), warnings: [], ...audioCommon() },
+      LOCALE,
+    );
+    expect(model.selected.lines).toContainEqual({
+      id: COST_DIALOG_L10N.unpriced,
+      args: { model: "mock-tts" },
+    });
+    expect(model.selected.acknowledge).toEqual({
+      id: COST_DIALOG_L10N.acknowledgeUnpriced,
+    });
+    expect(decideCostDialog(model, { accepted: true })).toEqual({
+      kind: "cancelled",
+    });
+    expect(
+      decideCostDialog(model, { accepted: true, acknowledged: true }),
+    ).toEqual({
+      kind: "run",
+      plan: "selected",
+      raise: undefined,
+      dontAskAgain: false,
+    });
+  });
+
+  it("above the threshold: the threshold line, the acknowledgement, and the ceiling's raise", () => {
+    const plan = audioPlan();
+    const cost = plan.cost.usd ?? 0;
+    expect(cost).toBeGreaterThan(0);
+    const model = buildAudioDialogModel(
+      {
+        step: "audio",
+        plan,
+        warnings: [],
+        ...audioCommon({ confirmAboveCents: 0, ceiling: STOP }),
+      },
+      LOCALE,
+    );
+    expect(idsOf(model.selected.lines)).toContain(
+      COST_DIALOG_L10N.aboveThreshold,
+    );
+    expect(model.selected.acknowledge).toEqual({
+      id: COST_DIALOG_L10N.acknowledge,
+      args: { cost: formatUsd(cost, LOCALE) },
+    });
+    expect(model.selected.raise?.limitUsd).toBe(0.13);
+    expect(
+      decideCostDialog(model, { accepted: true, acknowledged: true }),
+    ).toMatchObject({ kind: "run", raise: { ceiling: "run", limitUsd: 0.13 } });
+  });
+
+  it("the window script's accept rule applies to the audio model unchanged", () => {
+    const code = readFileSync(
+      resolve(process.cwd(), "addon/content/costConfirm.js"),
+      "utf8",
+    );
+    const factory = new Function(`${code}\nreturn RHCostDialog;`) as () => {
+      logic: {
+        canAccept(model: unknown, downgrade: boolean, ack: boolean): boolean;
+      };
+    };
+    const { logic } = factory();
+    const unpriced = buildAudioDialogModel(
+      { step: "audio", plan: audioPlan(null), warnings: [], ...audioCommon() },
+      LOCALE,
+    );
+    expect(logic.canAccept(unpriced, false, false)).toBe(false);
+    expect(logic.canAccept(unpriced, false, true)).toBe(true);
+  });
+});
+
+describe("P6-T15 — the script step: the script call, then the TTS part as provisional", () => {
+  it("prices both parts and says the audio is confirmed again with the real script", () => {
+    const model = buildAudioDialogModel(
+      {
+        step: "script",
+        estimate: SCRIPT_STEP,
+        targetMinutes: 10,
+        ...audioCommon(),
+      },
+      LOCALE,
+    );
+    expect(model.selected.lines).toEqual([
+      { id: COST_DIALOG_L10N.calls, args: { calls: 12 } },
+      {
+        id: AUDIO_COST_L10N.script,
+        args: { calls: 2, model: "mock-report", minutes: "10 minutes" },
+      },
+      {
+        id: AUDIO_COST_L10N.provisional,
+        args: { model: "mock-tts", duration: "10 minutes" },
+      },
+      {
+        id: COST_DIALOG_L10N.total,
+        args: { cost: formatUsd(0.2911, LOCALE) },
+      },
+    ]);
+    expect(model.notices[0]?.args).toMatchObject({
+      script: "due",
+      scriptHost: "openrouter.ai",
+      ttsHost: "generativelanguage.googleapis.com",
+    });
+  });
+
+  it("an unknown price on either part names that part's model", () => {
+    const both = buildAudioDialogModel(
+      {
+        step: "script",
+        estimate: {
+          ...SCRIPT_STEP,
+          script: { ...SCRIPT_STEP.script, costUsd: undefined },
+          tts: { ...SCRIPT_STEP.tts, usd: undefined },
+          costUsd: undefined,
+        },
+        targetMinutes: 10,
+        ...audioCommon(),
+      },
+      LOCALE,
+    );
+    expect(
+      both.selected.lines.filter((l) => l.id === COST_DIALOG_L10N.unpriced),
+    ).toEqual([
+      { id: COST_DIALOG_L10N.unpriced, args: { model: "mock-report" } },
+      { id: COST_DIALOG_L10N.unpriced, args: { model: "mock-tts" } },
+    ]);
+    const ttsOnly = buildAudioDialogModel(
+      {
+        step: "script",
+        estimate: {
+          ...SCRIPT_STEP,
+          tts: { ...SCRIPT_STEP.tts, usd: undefined },
+          costUsd: undefined,
+        },
+        targetMinutes: 10,
+        ...audioCommon(),
+      },
+      LOCALE,
+    );
+    expect(
+      ttsOnly.selected.lines.filter((l) => l.id === COST_DIALOG_L10N.unpriced),
+    ).toEqual([{ id: COST_DIALOG_L10N.unpriced, args: { model: "mock-tts" } }]);
+  });
+
+  it("carries the tier question when asked: three choices, 'don't know' pre-selected", () => {
+    const model = buildAudioDialogModel(
+      {
+        step: "script",
+        estimate: SCRIPT_STEP,
+        targetMinutes: 10,
+        ...audioCommon({ askTierQuestion: true }),
+      },
+      LOCALE,
+    );
+    expect(model.tierQuestion).toEqual({
+      prompt: { id: AUDIO_COST_L10N.tierQuestion },
+      choices: [
+        { answer: "paid", label: { id: AUDIO_COST_L10N.tierPaid } },
+        { answer: "free", label: { id: AUDIO_COST_L10N.tierFree } },
+        { answer: "unknown", label: { id: AUDIO_COST_L10N.tierUnknown } },
+      ],
+      preselected: "unknown",
+    });
+    expect(
+      decideCostDialog(model, { accepted: true, tierAnswer: "paid" }),
+    ).toEqual({
+      kind: "run",
+      plan: "selected",
+      raise: undefined,
+      dontAskAgain: false,
+      tierAnswer: "paid",
+    });
+  });
+
+  it("no other model carries a tier question, and no answer reports one", () => {
+    const model = asPreflight(preflight());
+    expect(model).not.toHaveProperty("tierQuestion");
+    expect(
+      decideCostDialog(model, { accepted: true, tierAnswer: "paid" }),
+    ).not.toHaveProperty("tierAnswer");
+  });
+});
+
+describe("P6-T15 — the audio strings in both bundles", () => {
+  const read = (path: string) =>
+    readFileSync(resolve(process.cwd(), path), "utf8");
+  const enUS = read("addon/locale/en-US/research-helper-mainWindow.ftl");
+  const koKR = read("addon/locale/ko-KR/research-helper-mainWindow.ftl");
+  const audioIds: readonly string[] = [
+    ...Object.values(AUDIO_COST_L10N),
+    L10N_AUDIO_TIER_REFUSED,
+  ];
+  const entry = (id: string) => {
+    const start = enUS.indexOf(`\n${id} =`);
+    const next = enUS.slice(start + 1).search(/\n[a-z][a-z0-9-]* =/);
+    return enUS.slice(start, start + 1 + next);
+  };
+
+  it("declares each in en-US and leaves each a commented ko-KR stub with a draft (G-41)", () => {
+    for (const id of audioIds) {
+      expect(enUS, id).toMatch(new RegExp(`^${id} =`, "m"));
+      expect(koKR, id).not.toMatch(new RegExp(`^${id} =`, "m"));
+      expect(koKR, id).toMatch(new RegExp(`^# ${id} =`, "m"));
+    }
+  });
+
+  it("every argument the audio models hand the window is placed by its message", () => {
+    const models = [
+      buildAudioDialogModel(
+        {
+          step: "script",
+          estimate: SCRIPT_STEP,
+          targetMinutes: 10,
+          ...audioCommon(),
+        },
+        LOCALE,
+      ),
+      buildAudioDialogModel(
+        {
+          step: "audio",
+          plan: audioPlan(),
+          warnings: [
+            {
+              kind: "length-out-of-band",
+              length: { unit: "words", count: 1, target: 2 },
+            },
+          ],
+          ...audioCommon({ disclosure: audioDisclosure(false) }),
+        },
+        LOCALE,
+      ),
+    ];
+    const placed = models
+      .flatMap((m) => [...m.notices, ...m.selected.lines])
+      .filter((l) => audioIds.includes(l.id));
+    expect(new Set(placed.map((l) => l.id)).size).toBe(8);
+    for (const line of placed) {
+      for (const arg of Object.keys(line.args ?? {})) {
+        expect(entry(line.id), `${line.id} $${arg}`).toContain(`$${arg}`);
+      }
+    }
+    expect(entry(AUDIO_COST_L10N.notice)).toMatch(/\[due\][\s\S]*\*\[stored\]/);
+    expect(entry(AUDIO_COST_L10N.attach)).toMatch(
+      /\[linked\][\s\S]*\*\[imported\]/,
+    );
+    expect(entry(AUDIO_COST_L10N.lengthWarning)).toMatch(
+      /\[syllables\][\s\S]*\*\[words\]/,
+    );
+  });
+
+  it("the notice names both destinations and what the TTS host receives (docs/09 §3 row 5)", () => {
+    const body = entry(AUDIO_COST_L10N.notice);
+    expect(body).toContain("{ $scriptHost }");
+    expect(body.split("{ $ttsHost }")).toHaveLength(3);
+    expect(body).toContain("which can name the collection and cited authors");
   });
 });

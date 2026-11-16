@@ -33,6 +33,11 @@ import type {
   ReservationEstimate,
   RunBudgetGuard,
 } from "../../../src/pipeline/shared/budget";
+import { chunkReservation } from "../../../src/pipeline/audioReport/estimate";
+import {
+  DOCUMENTED_TTS_PRICE_TABLE,
+  ttsPricesFor,
+} from "../../../src/tts/pricing";
 import type { AudioArtifact, SynthesisRequest } from "../../../src/tts/types";
 
 // ---------------------------------------------------------------------------
@@ -181,10 +186,7 @@ function deps(
   const seen: string[] = [];
   return {
     tts,
-    estimateChunk: (chunk) => ({
-      inputTokens: chunk.chars,
-      outputTokens: 1500,
-    }),
+    prices: undefined,
     clock: instantClock(),
     retry: POLICY,
     onChunk: (index, total) => {
@@ -249,13 +251,40 @@ describe("synthesizeChunks — in order, identical inputs (docs/04 §5.3)", () =
       costUsd: undefined,
     });
     expect(log).toEqual([
-      "reserve 1500",
+      "reserve 12",
       "settle 25",
-      "reserve 1500",
+      "reserve 12",
       "settle 25",
-      "reserve 1500",
+      "reserve 12",
       "settle 25",
     ]);
+  });
+
+  it("reserves each chunk by chunkReservation at the plan's prices (P6-T10)", async () => {
+    const seen: ReservationEstimate[] = [];
+    const guard: BudgetGuard & Pick<RunBudgetGuard, "reserveCall"> = {
+      ...fakeGuard().guard,
+      reserveCall(estimate: ReservationEstimate): BudgetReservation {
+        seen.push(estimate);
+        return {
+          costUsd: estimate.costUsd,
+          settle: () => ({}) as ReturnType<BudgetReservation["settle"]>,
+          release: () => undefined,
+        };
+      },
+    };
+    const prices = ttsPricesFor(DOCUMENTED_TTS_PRICE_TABLE[1]?.modelId ?? "");
+    const p = plan();
+    await synthesizeChunks(
+      input(p),
+      deps(fakeTts([{ ok: 2 }, { ok: 2 }, { ok: 2 }]), { prices }),
+      ctx(guard),
+    );
+    expect(seen).toEqual(
+      p.chunks.map((c) => chunkReservation(c, p, prices, 1_800_000_000_000)),
+    );
+    expect(seen[0]?.prices).toBe(prices);
+    expect(seen[0]?.costUsd).toBeGreaterThan(0);
   });
 
   it("never has two requests in flight", async () => {
@@ -299,9 +328,9 @@ describe("synthesizeChunks — in order, identical inputs (docs/04 §5.3)", () =
     expect(tts.requests[2]).toEqual(tts.requests[1]);
     expect(d.clock.slept).toEqual([2000]);
     expect(log.slice(2, 6)).toEqual([
-      "reserve 1500",
+      "reserve 12",
       "release",
-      "reserve 1500",
+      "reserve 12",
       "settle 25",
     ]);
   });

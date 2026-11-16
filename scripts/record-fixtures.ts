@@ -4227,10 +4227,9 @@ export type AudioScriptPrompt =
  * The script scenario's prompt, or why it is **pending**. A pending scenario
  * can be named and stood in for, but not priced or recorded. It is pending
  * while its bundled prompt (`P6-T06`) is not in `promptDir`, and also while the
- * file is there but the registry's parser refuses it. On 2026-11-16 both files
- * hold `docs/12` §13–§14's text verbatim, whose system text carries
- * `{{TARGET_MINUTES}}`, and wait for the owner in `src/prompts/pending/`
- * (`docs/12` §13's note of that day, `plan/00` §6 item 382).
+ * file is there but the registry's parser refuses it. Since 2026-11-17 both
+ * files are in `src/prompts/` and load (the owner adopted one sentence in each
+ * system text, `plan/00` §6 item 382), so both scenarios are ready.
  *
  * @param scenario - a name from {@link LLM_AUDIO_SCRIPT_SCENARIOS}
  * @param promptDir - `src/prompts/`; a test passes its own

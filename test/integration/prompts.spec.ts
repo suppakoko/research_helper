@@ -89,6 +89,12 @@ const RELEASED_FILE_SHA256: Readonly<Record<string, string>> = {
     "154a2754ebb4780aa0446a26b4b7cf058f0e29ec2bad02ef01cfd3901b0920b4",
   "collection-profile.v1.0.0.md":
     "46c5f3ca9c0d3dde285acd9278fc0cb9d0393eb8685571385dea21fe3748b8a7",
+  // P6-T06, registered 2026-11-17 once the owner moved the target length out
+  // of each system text (plan/00 §6 item 382; docs/12 §13–§14).
+  "audio-script-en.v1.0.0.md":
+    "4e1ff5cfb241c3582599a6e8541a4cc4d12cf1a9e93d7d40157c33fa510bc347",
+  "audio-script-ko.v1.0.0.md":
+    "202e6873552a1055045d4451b47dee269690b3a7225e519636633d48b82c0082",
 };
 
 /** Each prompt's schema file, or `null` (`docs/12` §3–§21). */
@@ -106,6 +112,8 @@ const SCHEMA_FILES: Readonly<Record<PromptId, string | null>> = {
   THEME_MERGE: "theme-merge.v1.json",
   CLUSTER_REDUCE_MERGE: "theme-analysis.v1.json",
   COLLECTION_PROFILE: "collection-profile.v1.json",
+  AUDIO_SCRIPT_EN: null,
+  AUDIO_SCRIPT_KO: null,
 };
 
 /** Each prompt's temperature (`docs/06` §11.1; `docs/12` §8, §20, §21). */
@@ -123,6 +131,8 @@ const TEMPERATURES: Readonly<Record<PromptId, number>> = {
   THEME_MERGE: 0.2,
   CLUSTER_REDUCE_MERGE: 0.3,
   COLLECTION_PROFILE: 0.2,
+  AUDIO_SCRIPT_EN: 0.4,
+  AUDIO_SCRIPT_KO: 0.4,
 };
 
 const SCHEMA_FILE = "paper-summary.v1.json";
@@ -144,7 +154,8 @@ describe("P3-T24: the bundled prompt registry (docs/12 §17.3)", function () {
       PROMPT_SOURCE_FILES.length,
       PROMPT_IDS.length + patched.length,
     );
-    assert.strictEqual(PROMPT_IDS.length, 13);
+    // 15 since 2026-11-17: the two audio prompts (plan/00 §6 item 382).
+    assert.strictEqual(PROMPT_IDS.length, 15);
     const expected: Record<string, string> = {};
     // The summary cache keys on these (2026-10-23, plan/00 §6 item 273(a)).
     for (const id of PROMPT_IDS) {
@@ -288,6 +299,16 @@ describe("P3-T24: the bundled prompt registry (docs/12 §17.3)", function () {
       "USER TOPIC (the reason this collection exists): topic\nTHEMES REQUIRED: between 4 and 7.\nMINIMUM PAPERS PER THEME: 3\n",
     );
     assert.strictEqual(clusterRendered.system, cluster.system);
+
+    // AUDIO_SCRIPT_KO's adopted rule 12 survived the bundle in Hangul, and
+    // the target length reaches the model through the user text only
+    // (owner, plan/00 §6 item 382, 2026-11-17).
+    const audioKo = PROMPT_REGISTRY.get("AUDIO_SCRIPT_KO");
+    assert.include(
+      audioKo.system,
+      "12. 목표 분량은 요청에 적힌 길이만큼의 말입니다. 보고서보다 훨씬 짧습니다. 이것은 낭독이 아니라 브리핑입니다.",
+    );
+    assert.include(audioKo.user, "목표 길이: 약 {{TARGET_MINUTES}}분.");
   });
 
   it("carries the schema and max_tokens each bundled prompt declares", async function () {
@@ -319,6 +340,15 @@ describe("P3-T24: the bundled prompt registry (docs/12 §17.3)", function () {
     assert.strictEqual(
       resolveMaxTokens(PROMPT_REGISTRY.get("THEME_MERGE")),
       4000,
+    );
+    // P6-T06: docs/12 §13–§14's floors (P6-T07 scales them above).
+    assert.strictEqual(
+      resolveMaxTokens(PROMPT_REGISTRY.get("AUDIO_SCRIPT_EN")),
+      2500,
+    );
+    assert.strictEqual(
+      resolveMaxTokens(PROMPT_REGISTRY.get("AUDIO_SCRIPT_KO")),
+      3500,
     );
     // P5-T22: docs/12 §15's one profile call.
     assert.strictEqual(

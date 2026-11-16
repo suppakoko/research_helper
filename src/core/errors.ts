@@ -567,10 +567,35 @@ export class OutputTruncatedError extends LLMError {
   override readonly code: string = "OUTPUT_TRUNCATED";
   override readonly messageKey: string = "rh-error-output-truncated";
 }
+/**
+ * Why a text-to-speech run failed, carried as `TTSError.context.reason`
+ * (`docs/07` §10.1's note of 2026-11-17; `plan/09` `P6-T14`). The first six
+ * are `P6-T14`'s and each has its own `rh-error-tts` variant; the last two
+ * are `P6-T05`'s and read the default variant.
+ */
+export const TTS_ERROR_REASONS = [
+  "unentitled",
+  "model-gone",
+  "no-audio",
+  "sample-rate",
+  "script-rejected",
+  "rate-limited",
+  "unsupported-format",
+  "malformed-response",
+] as const;
+export type TTSErrorReason = (typeof TTS_ERROR_REASONS)[number];
+
 export class TTSError extends ResearchHelperError {
   readonly code: string = "TTS";
   readonly messageKey: string = "rh-error-tts";
   readonly retryable: boolean = false;
+  /** `context.reason` when it is one of {@link TTS_ERROR_REASONS}. */
+  get reason(): TTSErrorReason | undefined {
+    const { reason } = this.context;
+    return (TTS_ERROR_REASONS as readonly unknown[]).includes(reason)
+      ? (reason as TTSErrorReason)
+      : undefined;
+  }
 }
 
 /* ---- Zotero-side ---- */

@@ -25,6 +25,7 @@ import { GEMINI_DISPLAY_NAME_KEY } from "../../../src/llm/gemini/geminiProvider"
 import { OPENAI_DISPLAY_NAME_KEY } from "../../../src/llm/openai/openAiProvider";
 import { OPENROUTER_DISPLAY_NAME_KEY } from "../../../src/llm/openrouter/openRouterProvider";
 import {
+  AUDIO_COST_L10N,
   COST_DIALOG_L10N,
   USAGE_L10N,
 } from "../../../src/ui/dialogs/costConfirmDialog";
@@ -164,6 +165,9 @@ const ID_CONSTANTS = {
   // `P5-T22`: a recommend run's notice and its fallback warning.
   L10N_EGRESS_PROFILE_NOTICE: keys.L10N_EGRESS_PROFILE_NOTICE,
   L10N_RECOMMEND_PROFILE_UNUSABLE: keys.L10N_RECOMMEND_PROFILE_UNUSABLE,
+  // `P6-T15`: the audio run's notice naming both hosts, and strict mode's refusal.
+  L10N_EGRESS_AUDIO_NOTICE: keys.L10N_EGRESS_AUDIO_NOTICE,
+  L10N_AUDIO_TIER_REFUSED: keys.L10N_AUDIO_TIER_REFUSED,
 } satisfies Record<string, string>;
 
 /** The exported `L10N_*` string constants that are not message identifiers. */
@@ -568,7 +572,7 @@ describe("src/i18n/keys.ts — the LLM error messages P3-T05 ships", () => {
     new StructuredOutputError("openai", "m", "x"),
   ].map((error) => error.messageKey);
 
-  it("ships the four LLM messageKeys and defers only TTS and policy (budget shipped with P3-T16)", () => {
+  it("ships the four LLM messageKeys and defers only policy (budget shipped with P3-T16, TTS with P6-T14)", () => {
     expect(llmKeys).toEqual([
       "rh-error-llm",
       "rh-error-context-length",
@@ -579,11 +583,42 @@ describe("src/i18n/keys.ts — the LLM error messages P3-T05 ships", () => {
     expect(notIn(llmKeys, read("MAIN_WINDOW_MESSAGE_IDS"))).toEqual([]);
     expect(sharedBy(llmKeys, read("DEFERRED_ERROR_MESSAGE_IDS"))).toEqual([]);
     expect(sorted(read("DEFERRED_ERROR_MESSAGE_IDS"))).toEqual(
-      sorted([
-        new TTSError("x").messageKey,
-        new PolicyViolationError("x").messageKey,
-      ]),
+      sorted([new PolicyViolationError("x").messageKey]),
     );
+  });
+
+  it("ships rh-error-tts with P6-T14: an argument message, Korean pending G-41", () => {
+    const tts = new TTSError("x").messageKey;
+    expect(read("ERROR_MESSAGE_IDS")).toContain(tts);
+    expect(read("MAIN_WINDOW_MESSAGE_IDS")).toContain(tts);
+    expect(read("ARGUMENT_MESSAGE_IDS")).toContain(tts);
+    expect(read("KO_PENDING_REVIEW")).toContain(tts);
+    expect(read("DEFERRED_ERROR_MESSAGE_IDS")).not.toContain(tts);
+    expect(read("KO_PRESENT")).not.toContain(tts);
+  });
+
+  it("ships P6-T15's thirteen audio strings in mainWindow, Korean pending G-41", () => {
+    const audio = [
+      ...Object.values(AUDIO_COST_L10N),
+      keys.L10N_AUDIO_TIER_REFUSED,
+    ];
+    expect(audio).toHaveLength(13);
+    expect(notIn(audio, read("MAIN_WINDOW_MESSAGE_IDS"))).toEqual([]);
+    expect(notIn(audio, read("KO_PENDING_REVIEW"))).toEqual([]);
+    expect(sharedBy(audio, read("KO_PRESENT"))).toEqual([]);
+    expect(
+      audio.filter((id) => read("ARGUMENT_MESSAGE_IDS").includes(id)),
+    ).toEqual([
+      keys.L10N_EGRESS_AUDIO_NOTICE,
+      AUDIO_COST_L10N.script,
+      AUDIO_COST_L10N.provisional,
+      AUDIO_COST_L10N.length,
+      AUDIO_COST_L10N.lengthWarning,
+      AUDIO_COST_L10N.duration,
+      AUDIO_COST_L10N.attach,
+    ]);
+    // `rh-error-policy` stays deferred: the refusal has its own message.
+    expect(read("DEFERRED_ERROR_MESSAGE_IDS")).toEqual(["rh-error-policy"]);
   });
 
   it("puts all four on KO_PRESENT once the owner reviewed the Korean (2026-10-20, G-41)", () => {

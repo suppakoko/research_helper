@@ -206,6 +206,134 @@ rh-error-seed-no-identifier = 이 항목에는 DOI, PMID, arXiv ID, 제목이 �
 rh-error-seed-no-match = 이 항목의 제목과 충분히 일치하는 논문을 찾지 못했고, 항목에 DOI, PMID, arXiv ID도 없습니다. 이 중 하나를 항목에 추가하거나 제목을 고친 뒤 다시 시도하세요.
 rh-error-recommend-too-few-items = 이 컬렉션에는 항목이 { $count }개 있습니다. 추천을 받으려면 항목이 5개 이상 필요합니다.
 
+# `TTSError` (P6-T14). On KO_PENDING_REVIEW: a commented stub, so a Korean UI
+# shows the en-US text until the owner reviews it (G-41). The English source
+# is the en-US entry; below it, the coordinator's draft, not adopted.
+# English source:
+#   unentitled: This Gemini key cannot use Gemini text-to-speech, so no audio was made. Your report is unchanged. Check the key's access in Google AI Studio, or save the spoken script as text.
+#   model-gone: The Gemini text-to-speech model is no longer available, so no audio was made. Your report is unchanged. Try again later, or save the spoken script as text.
+#   no-audio: Gemini answered without audio, so no audio was made. Your report is unchanged. Try again, or save the spoken script as text.
+#   sample-rate: Gemini returned the parts of the audio at different sample rates, so they could not be joined. Your report is unchanged. Try again, or save the spoken script as text.
+#   script-rejected: The spoken script still contained written formatting after one retry, so no audio was made and nothing was sent to Gemini. Your report is unchanged. Save the script as text, or try again.
+#   rate-limited: Gemini text-to-speech is receiving too many requests, so no audio was made. Your report is unchanged. Try again in a few minutes, or save the spoken script as text.
+#   other: Gemini text-to-speech could not make the audio. Your report is unchanged. Try again, or save the spoken script as text.
+# Draft (coordinator, 2026-11-17, not adopted):
+# rh-error-tts = { $reason ->
+#     [unentitled] 이 Gemini 키로는 Gemini 음성 합성을 쓸 수 없어 오디오를 만들지 못했습니다. 보고서는 그대로입니다. Google AI Studio에서 키의 사용 권한을 확인하거나, 음성 대본을 텍스트로 저장하세요.
+#     [model-gone] Gemini 음성 합성 모델을 더 이상 쓸 수 없어 오디오를 만들지 못했습니다. 보고서는 그대로입니다. 나중에 다시 시도하거나, 음성 대본을 텍스트로 저장하세요.
+#     [no-audio] Gemini가 오디오 없이 응답해 오디오를 만들지 못했습니다. 보고서는 그대로입니다. 다시 시도하거나, 음성 대본을 텍스트로 저장하세요.
+#     [sample-rate] Gemini가 보낸 오디오 조각들의 샘플링 레이트가 서로 달라 하나로 합칠 수 없었습니다. 보고서는 그대로입니다. 다시 시도하거나, 음성 대본을 텍스트로 저장하세요.
+#     [script-rejected] 한 번 다시 시도한 뒤에도 음성 대본에 문서 서식이 남아 있어 오디오를 만들지 않았고, Gemini에는 아무것도 보내지 않았습니다. 보고서는 그대로입니다. 대본을 텍스트로 저장하거나 다시 시도하세요.
+#     [rate-limited] Gemini 음성 합성에 요청이 너무 많아 오디오를 만들지 못했습니다. 보고서는 그대로입니다. 몇 분 뒤 다시 시도하거나, 음성 대본을 텍스트로 저장하세요.
+#    *[other] Gemini 음성 합성이 오디오를 만들지 못했습니다. 보고서는 그대로입니다. 다시 시도하거나, 음성 대본을 텍스트로 저장하세요.
+# }
+
+# P6-T15's audio notice, cost-dialog lines, tier question and refusal. On
+# KO_PENDING_REVIEW: commented stubs, so a Korean UI shows the en-US text until
+# the owner reviews them (G-41). For each: the English source, then the
+# coordinator's draft (2026-11-17, not adopted).
+# research-helper-egress-audio-notice
+# English source:
+#   { $script ->
+#   [due] To make the audio, the report's sections, the collection's name, its counts and year range, and one line for each cited paper (its Zotero item key, first author's surname and year) are sent to { $scriptModel } at { $scriptHost } to write a spoken script. The spoken script, which can name the collection and cited authors aloud, is then sent to { $ttsModel } at { $ttsHost } to be read aloud.
+#   *[stored] The spoken script already written for this report, which can name the collection and cited authors aloud, is sent to { $ttsModel } at { $ttsHost } to be read aloud. No script is written this time, so nothing else is sent.
+#   }
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-egress-audio-notice =
+#     { $script ->
+#         [due] 오디오를 만들기 위해 보고서의 각 절, 컬렉션 이름, 항목 수와 연도 범위, 그리고 인용된 논문마다 한 줄(Zotero 항목 키, 제1저자의 성, 연도)이 음성 대본 작성을 위해 { $scriptHost }의 { $scriptModel }(으)로 전송됩니다. 그런 다음 컬렉션 이름과 인용된 저자를 소리 내어 언급할 수 있는 음성 대본이 낭독을 위해 { $ttsHost }의 { $ttsModel }(으)로 전송됩니다.
+#        *[stored] 이 보고서용으로 이미 작성된 음성 대본(컬렉션 이름과 인용된 저자를 소리 내어 언급할 수 있음)이 낭독을 위해 { $ttsHost }의 { $ttsModel }(으)로 전송됩니다. 이번에는 대본을 새로 작성하지 않으므로 그 밖의 내용은 전송되지 않습니다.
+#     }
+# research-helper-cost-audio-script
+# English source:
+#   { $calls ->
+#   [one] Writing the spoken script: 1 call to { $model }, for about { $minutes } of audio.
+#   *[other] Writing the spoken script: up to { $calls } calls to { $model }, for about { $minutes } of audio.
+#   }
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-cost-audio-script =
+#     { $calls ->
+#        *[other] 음성 대본 작성: 약 { $minutes } 분량의 오디오를 위해 { $model }에 최대 { $calls }회 호출.
+#     }
+# research-helper-cost-audio-provisional
+# English source:
+#   Then reading it aloud with { $model }: about { $duration }, estimated from the target length. Once the script is written you confirm again, with its real length, before any audio is made.
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-cost-audio-provisional = 이어서 { $model }(으)로 낭독: 목표 길이로 추정한 약 { $duration }. 대본이 작성되면 오디오를 만들기 전에 실제 길이로 다시 확인합니다.
+# research-helper-cost-audio-length
+# English source:
+#   { $chunks ->
+#   [one] Spoken script: { $chars } characters, read aloud in 1 part.
+#   *[other] Spoken script: { $chars } characters, read aloud in { $chunks } parts.
+#   }
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-cost-audio-length =
+#     { $chunks ->
+#        *[other] 음성 대본: { $chars }자, { $chunks }개 부분으로 나누어 낭독.
+#     }
+# research-helper-cost-audio-length-warning
+# English source:
+#   { $unit ->
+#   [syllables] The script is { $count } Hangul syllables long, against a target of about { $target }, so the audio will be longer or shorter than planned.
+#   *[words] The script is { $count } words long, against a target of about { $target }, so the audio will be longer or shorter than planned.
+#   }
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-cost-audio-length-warning =
+#     { $unit ->
+#         [syllables] 대본 길이가 한글 { $count }음절로, 목표인 약 { $target }음절과 차이가 있어 오디오가 계획보다 길거나 짧아집니다.
+#        *[words] 대본 길이가 { $count }단어로, 목표인 약 { $target }단어와 차이가 있어 오디오가 계획보다 길거나 짧아집니다.
+#     }
+# research-helper-cost-audio-duration
+# English source:
+#   Audio: about { $duration }, about { $size } as a WAV file.
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-cost-audio-duration = 오디오: 약 { $duration }, WAV 파일로 약 { $size }.
+# research-helper-cost-audio-attach
+# English source:
+#   { $mode ->
+#   [linked] The file is too large to store in Zotero, so it is saved in a folder you choose and linked from the report's collection. Zotero does not sync a linked file.
+#   *[imported] The file is stored in Zotero, in the report's collection, and syncs like your other attachments.
+#   }
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-cost-audio-attach =
+#     { $mode ->
+#         [linked] 파일이 Zotero에 저장하기에는 너무 커서, 직접 고른 폴더에 저장하고 보고서의 컬렉션에서 링크합니다. Zotero는 링크된 파일을 동기화하지 않습니다.
+#        *[imported] 파일은 Zotero의 보고서 컬렉션에 저장되며 다른 첨부 파일처럼 동기화됩니다.
+#     }
+# research-helper-cost-audio-rate-unmeasured
+# English source:
+#   This cost uses an audio token rate measured on a different Gemini text-to-speech model, so it may be less accurate.
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-cost-audio-rate-unmeasured = 이 비용은 다른 Gemini 음성 합성 모델에서 측정한 오디오 토큰 비율을 사용하므로 덜 정확할 수 있습니다.
+# research-helper-cost-audio-tier-question
+# English source:
+#   Is this Google API key's Google Cloud project billing-linked (Google's paid tier)? Research Helper cannot check this itself, so it asks once. "Don't know" counts as the free tier. You can change the answer later in Research Helper's settings, under the Gemini key.
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-cost-audio-tier-question = 이 Google API 키의 Google Cloud 프로젝트에 결제가 연결되어 있나요(Google 유료 등급)? Research Helper는 이를 직접 확인할 수 없어 한 번만 묻습니다. "모름"은 무료 등급으로 취급됩니다. 답은 나중에 Research Helper 설정의 Gemini 키 항목에서 바꿀 수 있습니다.
+# research-helper-cost-audio-tier-paid
+# English source:
+#   .label = Yes, billing is linked (paid tier)
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-cost-audio-tier-paid =
+#     .label = 예, 결제가 연결되어 있습니다(유료 등급)
+# research-helper-cost-audio-tier-free
+# English source:
+#   .label = No, it is on the free tier
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-cost-audio-tier-free =
+#     .label = 아니요, 무료 등급입니다
+# research-helper-cost-audio-tier-unknown
+# English source:
+#   .label = Don't know
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-cost-audio-tier-unknown =
+#     .label = 모름
+# research-helper-audio-tier-refused
+# English source:
+#   Strict privacy mode makes no audio with this Google API key, because it may be on the free tier, where Google may use what you send to improve its products. To make audio, mark the key as paid in Research Helper's settings if its Google Cloud project is billing-linked, or choose a less strict privacy mode.
+# Draft (coordinator, 2026-11-17, not adopted):
+# research-helper-audio-tier-refused = 엄격 개인정보 보호 모드에서는 이 Google API 키로 오디오를 만들지 않습니다. 이 키가 무료 등급일 수 있고, 무료 등급에서는 Google이 전송된 내용을 자사 제품 개선에 사용할 수 있기 때문입니다. 오디오를 만들려면 Google Cloud 프로젝트에 결제가 연결된 경우 Research Helper 설정에서 이 키를 유료로 표시하거나, 덜 엄격한 개인정보 보호 모드를 선택하세요.
+
 
 ## The preference pane's key-storage badge (docs/09 §1.9; P1-T44, P2-T34)
 ##

@@ -162,6 +162,10 @@ with every card that adds logic; features hide until they work). In addition:
 24. **No TTS model ID is compiled in** except the one marked last-resort fallback (`docs/04` §2.2;
     `plan/README.md` §5 rule 4), and no price except in a dated, documented table with a row-by-row
     test, as `DOCUMENTED_PRICE_TABLE` is.
+    *DECIDED 2026-11-17 (coordinator, under item 313; `P6-T10`): the price table's rows are keyed by
+    their model ids, one per line marked `// PRICE ROW`; a row is a lookup for a model already resolved,
+    never a choice. `P6-T05`'s grep criterion reads "exactly one ID outside the marked price rows", and
+    `test/unit/tts/pricing.test.ts` checks it (`docs/04` §2.2's note of this date).*
 
 ### 0.3 What Phase 6 needs from earlier phases
 
@@ -191,7 +195,7 @@ may be overturned by the owner. Each card named carries the decision as a `DECID
 | 3 | v1.0 ships Gemini TTS only; on failure the script is saved as text (FR-43); OpenAI TTS is a later-release candidate, with no cards | owner, item 378(c) | `P6-T14`; §4; `docs/04` §7.5 marked 2026-11-16 |
 | 4 | The offline "Read aloud" (`speechSynthesis`, `W6-9`) is not in v1.0; later-release candidate, no cards | owner, item 378(d) | §4; `docs/04` §7.1 marked 2026-11-16 |
 | 5 | Primary Gemini surface: **legacy `generateContent` only**; Interactions is a later-release candidate | coordinator | `P6-T05`; `docs/04` §2.1 marked 2026-11-16 |
-| 6 | `tts.outputFormat` ships `"wav"`; v1.0 writes WAV only. Import at most 10 MiB, link above, into `tts.linkedFileDir` chosen on first use; the data-directory copy an import leaves is deleted. *Note 2026-11-16 (`P6-T13`): Zotero links a file only in the personal library, so a group report over 10 MiB is refused before synthesis until the owner answers `plan/00` §6 item 383* | coordinator | `P6-T02`, `P6-T13`; `docs/04` §6.4 and §10.2, `docs/07` §8.5, `docs/08` §7.3, `docs/13` §8.6 marked 2026-11-16 |
+| 6 | `tts.outputFormat` ships `"wav"`; v1.0 writes WAV only. Import at most 10 MiB, link above, into `tts.linkedFileDir` chosen on first use; the data-directory copy an import leaves is deleted. *Note 2026-11-16 (`P6-T13`): Zotero links a file only in the personal library, so a group report over 10 MiB is refused before synthesis until the owner answers `plan/00` §6 item 383. Decided 2026-11-17 (coordinator, under item 313; item 383): the refusal stands (option A); importing into a group whatever the size (option B) is a later-release candidate* | coordinator | `P6-T02`, `P6-T13`; `docs/04` §6.4 and §10.2, `docs/07` §8.5, `docs/08` §7.3, `docs/13` §8.6 marked 2026-11-16 |
 | 7 | The audio is a **standalone attachment in the report's collection**, its key kept in `TrendReport.audioAttachmentKeys`; `P6-T13` checks in Zotero's source whether a note can parent an attachment and records it, and writes a standalone attachment either way | coordinator | `P6-T13`; `docs/04` §10.1 marked 2026-11-16 |
 | 8 | Register: conversational, no citation markers read aloud, the written report is the source of record (`docs/10` Q9) | coordinator | `P6-T06`; `docs/10` §5 Q9, `docs/12` §14 marked 2026-11-16 |
 | 9 | The Korean script is written natively, not translated (`docs/10` Q10) | coordinator, within item 378(a) | `P6-T08`; `docs/10` §5 Q10 marked 2026-11-16 |
@@ -668,7 +672,7 @@ decided on 2026-11-16.
 | Field | Value |
 |---|---|
 | **ID** | `P6-T06` |
-| **State** | `TODO` — partly built 2026-11-16; blocked on an owner decision (`plan/00` §6 item 382): the prompts cannot load as `docs/12` prints them. Only the owner sets `DONE`. Report at `plan/reports/P6-T06.md`. |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Partly built 2026-11-16 and blocked on `plan/00` §6 item 382, which the owner decided on 2026-11-17; both prompts now load. Report at `plan/reports/P6-T06.md`, with an addendum of 2026-11-17. |
 | **Depends on** | none |
 | **Blocks** | `P6-T07`, `P6-T08` |
 | **Retires** | none |
@@ -725,6 +729,8 @@ nothing else stands in the way. The question, with a draft sentence for each pro
 loads. Six coordinator decisions under item 313. Checks: typecheck, lint, eslint, 7,855 unit and 84 contract tests,
 build with unchanged typings; no integration run, since nothing that runs inside Zotero changed.
 
+**Addendum, 2026-11-17 — built, awaiting the owner's review; both criteria pass; addendum in `plan/reports/P6-T06.md`.** The owner adopted the drafted sentences (`plan/00` §6 item 382(e)): §13 rule 11 and §14 rule 12 now carry no placeholder, in `docs/12` and in both files, version still 1.0.0, `lastReviewed` 2026-11-17. The files moved from `src/prompts/pending/` (now gone) into `src/prompts/`; `AUDIO_SCRIPT_EN` and `AUDIO_SCRIPT_KO` are appended to `PROMPT_IDS` and `PROMPT_FILE_NAMES` and bundled in `PROMPT_SOURCE_FILES`. The refusal tests became load tests; the generic shipped-prompt tests (verbatim, temperature, ceiling, schema) now cover both; `test/integration/prompts.spec.ts` gained their SHA-256 lines. The Korean line was byte-compared after writing (NFC, no BOM, no CR; only the rule line and `lastReviewed` differ from the held file). The recorder's two script scenarios are ready. Unit 7,995 and contract 93 pass; the typings did not move; three clean integration runs are in `plan/reports/P6-batch3.md`.
+
 ---
 
 ### P6-T07 — Script pass: citation map, target, validation, one retry
@@ -732,7 +738,7 @@ build with unchanged typings; no integration run, since nothing that runs inside
 | Field | Value |
 |---|---|
 | **ID** | `P6-T07` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T07.md`. |
 | **Depends on** | `P6-T01`, `P6-T02`, `P6-T06` |
 | **Blocks** | `P6-T08`, `P6-T10`, `P6-T14`, `P6-T16` |
 | **Retires** | none |
@@ -820,6 +826,8 @@ npm run typecheck && npm run lint:check && npm run test:unit -- audioScript
 `audioReportPipeline.ts` (`P6-T16`). Tests use `P6-T03`'s `audio-script-en` stand-in until `P6-T04`
 records it.
 
+**Findings, 2026-11-17 — built, awaiting the owner's review; all four criteria pass; full report at `plan/reports/P6-T07.md`.** `writeScript` (`src/pipeline/audioReport/script.ts`) builds the seven `docs/12` §13 variables from the report's §1–§10 (through `draftForCritique`), the citation map from the `CitationSource` port (`citationMapFor`, `src/pipeline/audioReport/citationMap.ts`), makes one call on the `strong` model at 0.4 with `scriptOutputCeiling`'s ceiling, and validates with `validateScript` over `SCRIPT_LEAKS`; one retry appends the English correction list, a second leak returns `ScriptRejected`, and a `length` or `content_filter` answer throws without a retry. Six readings recorded as coordinator decisions in the file header. One finding, not a card: the card names `targetWordsForOutput` for the report's target, which converts an output ceiling into words; the report's target is `resolveTargetWords` (`reportTargetWordsOf`). 36 tests in `audioScript.test.ts` (with `P6-T08`'s); the two cards share one mutation sweep, 36 of 37 killed, the survivor equivalent (`P6-T08`'s report); no integration run, since nothing that runs inside Zotero imports the new files yet.
+
 ---
 
 ### P6-T08 — Korean script path, language default, Korean length check
@@ -827,7 +835,7 @@ records it.
 | Field | Value |
 |---|---|
 | **ID** | `P6-T08` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T08.md`. |
 | **Depends on** | `P6-T02`, `P6-T06`, `P6-T07` |
 | **Blocks** | `P6-T16` |
 | **Retires** | part of `R-8` |
@@ -883,6 +891,8 @@ npm run typecheck && npm run lint:check && npm run test:unit -- audioScript audi
 How a `both` run's two stored reports are found from one of them is read from `P4-T21`'s report before
 coding; if no link between them is stored, this card uses the report it was given and says so in its
 report.
+
+**Findings, 2026-11-17 — built, awaiting the owner's review; all three criteria pass; full report at `plan/reports/P6-T08.md`.** `resolveAudioLanguage` takes the window's choice, then `tts.language`, then the report's `language`; `chooseScriptSource` uses the job's report when it is in the language asked, else a companion record that `isSameRun` accepts (one library, one collection, one `generatedAtEpochMs`, the other language), else the job's report, in one `AUDIO_SCRIPT_KO` call either way, with `sourceLanguage` set. `countHangulSyllables` and `countArabicNumerals` (`src/pipeline/audioReport/korean.ts`) are exact on a fixed sample; the Korean band counts syllables against `TARGET_MINUTES × 330`; the numeral count is logged at `info` for every Korean script. **Finding:** no link between a `both` run's two records is stored — only the shared instant — and `ReportStore` has no lookup by collection, so the caller (`P6-T16`, which owns `db.ts`) finds the companion; this card takes it as an optional input, as the card's note allows. 5 tests in `audioKorean.test.ts` and 6 in `audioScript.test.ts`; mutants in `P6-T07`'s shared sweep.
 
 ---
 
@@ -945,7 +955,7 @@ npm run typecheck && npm run lint:check && npm run test:unit -- chunk
 | Field | Value |
 |---|---|
 | **ID** | `P6-T10` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T10.md`. |
 | **Depends on** | `P6-T05`, `P6-T07`, `P6-T09` |
 | **Blocks** | `P6-T15`, `P6-T16` |
 | **Retires** | none |
@@ -1007,6 +1017,8 @@ npm run typecheck && npm run lint:check && npm run test:unit -- pricing audioEst
 
 **Notes.** Needs: `P3-T35` (the price source). `P3-T31` (NOT BUILT) would calibrate the script call;
 until then it uses `P3-T13`'s ratios, as every other call does.
+
+**Findings, 2026-11-17 — built, awaiting the owner's review; all four criteria pass; full report at `plan/reports/P6-T10.md`.** `src/tts/pricing.ts` holds `DOCUMENTED_TTS_PRICE_TABLE` (`docs/04` §4.2's three rows, `TTS_PRICES_AS_OF` 2026-09-08, the rate's measured model as a row flag), `AUDIO_TOKENS_PER_SECOND`, `ttsPricesFor` (a user `gemini` override wins; neither price is an unknown cost) and `ttsCostOf`. `src/pipeline/audioReport/estimate.ts` holds `estimateScriptStep` (the script call and its conditional retry at the ceiling, plus a provisional TTS figure from `TARGET_MINUTES`), `estimateAudioPlan` (`docs/07`'s `AudioPlan` from the real chunks), `audioDialogPlan` for `secondAcknowledgementFor` and `shouldOpenCostDialog` unchanged, and `chunkReservation`, which replaced `synthesize.ts`'s `estimateChunk` stand-in (`SynthesisDeps.prices` now). `docs/04` §11's example reproduces: 10 chunks, 600 s, 15,000 audio tokens before headroom, raw cost within 1 % of $0.151, linked at 28.8 MB. Five estimate decisions and three price-table decisions are recorded in the two file headers; the price rows name three TTS ids on lines marked `// PRICE ROW`, so `P6-T05`'s grep criterion now reads "outside the marked price rows" (§0.2 item 24's note) and is a unit test. **Finding for `P6-T16`:** the import-or-link preview is from the unpadded estimate, so a group-library report estimated just under 10 MiB can come out over it after spending; `P6-T16`'s refusal before synthesis (item 383, option A) should test the estimate with headroom. 13 + 6 tests and one in `audioSynthesize.test.ts`; 27 of 27 mutants killed.
 
 ---
 
@@ -1232,7 +1244,7 @@ a WAV over 10 MiB is linked, not imported.
 | Field | Value |
 |---|---|
 | **ID** | `P6-T14` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T14.md`. |
 | **Depends on** | `P6-T07`, `P6-T13` |
 | **Blocks** | `P6-T16` |
 | **Retires** | part of `R-8` |
@@ -1303,6 +1315,8 @@ npm run typecheck && npm run lint:check && npm run test:unit -- audioFailures i1
 **Notes.** Needs: Phase 3's error taxonomy. The Korean variant text waits for `G-41` like every new
 string (§0.4 line 30); the English lands with the card.
 
+**Findings, 2026-11-17 — built, awaiting the owner's review; all four criteria pass; full report at `plan/reports/P6-T14.md`.** `TTSError` gains `TTS_ERROR_REASONS` and a `reason` getter over its context (`src/core/errors.ts`; `docs/07` §10.1's note of 2026-11-17), with no new class. `classifyAudioFailure` (`src/pipeline/audioReport/failures.ts`) maps `AuthenticationError` and `AuthorizationError` to `unentitled`, `RateLimitError` to `rate-limited`, a 404 to `model-gone` and `ScriptRejected` to `script-rejected`; anything else keeps its own class, a plain `Error` becomes a `TTSError`; the serialized error is redacted, has no stack and keeps its HTTP status; `offerScriptText` and `offerAudioSaveAs` follow the state and a cancel. `saveScriptAsText` and `saveAudioAs` write UTF-8 text and a WAV to a path used once and never logged; `withAudioScript` is the store update `P6-T16` makes. Seven decisions are in the file header. `rh-error-tts` has one variant per reason and a default in en-US, and a commented ko-KR stub with the coordinator's draft, not adopted (`G-41`); it left `DEFERRED_ERROR_MESSAGE_IDS`, which now holds `rh-error-policy` alone. 17 tests in `audioFailures.test.ts` (a 403 through the real `createGeminiTts`) and one in `keys.test.ts`; 21 mutants, 19 killed (one after an added test), 2 equivalent (the explicit `redact` calls, which `toSerialized` repeats); integration 357 passed three times. No new finding.
+
 ---
 
 ### P6-T15 — Audio confirmation, tier question and both-host disclosure
@@ -1310,7 +1324,7 @@ string (§0.4 line 30); the English lands with the card.
 | Field | Value |
 |---|---|
 | **ID** | `P6-T15` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T15.md`. |
 | **Depends on** | `P6-T02`, `P6-T05`, `P6-T10` |
 | **Blocks** | `P6-T16` |
 | **Retires** | none |
@@ -1398,6 +1412,8 @@ npm run typecheck && npm run lint:check && npm run test:unit -- audioDisclosure 
 (`P6-T16`). §0.4 lines 26 and 27 were answered on 2026-11-16 (item 379). Line 27 changes one cell of
 the outcome table (balanced × free-or-unknown: warn and confirm instead of refuse); the estimate is
 unchanged, since the warn-and-confirm path is the one full mode already needed.
+
+**Findings, 2026-11-17 — built, awaiting the owner's review; all four criteria pass; full report at `plan/reports/P6-T15.md`.** `src/pipeline/audioReport/disclosure.ts` holds `audioTierState` (`paid` exactly when `gemini.paidTier` is on; the question while `gemini.tierAnswer` is `""` and the key is not declared paid), `recordTierAnswer` (on a confirmed dialog only; `paid` also sets `gemini.paidTier`), `assertAudioAllowed` (strict refuses a free or unknown key with a `PolicyViolationError` before any call; paid is allowed in every mode; every allowed run waits for the confirmation), `isAudioTierRefusal`, `audioKeyFingerprint` (16 hexadecimal characters of SHA-256 over a label, the `SecretId` and the key), `knownAudioKeyFingerprints` and `audioEgressNotice`. `egressDisclosure.ts` gains the `audio` input and member, `research-helper-egress-audio-notice` first among the notices, the reason `first-audio-key`, and the `audio` member on the egress log, which is the first-use record (`docs/07` §4.5's note of 2026-11-17). `costConfirmDialog.ts` gains `buildAudioDialogModel` for both moments of §0.4 line 13 as `preflight` models, with FR-42's lines, the script's length warnings, no downgrade and no "don't ask again", and the `tierQuestion` member, which `decideCostDialog` answers as `tierAnswer`. Thirteen en-US strings with commented ko-KR drafts, not adopted (`G-41`); `rh-error-policy` stays deferred, because the refusal shows `research-helper-audio-tier-refused`. Six decisions are in the file header and `docs/07` §8.5's note. 27 tests in `audioDisclosure.test.ts` (the 12-row table among them), 13 in `costConfirmDialog.test.ts`, 1 in `keys.test.ts`; 45 of 45 mutants killed. **Findings:** (1) the cost dialog's window (`addon/content/costConfirm.js`) does not render the tier question and no card has it in its Files row, so inside Zotero a confirmed dialog records the pre-selected "don't know"; recorded as `plan/00` §6 item 384, with a draft (not adopted) that adds the window to `P6-T17`'s Files. (2) For `P6-T16` and `P6-T17`, not a card: the refusal must be shown with `research-helper-audio-tier-refused` (`isAudioTierRefusal`), not the error's `messageKey`, and `knownAudioKeyFingerprints` needs the stored audio jobs.
 
 ---
 

@@ -22,6 +22,16 @@
  *   ({@link REPORT_COST_L10N}) and names each unpriced model, and applies the
  *   same threshold, ceilings, second acknowledgement and "don't ask again"
  *   rules, unchanged.
+ * - **an audio run's two moments** (`P6-T15`; `plan/09` §0.4 line 13;
+ *   {@link buildAudioDialogModel}): the script step, when a script call is due,
+ *   priced from the target length with the TTS part marked provisional; then
+ *   the audio step, with FR-42's figures from the real script — characters,
+ *   chunks, duration, file size, import-or-link and cost — and the script's
+ *   length warning. Both are `preflight` models, so the window renders them
+ *   as it renders any other, with the audio notice naming both hosts, the
+ *   Gemini warning or the declared-paid reminder, and no "don't ask again"
+ *   (every Gemini disclosure forces the question). The first one carries the
+ *   tier question while it is unanswered ({@link TierQuestion}).
  * - `ceiling` — a `BudgetExceededError` mid-run paused the job (`budget-stop`).
  *   It shows the spend so far and asks: continue (raise the ceiling for this
  *   run) or stop. Every summary already made is kept either way.
@@ -49,10 +59,22 @@
 
 import { config } from "../../../package.json";
 import {
+  L10N_EGRESS_AUDIO_NOTICE,
   L10N_EGRESS_PROFILE_NOTICE,
   L10N_EGRESS_REPORT_NOTICE,
   type MainWindowMessageId,
 } from "../../i18n/keys";
+import type { AudioPlan, SpokenScriptWarning } from "../../model/audio";
+import {
+  isOfferedTierAnswer,
+  OFFERED_TIER_ANSWERS,
+  PRESELECTED_TIER_ANSWER,
+  type OfferedTierAnswer,
+} from "../../pipeline/audioReport/disclosure";
+import {
+  audioDialogPlan,
+  type ScriptStepEstimate,
+} from "../../pipeline/audioReport/estimate";
 import {
   isEstimatedSpend,
   type CeilingKind,
@@ -128,6 +150,36 @@ export const REPORT_COST_L10N = {
   review: "research-helper-cost-report-review",
 } as const satisfies Record<string, MainWindowMessageId>;
 
+/**
+ * The audio run's own ids (`P6-T15`), placed only by
+ * {@link buildAudioDialogModel}: its notice, FR-42's lines, the provisional
+ * TTS line of the script step, the length warning, the tier question and its
+ * three choices. Korean pending review (`G-41`, `KO_PENDING_REVIEW`).
+ */
+export const AUDIO_COST_L10N = {
+  notice: L10N_EGRESS_AUDIO_NOTICE,
+  script: "research-helper-cost-audio-script",
+  provisional: "research-helper-cost-audio-provisional",
+  length: "research-helper-cost-audio-length",
+  lengthWarning: "research-helper-cost-audio-length-warning",
+  duration: "research-helper-cost-audio-duration",
+  attach: "research-helper-cost-audio-attach",
+  rateUnmeasured: "research-helper-cost-audio-rate-unmeasured",
+  tierQuestion: "research-helper-cost-audio-tier-question",
+  tierPaid: "research-helper-cost-audio-tier-paid",
+  tierFree: "research-helper-cost-audio-tier-free",
+  tierUnknown: "research-helper-cost-audio-tier-unknown",
+} as const satisfies Record<string, MainWindowMessageId>;
+
+/** Each offered answer's label, in {@link OFFERED_TIER_ANSWERS}' order. */
+const TIER_CHOICE_L10N: Readonly<
+  Record<OfferedTierAnswer, MainWindowMessageId>
+> = {
+  paid: AUDIO_COST_L10N.tierPaid,
+  free: AUDIO_COST_L10N.tierFree,
+  unknown: AUDIO_COST_L10N.tierUnknown,
+};
+
 /** The document the window loads. */
 export const COST_DIALOG_URL = `chrome://${config.addonRef}/content/costConfirm.xhtml`;
 
@@ -176,6 +228,26 @@ export function formatList(names: readonly string[], locale: string): string {
     style: "long",
     type: "conjunction",
   }).format(names);
+}
+
+/** A duration in whole minutes, at least one, for the locale ("10 minutes"). */
+export function formatMinutes(seconds: number, locale: string): string {
+  return new Intl.NumberFormat(locale, {
+    style: "unit",
+    unit: "minute",
+    unitDisplay: "long",
+    maximumFractionDigits: 0,
+  }).format(Math.max(1, Math.round(seconds / 60)));
+}
+
+/** A file size in decimal megabytes, one decimal ("28.8 MB"). */
+export function formatMegabytes(bytes: number, locale: string): string {
+  return new Intl.NumberFormat(locale, {
+    style: "unit",
+    unit: "megabyte",
+    unitDisplay: "short",
+    maximumFractionDigits: 1,
+  }).format(bytes / 1_000_000);
 }
 
 /** A price table's date, in UTC (the tables are dated, not timed). */
@@ -331,6 +403,23 @@ export interface PreflightDialogModel {
   readonly dontAskAgain: FluentLine | undefined;
   readonly accept: FluentLine;
   readonly cancel: FluentLine;
+  /**
+   * An audio run's first confirmation while the Gemini tier is unanswered
+   * (`P6-T15`). The member is absent from every other model.
+   */
+  readonly tierQuestion?: TierQuestion;
+}
+
+/** The once-asked tier question (owner, `plan/00` §6 item 378(b)). */
+export interface TierQuestion {
+  readonly prompt: FluentLine;
+  /** Radio choices, in order; exactly one is answered. */
+  readonly choices: readonly {
+    readonly answer: OfferedTierAnswer;
+    readonly label: FluentLine;
+  }[];
+  /** "Don't know", which counts as the free tier. */
+  readonly preselected: OfferedTierAnswer;
 }
 
 /** The mid-run question, as data. */
@@ -406,6 +495,97 @@ function reportPlanLines(
   return lines;
 }
 
+/** The disclosure's notices, each with its arguments. */
+function noticeLines(
+  disclosure: EgressDisclosure,
+  locale: string,
+): FluentLine[] {
+  return disclosure.noticeIds.map((id): FluentLine => {
+    if (id === L10N_EGRESS_REPORT_NOTICE && disclosure.report !== undefined) {
+      return {
+        id,
+        args: {
+          papers: disclosure.report.papers,
+          models: formatList(disclosure.report.modelIds, locale),
+        },
+      };
+    }
+    // `P6-T15`: both hosts when a script call is due (`docs/09` §3 row 5).
+    if (id === L10N_EGRESS_AUDIO_NOTICE && disclosure.audio !== undefined) {
+      const call = disclosure.audio.scriptCall;
+      return {
+        id,
+        args: {
+          script: call === undefined ? "stored" : "due",
+          scriptModel: call?.modelId ?? "",
+          scriptHost: call?.host ?? "",
+          ttsModel: disclosure.modelId,
+          ttsHost: disclosure.host,
+        },
+      };
+    }
+    // `P5-T22`: names the model and the scope (`docs/09` §3 row 6).
+    return id === L10N_EGRESS_PROFILE_NOTICE
+      ? {
+          id,
+          args: { papers: disclosure.itemCount, model: disclosure.modelId },
+        }
+      : { id };
+  });
+}
+
+/**
+ * FR-24's second acknowledgement and the threshold line for a plan, and the
+ * raise a ceiling the plan would pass asks for. Shared by {@link planView}
+ * and the audio views, so the rules are the same for every run.
+ */
+function moneyView(
+  plan: Pick<RunPlan, "calls" | "costUsd">,
+  confirmAboveCents: number,
+  stop: CeilingStop | undefined,
+  locale: string,
+): {
+  readonly thresholdLine: FluentLine | undefined;
+  readonly acknowledge: FluentLine | undefined;
+  readonly raise: PlanView["raise"];
+} {
+  const reason = secondAcknowledgementFor(plan, confirmAboveCents);
+  const thresholdLine: FluentLine | undefined =
+    reason === "above-threshold"
+      ? {
+          id: COST_DIALOG_L10N.aboveThreshold,
+          args: { threshold: formatUsd(confirmAboveCents / 100, locale) },
+        }
+      : undefined;
+  const acknowledge: FluentLine | undefined =
+    reason === undefined
+      ? undefined
+      : reason === "unknown-cost"
+        ? { id: COST_DIALOG_L10N.acknowledgeUnpriced }
+        : {
+            id: COST_DIALOG_L10N.acknowledge,
+            args: { cost: formatUsd(plan.costUsd ?? 0, locale) },
+          };
+  let raise: PlanView["raise"];
+  if (stop !== undefined) {
+    const limitUsd = Math.ceil(stop.projectedUsd * 100 - 1e-9) / 100;
+    raise = {
+      ceiling: stop.ceiling,
+      limitUsd,
+      line: {
+        id: COST_DIALOG_L10N.ceilingPreflight,
+        args: {
+          ceiling: stop.ceiling,
+          limit: formatUsd(stop.limitUsd, locale),
+          spent: formatUsd(stop.spentUsd, locale),
+          raised: formatUsd(limitUsd, locale),
+        },
+      },
+    };
+  }
+  return { thresholdLine, acknowledge, raise };
+}
+
 function planView(
   plan: RunPlan,
   unpricedModelIds: readonly string[],
@@ -437,40 +617,9 @@ function planView(
           },
         ]),
   ];
-  const reason = secondAcknowledgementFor(plan, confirmAboveCents);
-  if (reason === "above-threshold") {
-    lines.push({
-      id: COST_DIALOG_L10N.aboveThreshold,
-      args: { threshold: formatUsd(confirmAboveCents / 100, locale) },
-    });
-  }
-  const acknowledge: FluentLine | undefined =
-    reason === undefined
-      ? undefined
-      : reason === "unknown-cost"
-        ? { id: COST_DIALOG_L10N.acknowledgeUnpriced }
-        : {
-            id: COST_DIALOG_L10N.acknowledge,
-            args: { cost: formatUsd(plan.costUsd ?? 0, locale) },
-          };
-  let raise: PlanView["raise"];
-  if (stop !== undefined) {
-    const limitUsd = Math.ceil(stop.projectedUsd * 100 - 1e-9) / 100;
-    raise = {
-      ceiling: stop.ceiling,
-      limitUsd,
-      line: {
-        id: COST_DIALOG_L10N.ceilingPreflight,
-        args: {
-          ceiling: stop.ceiling,
-          limit: formatUsd(stop.limitUsd, locale),
-          spent: formatUsd(stop.spentUsd, locale),
-          raised: formatUsd(limitUsd, locale),
-        },
-      },
-    };
-  }
-  return { lines, acknowledge, raise };
+  const money = moneyView(plan, confirmAboveCents, stop, locale);
+  if (money.thresholdLine !== undefined) lines.push(money.thresholdLine);
+  return { lines, acknowledge: money.acknowledge, raise: money.raise };
 }
 
 /**
@@ -539,24 +688,7 @@ export function buildCostDialogModel(
       },
     },
   ];
-  const notices: FluentLine[] = disclosure.noticeIds.map((id) => {
-    if (id === L10N_EGRESS_REPORT_NOTICE && disclosure.report !== undefined) {
-      return {
-        id,
-        args: {
-          papers: disclosure.report.papers,
-          models: formatList(disclosure.report.modelIds, locale),
-        },
-      };
-    }
-    // `P5-T22`: names the model and the scope (`docs/09` §3 row 6).
-    return id === L10N_EGRESS_PROFILE_NOTICE
-      ? {
-          id,
-          args: { papers: disclosure.itemCount, model: disclosure.modelId },
-        }
-      : { id };
-  });
+  const notices = noticeLines(disclosure, locale);
   // A report run's plans name each unpriced model and carry the report's own
   // lines (P4-T16); a summarize run's lines are exactly what they were.
   const report = isReportRunEstimate(estimate) ? estimate : undefined;
@@ -641,6 +773,211 @@ export function buildCostDialogModel(
 }
 
 // ===========================================================================
+// 4b. An audio run's two moments (P6-T15; plan/09 §0.4 line 13)
+// ===========================================================================
+
+/** What both audio moments share. */
+interface AudioDialogCommon {
+  /** `audioEgressNotice`'s disclosure (`src/pipeline/audioReport/disclosure.ts`). */
+  readonly disclosure: EgressDisclosure;
+  /** The TTS provider's display name (untranslated, `docs/08` §10.3). */
+  readonly providerName: string;
+  /** `summary.confirmAboveCents`. */
+  readonly confirmAboveCents: number;
+  /** The ceiling this step's estimate would pass (`guard.check`). */
+  readonly ceiling: CeilingStop | undefined;
+  /** This session's spend so far, for the usage line. */
+  readonly session: SpendTotals;
+  /** `audioTierState(…).askTierQuestion`: offer the tier question here. */
+  readonly askTierQuestion: boolean;
+  /** The date of the prices the estimate used, for the disclaimer line. */
+  readonly pricesAsOfEpochMs: number | undefined;
+}
+
+/** The first moment, when a script call is due (`estimateScriptStep`). */
+export interface AudioScriptDialogInput extends AudioDialogCommon {
+  readonly step: "script";
+  readonly estimate: ScriptStepEstimate;
+  /** `TARGET_MINUTES` (`docs/12` §13). */
+  readonly targetMinutes: number;
+}
+
+/** The second moment, from the real script (`estimateAudioPlan`). */
+export interface AudioPlanDialogInput extends AudioDialogCommon {
+  readonly step: "audio";
+  readonly plan: AudioPlan;
+  /** The script's warnings (`P6-T07`); a stored script carries none. */
+  readonly warnings: readonly SpokenScriptWarning[];
+}
+
+/** Either audio moment. */
+export type AudioDialogInput = AudioScriptDialogInput | AudioPlanDialogInput;
+
+/** The cost line, or one unpriced line per model with no known price. */
+function costLines(
+  costUsd: number | undefined,
+  unpricedModelIds: readonly string[],
+  locale: string,
+): FluentLine[] {
+  return costUsd === undefined
+    ? unpricedModelIds.map((model): FluentLine => ({
+        id: COST_DIALOG_L10N.unpriced,
+        args: { model },
+      }))
+    : [
+        {
+          id: COST_DIALOG_L10N.total,
+          args: { cost: formatUsd(costUsd, locale) },
+        },
+      ];
+}
+
+/** The script step's lines: the script call, then the provisional TTS part. */
+function scriptStepLines(
+  input: AudioScriptDialogInput,
+  locale: string,
+): { lines: FluentLine[]; money: Pick<RunPlan, "calls" | "costUsd"> } {
+  const { estimate } = input;
+  const unpriced: string[] = [];
+  if (estimate.script.costUsd === undefined) {
+    unpriced.push(estimate.script.modelId);
+  }
+  if (estimate.tts.usd === undefined) unpriced.push(input.disclosure.modelId);
+  return {
+    lines: [
+      { id: COST_DIALOG_L10N.calls, args: { calls: estimate.calls } },
+      {
+        id: AUDIO_COST_L10N.script,
+        args: {
+          calls: estimate.script.calls,
+          model: estimate.script.modelId,
+          minutes: formatMinutes(input.targetMinutes * 60, locale),
+        },
+      },
+      {
+        id: AUDIO_COST_L10N.provisional,
+        args: {
+          model: input.disclosure.modelId,
+          duration: formatMinutes(estimate.tts.estimatedSeconds, locale),
+        },
+      },
+      ...costLines(estimate.costUsd, unpriced, locale),
+    ],
+    money: { calls: estimate.calls, costUsd: estimate.costUsd },
+  };
+}
+
+/** The audio step's lines: FR-42's figures, the warnings, the cost. */
+function audioStepLines(
+  input: AudioPlanDialogInput,
+  locale: string,
+): { lines: FluentLine[]; money: Pick<RunPlan, "calls" | "costUsd"> } {
+  const { plan } = input;
+  const money = audioDialogPlan(plan);
+  const lines: FluentLine[] = [
+    { id: COST_DIALOG_L10N.calls, args: { calls: money.calls } },
+    {
+      id: AUDIO_COST_L10N.length,
+      args: {
+        chars: formatCount(plan.totalChars, locale),
+        chunks: plan.chunks.length,
+      },
+    },
+    {
+      id: AUDIO_COST_L10N.duration,
+      args: {
+        duration: formatMinutes(plan.estimatedSeconds, locale),
+        size: formatMegabytes(plan.estimatedBytes, locale),
+      },
+    },
+    { id: AUDIO_COST_L10N.attach, args: { mode: plan.mode } },
+  ];
+  for (const warning of input.warnings) {
+    lines.push({
+      id: AUDIO_COST_L10N.lengthWarning,
+      args: {
+        unit: warning.length.unit === "words" ? "words" : "syllables",
+        count: formatCount(warning.length.count, locale),
+        target: formatCount(warning.length.target, locale),
+      },
+    });
+  }
+  lines.push(...costLines(money.costUsd, [plan.model], locale));
+  if (!plan.cost.rateMeasuredOnModel) {
+    lines.push({ id: AUDIO_COST_L10N.rateUnmeasured });
+  }
+  return { lines, money };
+}
+
+/**
+ * The cost dialog's model for one of an audio run's two moments: a
+ * `preflight` model, so the window places it as any other. Its header names
+ * Gemini's host and the TTS model with the mode; its notices are the
+ * disclosure's, the audio notice first; it offers no downgrade and no "don't
+ * ask again"; the tier question is present only when `askTierQuestion` is.
+ *
+ * @param input - either moment
+ * @param locale - a BCP 47 tag, the application's
+ * @returns the model the window script renders
+ */
+export function buildAudioDialogModel(
+  input: AudioDialogInput,
+  locale: string,
+): PreflightDialogModel {
+  const { disclosure } = input;
+  const { lines, money } =
+    input.step === "script"
+      ? scriptStepLines(input, locale)
+      : audioStepLines(input, locale);
+  const view = moneyView(money, input.confirmAboveCents, input.ceiling, locale);
+  if (view.thresholdLine !== undefined) lines.push(view.thresholdLine);
+  const footer: FluentLine[] = [
+    usageLine(COST_DIALOG_L10N.usageSession, input.session, locale),
+  ];
+  if (input.pricesAsOfEpochMs !== undefined) {
+    footer.push({
+      id: COST_DIALOG_L10N.disclaimer,
+      args: { date: formatDate(input.pricesAsOfEpochMs, locale) },
+    });
+  }
+  const model: PreflightDialogModel = {
+    mode: "preflight",
+    title: { id: COST_DIALOG_L10N.title },
+    header: [
+      {
+        id: COST_DIALOG_L10N.destination,
+        args: {
+          provider: input.providerName,
+          host: disclosure.host,
+          model: disclosure.modelId,
+          mode: disclosure.privacyMode,
+        },
+      },
+    ],
+    notices: noticeLines(disclosure, locale),
+    selected: { lines, acknowledge: view.acknowledge, raise: view.raise },
+    downgrade: undefined,
+    footer,
+    dontAskAgain: undefined,
+    accept: { id: COST_DIALOG_L10N.run },
+    cancel: { id: COST_DIALOG_L10N.cancel },
+  };
+  return input.askTierQuestion
+    ? {
+        ...model,
+        tierQuestion: {
+          prompt: { id: AUDIO_COST_L10N.tierQuestion },
+          choices: OFFERED_TIER_ANSWERS.map((answer) => ({
+            answer,
+            label: { id: TIER_CHOICE_L10N[answer] },
+          })),
+          preselected: PRESELECTED_TIER_ANSWER,
+        },
+      }
+    : model;
+}
+
+// ===========================================================================
 // 5. The answer, checked again here
 // ===========================================================================
 
@@ -653,6 +990,8 @@ export interface CostDialogAnswer {
   readonly acknowledged?: boolean;
   /** "Don't ask again for this collection" was ticked. */
   readonly dontAskAgain?: boolean;
+  /** The tier question's choice, when the model asked it (`P6-T15`). */
+  readonly tierAnswer?: OfferedTierAnswer;
 }
 
 /** What the caller does next. */
@@ -667,6 +1006,12 @@ export type CostDialogOutcome =
         | undefined;
       /** Store `routineConfirmationFor` the disclosure for the collection. */
       readonly dontAskAgain: boolean;
+      /**
+       * The tier answer to record (`recordTierAnswer`): present only when the
+       * model asked the question; an absent or unknown choice is the
+       * pre-selected one.
+       */
+      readonly tierAnswer?: OfferedTierAnswer;
     }
   | { readonly kind: "cancelled" }
   | {
@@ -687,6 +1032,9 @@ function asAnswer(value: unknown): CostDialogAnswer {
     downgrade: v["downgrade"] === true,
     acknowledged: v["acknowledged"] === true,
     dontAskAgain: v["dontAskAgain"] === true,
+    ...(isOfferedTierAnswer(v["tierAnswer"]) && {
+      tierAnswer: v["tierAnswer"],
+    }),
   };
 }
 
@@ -729,6 +1077,10 @@ export function decideCostDialog(
     // Only a box the window was given can have been ticked (item 281(b)).
     dontAskAgain:
       model.dontAskAgain !== undefined && answer.dontAskAgain === true,
+    // Only a question the window was given can have been answered (P6-T15).
+    ...(model.tierQuestion !== undefined && {
+      tierAnswer: answer.tierAnswer ?? model.tierQuestion.preselected,
+    }),
   };
 }
 

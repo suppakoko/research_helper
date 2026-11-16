@@ -1955,6 +1955,49 @@ export type { AudioChunk } from "../model/audio";
 > // EgressLogEntry gain `readonly report?: ReportEgressNotice`, present only for a report run.
 > ```
 >
+> **Added 2026-11-17 (`plan/09` `P6-T15`; coordinator, under `plan/00` §6 item 313): the audio run's
+> disclosure.** An audio run sends to **two** hosts (`09-security-privacy-and-api-keys.md` §3 row 5,
+> clarified 2026-11-16): the provider of `reportModel`, only when a script call is due (no script stored
+> for that language), and Gemini's TTS host, which receives the spoken script only. Its disclosure is
+> built by `buildEgressDisclosure` with provider `gemini`, the TTS model, **no items**, and an optional
+> `audio` input; so the Gemini free-tier warning, or the declared-paid reminder in its place, comes from
+> the existing rule, which reads `gemini.paidTier` (§8.5) on every build. The disclosure then carries
+> `research-helper-egress-audio-notice` **first** among its notices, naming both hosts and what each
+> receives, or Gemini's alone when the script is stored. `EgressDisclosure` and `EgressLogEntry` gain
+> `audio?: AudioEgressNotice`, present only for an audio run, so every other disclosure and log entry is
+> unchanged byte for byte. **The first use with a key** (09 §3.4 rule 5): the notice carries
+> `keyFingerprint` — the first **16** hexadecimal characters of SHA-256 over a fixed label, the key's
+> `SecretId` and the key (`audioKeyFingerprint` in `src/pipeline/audioReport/disclosure.ts`) — and
+> `firstUseWithKey`, true when no earlier audio job's egress log holds that fingerprint;
+> `mustAskConfirmation` then adds the reason `first-audio-key`. The record is the job's egress log
+> (§3.6 item 4 of doc 09), so the `input` column's gate (`redactRecord`) is the gate it passes. Sixteen
+> characters stay under `KEY_PATTERNS`' 32-character hexadecimal run, so the gate keeps the value, and
+> the field name matches no `KEYISH_FIELD` word (a name with "secret" in it would be dropped); 64 bits
+> of a hash cannot give back a key of about 210 bits, so nothing the key can be recovered from is
+> stored. **No "don't ask again" for audio:** every Gemini disclosure carries the warning or the
+> reminder, so `mustAskConfirmation` always asks and the box could never apply; the audio dialog omits
+> it (`offerDontAskAgain: false`) and there is no audio routine-confirmation record.
+>
+> ```ts
+> // src/pipeline/shared/egressDisclosure.ts
+> export type EgressNoticeId = /* … as above … */ | typeof L10N_EGRESS_AUDIO_NOTICE; // "research-helper-egress-audio-notice"
+> /** The script call of an audio run, when one is due. */
+> export interface AudioScriptCall { readonly providerId: ProviderId; readonly modelId: string }
+> export interface AudioEgressInput {
+>   readonly scriptCall?: AudioScriptCall;            // absent when the script is stored
+>   readonly keyFingerprint: string;                  // audioKeyFingerprint(secretId, key)
+>   readonly knownKeyFingerprints: readonly string[]; // from earlier audio jobs' egress logs
+> }
+> export interface AudioEgressNotice {
+>   readonly scriptCall?: AudioScriptCall & { readonly host: string };  // the effective host
+>   readonly keyFingerprint: string;
+>   readonly firstUseWithKey: boolean;
+> }
+> // EgressDisclosureInput gains `readonly audio?: AudioEgressInput`; EgressDisclosure and
+> // EgressLogEntry gain `readonly audio?: AudioEgressNotice`, present only for an audio run.
+> // ConfirmationReason gains "first-audio-key".
+> ```
+>
 > **Decided 2026-10-27 (`P4-T16`; the card's readings, ~~for the owner to confirm~~ confirmed —
 > Decided 2026-10-27 (owner, `plan/00` §6 item 292(e)): the estimate stays wide, because it never
 > under-states, and is revisited once `P3-T25`'s stored summaries, `P4-T04`'s digests and real runs
@@ -4155,7 +4198,7 @@ A summary is stored as a **child note** on the item, not in `extra`:
   *As built 2026-10-30 (`P4-T14`): `writeReportNote` in `src/zotero/notes.ts` writes it, `findReportNote` finds it by the stored key and the tag, and the marker reads `<!-- rh:report v=1 id=<report id> lang=<en|ko> generatedAt=<ISO-8601 UTC> -->`; every run writes a new note, a read-only library gets the export only, and a group library is written only with the user's answer to a confirmation naming the group (`06-summarization-and-trend-report.md` §14.2's note of that date, §16 items 6 and 7).*
 - Cited works are linked via `zotero://select/library/items/<key>` anchors so the narrative is clickable.
 - ~~Audio is attached as a **child attachment of the report note** — an imported file attachment (`linkMode: "imported_file"`) with the audio MIME type, so it syncs and is deletable through normal Zotero UI.~~ *Decided 2026-11-16 (coordinator, under `plan/00` §6 item 313; `plan/09` §0.4 line 7; `04-audio-report-tts.md` §10.1's note of that day): the audio is a **standalone attachment in the report's collection**, with no parent item, and its key is kept in the stored report's `TrendReport.audioAttachmentKeys[language]` (§5.2), which is how the report window finds it. The report note is a standalone note (above), v1.0 creates no parent item and does not move or edit the note. A WAV of at most 10 MiB is imported (`linkMode` `imported_file`, `audio/wav`); a larger one is linked from `tts.linkedFileDir` (§8.5; `plan/09` §0.4 lines 6 and 25). Whether Zotero 10 lets a note be an attachment's parent at all is **not recorded** in this corpus: `plan/09` `P6-T13` reads Zotero's item and attachment source, records the answer here with the file and function, and writes a standalone attachment either way.* Filenames: `<collection-slug>-trends-<yyyymmdd>-<lang>.<ext>` (v1.0 writes `.wav` only).
-  *Recorded 2026-11-16 (`plan/09` `P6-T13` step 1), read in the installed Zotero 10 client's `omni.ja`: **a note cannot parent an attachment.** `Zotero.Item.prototype._saveData` in `chrome/content/zotero/xpcom/data/item.js` throws "Parent item … must be a regular item" for any child item whose parent is not a regular item; its only exceptions are an embedded image, whose parent must be a note, and an annotation, whose parent must be a file attachment. So the 2026-11-16 decision above is also the only one Zotero allows. The same source holds a second rule this section did not foresee: **a linked file can only be in the personal library** ("Linked files can only be added to user library", in `_saveData` and in the `attachmentPath` setter of the same file; `linkFromFile` in `xpcom/attachments.js` takes no `libraryID`, and `Zotero.Item.prototype.setCollections` sets an unset library to the personal one). A report in a group library whose WAV is over 10 MiB therefore cannot be linked; as built, `checkAudioDestination` and `deliverAudio` (`src/pipeline/audioReport/deliver.ts`) refuse it before synthesis with the reason `linked-needs-personal-library`, pending the owner question recorded in `plan/00` §6 the same day. As built: `createZoteroAudioAttachments` in `src/zotero/attachments.ts` is the Zotero half; the stem caps the slug so `-trends-<yyyymmdd>-<lang>-<n>` always fits the 60-code-point stem (`MAX_FILE_STEM_LENGTH`), and the date is the local calendar date.*
+  *Recorded 2026-11-16 (`plan/09` `P6-T13` step 1), read in the installed Zotero 10 client's `omni.ja`: **a note cannot parent an attachment.** `Zotero.Item.prototype._saveData` in `chrome/content/zotero/xpcom/data/item.js` throws "Parent item … must be a regular item" for any child item whose parent is not a regular item; its only exceptions are an embedded image, whose parent must be a note, and an annotation, whose parent must be a file attachment. So the 2026-11-16 decision above is also the only one Zotero allows. The same source holds a second rule this section did not foresee: **a linked file can only be in the personal library** ("Linked files can only be added to user library", in `_saveData` and in the `attachmentPath` setter of the same file; `linkFromFile` in `xpcom/attachments.js` takes no `libraryID`, and `Zotero.Item.prototype.setCollections` sets an unset library to the personal one). A report in a group library whose WAV is over 10 MiB therefore cannot be linked; as built, `checkAudioDestination` and `deliverAudio` (`src/pipeline/audioReport/deliver.ts`) refuse it before synthesis with the reason `linked-needs-personal-library`, pending the owner question recorded in `plan/00` §6 the same day. **DECIDED 2026-11-17 (coordinator, under `plan/00` §6 item 313; item 383): that refusal stands (option A)** — nothing is spent, and `P6-T14`'s message offers the script as text; importing into a group whatever the size (option B) is a later-release candidate. As built: `createZoteroAudioAttachments` in `src/zotero/attachments.ts` is the Zotero half; the stem caps the slug so `-trends-<yyyymmdd>-<lang>-<n>` always fits the 60-code-point stem (`MAX_FILE_STEM_LENGTH`), and the date is the local calendar date.*
 
 ### 6.6 Reading from Zotero
 
@@ -5406,6 +5449,8 @@ The allowed-value enumerations for `screening.retractionPolicy` and `screening.n
 > - **Import below 10 MiB, link above** (coordinator, under item 313): doc 04 §10.2's rule as `P0-T26` built it (`chooseAttachmentMode`, `IMPORT_MAX_BYTES` in `src/tts/audioStore.ts`). A WAV longer than about 3.6 minutes (10 MiB at 48,000 bytes a second, 24 kHz 16-bit mono) is linked into `tts.linkedFileDir`, asked on first use. A linked file does not sync to Zotero's mobile apps (doc 04 §10.4); that consequence is the owner's open line in `plan/09` §0.4.
 > - **`tts.language` `auto` follows the report's `language`** (coordinator, under item 313; doc 04 §9.4's note of 2026-11-16), not `Zotero.locale`; no per-collection value is stored.
 > - **Two new rows** come with `P6-T02`: `gemini.tierAnswer` (the once-asked billing question, owner, item 378(b)) and the hidden `audio.enabled` (off until `plan/09` `P6-T19` passes, the item 307(d) pattern).
+>
+> **As built 2026-11-17 (`plan/09` `P6-T15`; coordinator, under `plan/00` §6 item 313): how the tier answer is read and written.** (1) **`gemini.paidTier` is the live declaration**, and the audio tier is `paid` exactly when it is on (`audioTierState` in `src/pipeline/audioReport/disclosure.ts`). A `paid` answer sets it, so the two agree; if the user later clears the pane's box, the free-tier warning comes back even though `gemini.tierAnswer` still reads `paid`, because doc 09 §3.6 item 3 says turning the declaration off brings the warning back, and §3.4 rule 4's note of 2026-11-16 keeps the pane's checkbox as the way to change the answer. (2) The question is offered while `gemini.tierAnswer` is `""` **and** the key is not already declared paid from the pane (a declared key has its answer). (3) "Don't know" is pre-selected, so a confirmed dialog always records an answer; the answer is written only when the dialog is **confirmed**, as `privacy.egressAcknowledged` is, and a cancel writes nothing, so the question comes back. (4) `free` and `unknown` leave `gemini.paidTier` as it is, which is off, since the question is offered only then. (5) Strict mode refuses a free or unknown key before any dialog (`assertAudioAllowed`), so in strict mode the question is never shown and the way out is the pane's box or a less strict mode.
 
 #### Related papers & recommendations
 
@@ -6053,6 +6098,17 @@ export class PolicyViolationError extends ResearchHelperError {
   // e.g. privacy mode forbids sending full text to a provider that may retain it.
 }
 ```
+
+> **`TTSError`'s reasons. DECIDED 2026-11-17 (coordinator, under `plan/00` §6 item 313; `plan/09` `P6-T14`).**
+> No new class: a reason is carried as `context.reason`, as `P6-T05` already throws it, and `TTSError` gains a
+> read-only `reason` getter that returns it when it is one of `TTS_ERROR_REASONS` (`src/core/errors.ts`):
+> `unentitled`, `model-gone`, `no-audio`, `sample-rate`, `script-rejected`, `rate-limited`, plus `P6-T05`'s
+> `unsupported-format` and `malformed-response`. The constructor is unchanged. `classifyAudioFailure`
+> (`src/pipeline/audioReport/failures.ts`) turns a 401, 403 or 400 `API_KEY_INVALID` (`AuthenticationError`,
+> `AuthorizationError`) into `unentitled`, a 404 `BadRequestError` into `model-gone`, a `RateLimitError` that
+> outlived the retries into `rate-limited`, and a `ScriptRejected` outcome into `script-rejected`; every other
+> error keeps its own class. `rh-error-tts` takes `$reason` as a selector, with one variant for each of the
+> card's six reasons and a default for the rest (`addon/locale/en-US/research-helper-mainWindow.ftl`).
 
 > **`PrivacyRoutingError`, OpenRouter's guardrail 404. Decided 2026-10-21 (owner; `plan/00` §6 item 262(c)).**
 > `09-security-privacy-and-api-keys.md` §3.4 rule 2 wants this 404 explained to the user. `P3-T07` mapped it onto

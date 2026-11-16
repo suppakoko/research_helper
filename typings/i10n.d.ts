@@ -3,9 +3,21 @@
 /* eslint-disable */
 // @ts-nocheck
 export type FluentMessageId =
+  | 'research-helper-audio-tier-refused'
   | 'research-helper-cost-above-threshold'
   | 'research-helper-cost-acknowledge'
   | 'research-helper-cost-acknowledge-unpriced'
+  | 'research-helper-cost-audio-attach'
+  | 'research-helper-cost-audio-duration'
+  | 'research-helper-cost-audio-length'
+  | 'research-helper-cost-audio-length-warning'
+  | 'research-helper-cost-audio-provisional'
+  | 'research-helper-cost-audio-rate-unmeasured'
+  | 'research-helper-cost-audio-script'
+  | 'research-helper-cost-audio-tier-free'
+  | 'research-helper-cost-audio-tier-paid'
+  | 'research-helper-cost-audio-tier-question'
+  | 'research-helper-cost-audio-tier-unknown'
   | 'research-helper-cost-calls'
   | 'research-helper-cost-cancel'
   | 'research-helper-cost-ceiling-preflight'
@@ -31,6 +43,7 @@ export type FluentMessageId =
   | 'research-helper-cost-usage-estimated'
   | 'research-helper-cost-usage-job'
   | 'research-helper-cost-usage-session'
+  | 'research-helper-egress-audio-notice'
   | 'research-helper-egress-first-job-notice'
   | 'research-helper-egress-gemini-declared-paid'
   | 'research-helper-egress-gemini-free-tier'
@@ -471,5 +484,6 @@ export type FluentMessageId =
   | 'rh-error-storage'
   | 'rh-error-structured-output'
   | 'rh-error-timeout'
+  | 'rh-error-tts'
   | 'rh-error-upstream'
   | 'rh-error-zotero';

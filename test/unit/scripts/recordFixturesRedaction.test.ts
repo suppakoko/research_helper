@@ -19,8 +19,7 @@
 
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -91,10 +90,6 @@ import { MAINTAINER_EMAIL } from "../../../src/core/http/userAgent";
 import { modelsFor } from "../../../src/llm/shared/modelCatalogue";
 import { estTokens } from "../../../src/llm/shared/tokenEstimate";
 import { requestEstimate } from "../../../src/pipeline/shared/budget";
-import {
-  parsePromptFile,
-  type PromptSourceFile,
-} from "../../../src/prompts/index";
 
 const PLAIN = MAINTAINER_EMAIL;
 const ENCODED = encodeURIComponent(MAINTAINER_EMAIL);
@@ -1671,12 +1666,6 @@ describe("record-fixtures, Gemini TTS (P6-T03) — stand-ins", () => {
   });
 });
 
-/** Where `P6-T06`'s verbatim files wait for the owner (`plan/00` §6 item 382). */
-const PENDING_PROMPT_DIR = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "../../../src/prompts/pending",
-);
-
 describe("record-fixtures, LLM (P6-T03) — the two script scenarios", () => {
   it("are named with --only, never part of a provider's default list", () => {
     const names = (list: readonly { scenario: string }[]): string[] =>
@@ -1709,53 +1698,29 @@ describe("record-fixtures, LLM (P6-T03) — the two script scenarios", () => {
     } finally {
       await rm(promptDir, { recursive: true, force: true });
     }
-    // The verbatim files (P6-T06, 2026-11-16) wait for the owner in
-    // src/prompts/pending/: not landed where the recorder reads, and refused
-    // by the parser where they are.
-    for (const s of LLM_AUDIO_SCRIPT_SCENARIOS) {
-      const shipped = audioScriptPrompt(s.scenario);
-      expect(shipped.ready, s.scenario).toBe(false);
-      if (!shipped.ready) expect(shipped.reason).toMatch(/has not landed/u);
-      expect(() => audioScriptRequest(s.scenario, "a/model")).toThrow(
-        UsageError,
-      );
-      const held = audioScriptPrompt(s.scenario, PENDING_PROMPT_DIR);
-      expect(held.ready, s.scenario).toBe(false);
-      if (!held.ready) {
-        expect(held.reason).toMatch(/does not load yet/u);
-        expect(held.reason).toMatch(/system text must contain no placeholder/u);
-      }
-    }
   });
 
-  it("render the shipped prompt files into a request once the parser accepts them", () => {
-    // Stands in for the owner's decision only so the rendering can be checked:
-    // the file is parsed under a registered id and file name, with the one
-    // system sentence holding {{TARGET_MINUTES}} replaced. No wording is chosen
-    // here, and the shipped files are not changed.
-    const asRegistered = (file: PromptSourceFile) =>
-      parsePromptFile({
-        fileName: "chunk-map.v1.0.0.md",
-        text: file.text
-          .replace(/^id: AUDIO_SCRIPT_(EN|KO)$/mu, "id: CHUNK_MAP")
-          .replace(
-            /^(1[12]\. )[^\n]*\{\{TARGET_MINUTES\}\}[^\n]*$/mu,
-            "$1(rule)",
-          ),
-      });
+  // Changed 2026-11-17: the owner adopted the one-sentence rewordings
+  // (plan/00 §6 item 382), the two files moved up into src/prompts/ and are
+  // registered, so both scenarios are ready with the real parser.
+  it("are ready now that the shipped prompt files load (owner, plan/00 §6 item 382)", () => {
+    for (const s of LLM_AUDIO_SCRIPT_SCENARIOS) {
+      const shipped = audioScriptPrompt(s.scenario);
+      expect(shipped.ready, s.scenario).toBe(true);
+      expect(() => audioScriptRequest(s.scenario, "a/model")).not.toThrow();
+    }
+    expect(() => audioScriptRequest("chat-json-ok", "a/model")).toThrow(
+      UsageError,
+    );
+  });
+
+  it("render the shipped prompt files into a request", () => {
     for (const [scenario, ceiling] of [
       ["audio-script-en", 2500],
       ["audio-script-ko", 3500],
     ] as const) {
-      expect(
-        audioScriptPrompt(scenario, PENDING_PROMPT_DIR, asRegistered).ready,
-      ).toBe(true);
-      const request = audioScriptRequest(
-        scenario,
-        "a/model",
-        PENDING_PROMPT_DIR,
-        asRegistered,
-      );
+      expect(audioScriptPrompt(scenario).ready).toBe(true);
+      const request = audioScriptRequest(scenario, "a/model");
       expect(request.temperature).toBe(0.4);
       expect(request.maxOutputTokens).toBe(ceiling);
       expect(request.responseFormat).toBeUndefined();

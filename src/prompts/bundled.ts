@@ -40,8 +40,13 @@
  * bundle: 1.0.1 raised their output ceilings only (owner, `plan/00` §6 item
  * 311(c), 2026-10-30). `COLLECTION_PROFILE` is read through
  * {@link PROMPT_REGISTRY} by the recommend pipeline (`P5-T22`, `P5-T25`).
+ * `AUDIO_SCRIPT_EN` and `AUDIO_SCRIPT_KO` are read by the audio script pass
+ * (`src/pipeline/audioReport/script.ts`, `P6-T07`); they joined on 2026-11-17
+ * (owner, `plan/00` §6 item 382).
  */
 
+import audioScriptEnV100 from "./audio-script-en.v1.0.0.md" with { type: "text" };
+import audioScriptKoV100 from "./audio-script-ko.v1.0.0.md" with { type: "text" };
 import chunkMapV100 from "./chunk-map.v1.0.0.md" with { type: "text" };
 import chunkReduceV100 from "./chunk-reduce.v1.0.0.md" with { type: "text" };
 import clusterReduceMergeV100 from "./cluster-reduce-merge.v1.0.0.md" with { type: "text" };
@@ -92,6 +97,8 @@ export const PROMPT_SOURCE_FILES: readonly PromptSourceFile[] = Object.freeze([
     fileName: "cluster-reduce-merge.v1.0.0.md",
     text: clusterReduceMergeV100,
   },
+  { fileName: "audio-script-en.v1.0.0.md", text: audioScriptEnV100 },
+  { fileName: "audio-script-ko.v1.0.0.md", text: audioScriptKoV100 },
 ]);
 
 /** The registry over {@link PROMPT_SOURCE_FILES}, built once. */

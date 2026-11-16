@@ -709,7 +709,8 @@ See §8. Manual QA is where UI, accessibility, real network behaviour, real cost
 > files load (`audioScriptPrompt`): they can be stood in for, but not priced or recorded. *(Noted 2026-11-16, later
 > (`P6-T06`): the files are written, verbatim, but wait in `src/prompts/pending/`, because the parser refuses them
 > while their system text holds `{{TARGET_MINUTES}}`. The scenarios stay pending until the owner decides `plan/00`
-> §6 item 382.)*
+> §6 item 382.)* *(Updated 2026-11-17: the owner adopted the drafted sentences (item 382); both files are in
+> `src/prompts/` and load, so both script scenarios are ready. They are still the owner's to record (`P6-T04`).)*
 
 **Relatedness (Phase 5)** — what the related-papers and recommendation adapters send, in `test/fixtures/<source>/related/`, one directory below each source's search fixtures. *As built 2026-11-02 (`P5-T04`).* The scenario lists are `relatedPlanFor` in `scripts/record-fixtures.ts`; the requests are `test/support/*RecordedRequests.ts`'s, built by the shipped builders in `src/sources/semanticscholar/graph.ts`, `recommendations.ts`, `src/sources/europepmc/citations.ts`, `src/sources/pubmed/elink.ts` and `src/sources/crossref/references.ts`.
 

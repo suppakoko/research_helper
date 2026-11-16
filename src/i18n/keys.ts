@@ -294,6 +294,9 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   "rh-error-seed-no-match",
   // FR-44's refusal, a plain `SerializedError` from `createRecommendPipeline` (P5-T25).
   "rh-error-recommend-too-few-items",
+  // `TTSError`, the audio run's failures (P6-T14; docs/07 §10.1's note of
+  // 2026-11-17), moved here from DEFERRED_ERROR_MESSAGE_IDS.
+  "rh-error-tts",
 
   // The preference pane's literature-source credential blocks (docs/08 §7.3,
   // docs/09 §1.8–1.9; P1-T44). On *this* surface rather than a fourth
@@ -388,6 +391,24 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   // P5-T22: a recommend run's own notice (docs/09 §3 row 6). See
   // L10N_EGRESS_PROFILE_NOTICE.
   "research-helper-egress-profile-notice",
+  // P6-T15: the audio run's notice naming both hosts (docs/09 §3 row 5), its
+  // lines in the cost dialog (FR-42), the once-asked tier question and the
+  // strict-mode refusal (docs/09 §3.4 rule 4, §3.5). See L10N_EGRESS_AUDIO_NOTICE,
+  // L10N_AUDIO_TIER_REFUSED and AUDIO_COST_L10N in
+  // src/ui/dialogs/costConfirmDialog.ts.
+  "research-helper-egress-audio-notice",
+  "research-helper-cost-audio-script",
+  "research-helper-cost-audio-provisional",
+  "research-helper-cost-audio-length",
+  "research-helper-cost-audio-length-warning",
+  "research-helper-cost-audio-duration",
+  "research-helper-cost-audio-attach",
+  "research-helper-cost-audio-rate-unmeasured",
+  "research-helper-cost-audio-tier-question",
+  "research-helper-cost-audio-tier-paid",
+  "research-helper-cost-audio-tier-free",
+  "research-helper-cost-audio-tier-unknown",
+  "research-helper-audio-tier-refused",
   // P3-T16: the cost confirmation dialog (docs/06 §5.4, docs/10 FR-24,
   // docs/09 §3.6) and the preference pane's Usage section. See
   // COST_DIALOG_L10N and USAGE_L10N in src/ui/dialogs/costConfirmDialog.ts.
@@ -733,6 +754,25 @@ export const L10N_EGRESS_REPORT_NOTICE = "research-helper-egress-report-notice";
  */
 export const L10N_EGRESS_PROFILE_NOTICE =
   "research-helper-egress-profile-notice";
+
+/**
+ * An audio run's own notice on the cost dialog (`P6-T15`; `docs/09` §3 row 5,
+ * clarified 2026-11-16): what the script call sends to `$scriptModel` at
+ * `$scriptHost` when `$script` is `due`, and that the spoken script goes to
+ * `$ttsModel` at `$ttsHost`. Carried as data by
+ * `src/pipeline/shared/egressDisclosure.ts`; placed with its arguments by
+ * `src/ui/dialogs/costConfirmDialog.ts`.
+ */
+export const L10N_EGRESS_AUDIO_NOTICE = "research-helper-egress-audio-notice";
+
+/**
+ * Strict mode's refusal of audio with a free or unknown Gemini key, naming the
+ * reason and the two ways out (`P6-T15` step 3; `docs/09` §3.5's Gemini row).
+ * Shown for the `PolicyViolationError` `assertAudioAllowed` throws
+ * (`isAudioTierRefusal`, `src/pipeline/audioReport/disclosure.ts`), because
+ * `rh-error-policy` is still deferred; the audio surface is `P6-T17`'s.
+ */
+export const L10N_AUDIO_TIER_REFUSED = "research-helper-audio-tier-refused";
 
 /**
  * The warning when the model's answer could not be used, or not one line fits
@@ -1222,6 +1262,11 @@ export const ERROR_MESSAGE_IDS = [
   "rh-error-seed-no-match",
   // P5-T25: FR-44's refusal, from `createRecommendPipeline`, with no error class.
   "rh-error-recommend-too-few-items",
+  // P6-T14 (2026-11-17): `TTSError`, thrown by the TTS client
+  // (`src/tts/geminiTts.ts`), the assembler (`src/tts/audioStore.ts`) and the
+  // synthesis loop, and made by `classifyAudioFailure`
+  // (`src/pipeline/audioReport/failures.ts`).
+  "rh-error-tts",
 ] as const satisfies readonly MainWindowMessageId[];
 
 /**
@@ -1243,7 +1288,7 @@ export const ERROR_MESSAGE_IDS = [
  * that assertion instead of rendering a blank label.
  */
 export const DEFERRED_ERROR_MESSAGE_IDS = [
-  "rh-error-tts",
+  // `rh-error-tts` left on 2026-11-17 with `P6-T14`'s failure paths.
   "rh-error-policy",
 ] as const;
 
@@ -1356,6 +1401,26 @@ export const KO_PENDING_REVIEW = [
   // --- P5-T26's recommend entry and mode, P5-T27's results and P5-T16's related results ---
   // All 116 left this list on 2026-11-06: the owner reviewed the Korean in chat (`G-41`,
   // plan/00 §6 item 357), so all are on KO_PRESENT.
+  // --- P6-T14's audio failure message (mainWindow) ---
+  // A commented `ko-KR` stub with the English source and the coordinator's
+  // draft (2026-11-17, not adopted); the owner reviews it (`G-41`).
+  "rh-error-tts",
+  // --- P6-T15's audio notice, cost-dialog lines, tier question and refusal
+  // (mainWindow) --- commented `ko-KR` stubs with the English source and the
+  // coordinator's drafts (2026-11-17, not adopted); the owner reviews them (`G-41`).
+  "research-helper-egress-audio-notice",
+  "research-helper-cost-audio-script",
+  "research-helper-cost-audio-provisional",
+  "research-helper-cost-audio-length",
+  "research-helper-cost-audio-length-warning",
+  "research-helper-cost-audio-duration",
+  "research-helper-cost-audio-attach",
+  "research-helper-cost-audio-rate-unmeasured",
+  "research-helper-cost-audio-tier-question",
+  "research-helper-cost-audio-tier-paid",
+  "research-helper-cost-audio-tier-free",
+  "research-helper-cost-audio-tier-unknown",
+  "research-helper-audio-tier-refused",
 ] as const satisfies readonly FluentMessageId[];
 
 /**
@@ -1994,6 +2059,9 @@ export interface FluentMessageArgsMap {
   "rh-error-budget": { limit: string; spent: string };
   // P5-T25. `RecommendFailed.tooFewItems.itemCount`.
   "rh-error-recommend-too-few-items": { count: number };
+  // P6-T14. `$reason` is a selector only: one of `TTS_ERROR_REASONS`
+  // (src/core/errors.ts), or `other` (`AudioFailure.messageArgs`).
+  "rh-error-tts": { reason: string };
   "research-helper-cost-items": {
     items: number;
     fullText: number;
@@ -2055,6 +2123,32 @@ export interface FluentMessageArgsMap {
     model: string;
   };
   "research-helper-cost-report-review": { calls: number; model: string };
+  // P6-T15. `$script` (`due` | `stored`), `$unit` (`words` |
+  // `syllables`) and `$mode` (`imported` | `linked`) are selectors only;
+  // `$calls` and `$chunks` are numbers; `$chars`, `$count`, `$target`,
+  // `$minutes`, `$duration` and `$size` are formatted with Intl over the
+  // application locale; models and hosts are names, never translated.
+  "research-helper-egress-audio-notice": {
+    script: string;
+    scriptModel: string;
+    scriptHost: string;
+    ttsModel: string;
+    ttsHost: string;
+  };
+  "research-helper-cost-audio-script": {
+    calls: number;
+    model: string;
+    minutes: string;
+  };
+  "research-helper-cost-audio-provisional": { model: string; duration: string };
+  "research-helper-cost-audio-length": { chars: string; chunks: number };
+  "research-helper-cost-audio-length-warning": {
+    unit: string;
+    count: string;
+    target: string;
+  };
+  "research-helper-cost-audio-duration": { duration: string; size: string };
+  "research-helper-cost-audio-attach": { mode: string };
   // The preference pane (P1-T44). `$count` is a plural selector; `$time` is a
   // clock time the pane script has already formatted with
   // `Intl.DateTimeFormat` over `Zotero.locale` (docs/08 §10.3). **No message
@@ -2396,6 +2490,14 @@ export const ARGUMENT_MESSAGE_IDS = [
   "research-helper-cost-report-summaries",
   "research-helper-cost-report-writing",
   "research-helper-cost-report-review",
+  // mainWindow — the audio run's notice and cost-dialog lines (7, P6-T15)
+  "research-helper-egress-audio-notice",
+  "research-helper-cost-audio-script",
+  "research-helper-cost-audio-provisional",
+  "research-helper-cost-audio-length",
+  "research-helper-cost-audio-length-warning",
+  "research-helper-cost-audio-duration",
+  "research-helper-cost-audio-attach",
   // mainWindow — the item menu entry's disabled reason (P5-T15)
   "research-helper-menu-item-find-related",
 
@@ -2470,6 +2572,8 @@ export const ARGUMENT_MESSAGE_IDS = [
   "research-helper-egress-profile-notice",
   // mainWindow — the recommend run's refusal below 5 items (1, P5-T25)
   "rh-error-recommend-too-few-items",
+  // mainWindow — the audio run's failures (1, P6-T14)
+  "rh-error-tts",
 ] as const satisfies readonly (keyof FluentMessageArgsMap)[];
 
 /**

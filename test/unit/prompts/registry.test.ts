@@ -192,6 +192,7 @@ describe("the shipped prompt files", () => {
   // Changed 2026-10-30: the two report prompts are at 1.0.1, a PATCH that
   // raised only their ceilings (owner, plan/00 §6 item 311(c)).
   it("all load into one registry at version 1.0.0, the two report prompts at 1.0.1", () => {
+    // AUDIO_SCRIPT_EN and AUDIO_SCRIPT_KO joined 2026-11-17 (plan/00 §6 item 382).
     const registry = createPromptRegistry(shippedFiles());
     expect(registry.versions).toEqual({
       RELEVANCE_SCREEN: "1.0.0",
@@ -207,6 +208,8 @@ describe("the shipped prompt files", () => {
       THEME_MERGE: "1.0.0",
       CLUSTER_REDUCE_MERGE: "1.0.0",
       COLLECTION_PROFILE: "1.0.0",
+      AUDIO_SCRIPT_EN: "1.0.0",
+      AUDIO_SCRIPT_KO: "1.0.0",
     });
     for (const id of PROMPT_IDS) {
       expect(registry.get(id).id).toBe(id);
@@ -263,7 +266,12 @@ describe("the shipped prompt files", () => {
     // 2000 + 40 × N (docs/12 §8), so it has no defaultMaxTokens.
     const expected: Record<
       PromptId,
-      readonly [number, number | null, "json" | "markdown", number | null]
+      readonly [
+        number,
+        number | null,
+        "json" | "markdown" | "text",
+        number | null,
+      ]
     > = {
       RELEVANCE_SCREEN: [0, null, "json", null],
       PAPER_SUMMARY_ABSTRACT: [0, 1200, "json", null],
@@ -279,6 +287,9 @@ describe("the shipped prompt files", () => {
       THEME_MERGE: [0.2, 4000, "json", null],
       CLUSTER_REDUCE_MERGE: [0.3, 3000, "json", null],
       COLLECTION_PROFILE: [0.2, 2500, "json", null],
+      // docs/12 §13–§14 (P6-T06); P6-T07 scales the ceiling above its floor.
+      AUDIO_SCRIPT_EN: [0.4, 2500, "text", null],
+      AUDIO_SCRIPT_KO: [0.4, 3500, "text", null],
     };
     for (const id of PROMPT_IDS) {
       const t = registry.get(id);
@@ -363,6 +374,9 @@ describe("the shipped prompt files", () => {
       // docs/12 §21: no schema of its own.
       CLUSTER_REDUCE_MERGE: "theme-analysis.v1.json",
       COLLECTION_PROFILE: "collection-profile.v1.json",
+      // docs/12 §13–§14: plain text, no schema.
+      AUDIO_SCRIPT_EN: null,
+      AUDIO_SCRIPT_KO: null,
     };
     for (const id of PROMPT_IDS) {
       const file = expected[id];
@@ -1086,22 +1100,23 @@ describe("createPromptRegistry", () => {
 });
 
 // ---------------------------------------------------------------------------
-// AUDIO_SCRIPT_EN / AUDIO_SCRIPT_KO — `P6-T06`, held verbatim and unregistered
+// AUDIO_SCRIPT_EN / AUDIO_SCRIPT_KO — `P6-T06`, registered 2026-11-17
 // ---------------------------------------------------------------------------
 
 /*
  * Found 2026-11-16 (`P6-T06`; `docs/12` §13's note of that day): both system
- * prompts, as `docs/12` §13 and §14 print them, hold `{{TARGET_MINUTES}}`
- * (§13 rule 11, §14 rule 12), and the registry refuses any placeholder in a
- * system text (§1.1 rule 2). The prompt text may not be reworded without the
- * owner (Korean wording is the owner's, §19 item 4), so the files are held
- * verbatim and unregistered in `src/prompts/pending/`, as
- * `theme-cluster.v1.0.0.md` was held before item 290(b). Registering them now
- * would make `createPromptRegistry` throw when `bundled.ts` loads, taking every
- * prompt down with it. They sit one folder down because eight pipeline test
- * files build a registry from every `.md` directly in `src/prompts/`.
+ * prompts, as `docs/12` §13 and §14 then printed them, held
+ * `{{TARGET_MINUTES}}` (§13 rule 11, §14 rule 12), which the registry refuses
+ * (§1.1 rule 2), so the files waited unregistered in `src/prompts/pending/`.
+ *
+ * Decided 2026-11-17 (owner, `plan/00` §6 item 382): the one-sentence
+ * rewordings drafted in `docs/12` §13's note are adopted word for word. The
+ * files moved up into `src/prompts/`, both ids are registered, the version
+ * stays 1.0.0 (neither had shipped, §17.5). The generic "shipped prompt files"
+ * block above now covers their verbatim text, temperature, ceiling and schema;
+ * this block pins what the decision changed.
  */
-describe("audio-script-en.v1.0.0.md and audio-script-ko.v1.0.0.md (P6-T06, awaiting the owner)", () => {
+describe("audio-script-en.v1.0.0.md and audio-script-ko.v1.0.0.md (P6-T06, owner item 382)", () => {
   const files = [
     ["AUDIO_SCRIPT_EN", "audio-script-en.v1.0.0.md", 2500],
     ["AUDIO_SCRIPT_KO", "audio-script-ko.v1.0.0.md", 3500],
@@ -1118,97 +1133,83 @@ describe("audio-script-en.v1.0.0.md and audio-script-ko.v1.0.0.md (P6-T06, await
     "YEAR_MAX",
   ];
 
+  /** The two adopted sentences, exactly as the owner approved them. */
+  const ADOPTED: Readonly<Record<string, string>> = {
+    AUDIO_SCRIPT_EN:
+      "11. Target the length stated in the request, roughly 150 words for each minute. This is far shorter than the report: it is a briefing, not a reading.",
+    AUDIO_SCRIPT_KO:
+      "12. 목표 분량은 요청에 적힌 길이만큼의 말입니다. 보고서보다 훨씬 짧습니다. 이것은 낭독이 아니라 브리핑입니다.",
+  };
+
   function fileText(fileName: string): string {
-    return readFileSync(resolve(promptsDir, "pending", fileName), "utf8");
-  }
-
-  /** The fenced block after `heading` in the raw file. */
-  function fileFence(text: string, heading: string): string {
-    const lines = text.split("\n");
-    const at = lines.indexOf(heading);
-    const open = lines.findIndex((l, i) => i > at && l === "```text");
-    const close = lines.findIndex((l, i) => i > open && l === "```");
-    expect(at >= 0 && open > at && close > open).toBe(true);
-    return lines.slice(open + 1, close).join("\n");
+    return readFileSync(resolve(promptsDir, fileName), "utf8");
   }
 
   it.each(files)(
-    "%s: the system and user text are docs/12's, verbatim",
-    (id, fileName) => {
-      const text = fileText(fileName);
-      expect(fileFence(text, "## system")).toBe(
-        docs12Fence(id, "### System prompt"),
-      );
-      expect(fileFence(text, "## user")).toBe(
-        docs12Fence(id, "### User prompt"),
-      );
-    },
-  );
-
-  it.each(files)(
-    "%s: front matter carries docs/12's version, temperature 0.4, its ceiling, no schema and plain text",
+    "%s: loads by id through createPromptRegistry, from the shipped file list",
     (id, fileName, maxTokens) => {
-      const text = fileText(fileName);
-      const front = text.slice(0, text.indexOf("\n---\n", 4) + 5);
-      expect(front).toBe(
-        [
-          "---",
-          `id: ${id}`,
-          "version: 1.0.0",
-          "cacheEpoch: 1",
-          "schema: none",
-          "defaultTemperature: 0.4",
-          `defaultMaxTokens: ${String(maxTokens)}`,
-          "outputFormat: text",
-          "lastReviewed: 2026-11-16",
-          "variables:",
-          ...VARIABLES.map((v) => `  - ${v}`),
-          "---",
-          "",
-        ].join("\n"),
-      );
+      expect(PROMPT_IDS as readonly string[]).toContain(id);
+      expect(PROMPT_FILE_NAMES[id]).toBe(fileName);
+      const template = createPromptRegistry(shippedFiles()).get(id);
+      expect(template.id).toBe(id);
+      expect(template.version).toBe("1.0.0");
+      expect(template.cacheEpoch).toBe(1);
+      expect(template.defaultTemperature).toBe(0.4);
+      expect(template.defaultMaxTokens).toBe(maxTokens);
+      expect(template.outputFormat).toBe("text");
+      expect(template.schema).toBeNull();
+      expect(template.lastReviewed).toBe("2026-11-17");
+      expect(template.variables).toEqual(VARIABLES);
+      expect(template.system).not.toMatch(/\{\{|\}\}/u);
       expect(docs12Section(id).join("\n")).toContain("**Version:** `v1.0.0`");
     },
   );
 
   it.each(files)(
-    "%s: the registry refuses it for two reasons only — an unregistered id and the system placeholder",
+    "%s: the system text holds the adopted sentence, NFC, and docs/12 prints the same",
     (id, fileName) => {
-      let caught: unknown;
-      try {
-        parsePromptFile({ fileName, text: fileText(fileName) });
-      } catch (error) {
-        caught = error;
-      }
-      expect(caught).toBeInstanceOf(PromptRegistryError);
-      expect((caught as PromptRegistryError).problems).toEqual([
-        `${fileName}: unknown prompt id \`${id}\``,
-        `${fileName}: the system text must contain no placeholder (docs/12 §1.1 rule 2)`,
-      ]);
-    },
-  );
-
-  it.each(files)(
-    "%s: the system text's one placeholder is TARGET_MINUTES, and the user text already holds every variable",
-    (_id, fileName) => {
-      const text = fileText(fileName);
-      const system = fileFence(text, "## system");
-      const user = fileFence(text, "## user");
-      const inSystem = new Set(
-        Array.from(system.matchAll(/\{\{([A-Z_]+)\}\}/g), (m) => m[1]),
+      const template = parsePromptFile({ fileName, text: fileText(fileName) });
+      const sentence = ADOPTED[id] as string;
+      expect(sentence.normalize("NFC")).toBe(sentence);
+      expect(template.system.split("\n")).toContain(sentence);
+      expect(docs12Fence(id, "### System prompt").split("\n")).toContain(
+        sentence,
       );
-      expect([...inSystem]).toEqual(["TARGET_MINUTES"]);
-      for (const name of VARIABLES) expect(user, name).toContain(`{{${name}}}`);
+      expect(fileText(fileName).normalize("NFC")).toBe(fileText(fileName));
+      // The user text still carries every variable, the target length among them.
+      for (const name of VARIABLES) {
+        expect(template.user, name).toContain(`{{${name}}}`);
+      }
     },
   );
 
-  it("neither is registered, bundled or directly in src/prompts yet", () => {
-    for (const [, fileName] of files) {
-      expect(() => readFileSync(resolve(promptsDir, fileName))).toThrow();
+  it("renders the target length into the user message only", () => {
+    const registry = createPromptRegistry(shippedFiles());
+    for (const [id] of files) {
+      const template = registry.get(id);
+      const vars = Object.fromEntries(
+        template.variables.map((name) => [name, `[${name}]`]),
+      );
+      const { system, user } = renderPrompt(template, {
+        ...vars,
+        TARGET_MINUTES: "7",
+      });
+      expect(system).toBe(template.system);
+      expect(system).not.toContain("7 minutes");
+      expect(user).toMatch(
+        id === "AUDIO_SCRIPT_EN" ? /about 7 minutes/u : /약 7분/u,
+      );
     }
-    expect(PROMPT_IDS as readonly string[]).not.toContain("AUDIO_SCRIPT_EN");
-    expect(PROMPT_IDS as readonly string[]).not.toContain("AUDIO_SCRIPT_KO");
-    expect(readRepo("src/prompts/bundled.ts")).not.toContain("audio-script");
-    expect(() => createPromptRegistry(shippedFiles())).not.toThrow();
+  });
+
+  it("both are bundled and nothing is left in src/prompts/pending/", () => {
+    const bundled = readRepo("src/prompts/bundled.ts");
+    for (const [, fileName] of files) {
+      expect(bundled).toContain(`"./${fileName}" with { type: "text" }`);
+      expect(bundled).toContain(`fileName: "${fileName}"`);
+      expect(() =>
+        readFileSync(resolve(promptsDir, "pending", fileName)),
+      ).toThrow();
+    }
   });
 });

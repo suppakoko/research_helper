@@ -278,7 +278,8 @@ research-helper-progress-headline = Research Helper
 ## Three of §10.1's 23 keys belong to subsystems not built yet, and
 ## `plan/README.md` §5 rule 2 forbids adding them here on spec: `rh-error-tts`,
 ## `rh-error-budget` and `rh-error-policy` arrive with the cards that can throw
-## them. Until 2026-10-20 the list also held the four LLM keys, which `P3-T05`
+## them. *(Updated 2026-11-17, `P6-T14`: `rh-error-tts` left the list with the
+## audio failure paths, and its entry closes this block; one remains.)* Until 2026-10-20 the list also held the four LLM keys, which `P3-T05`
 ## added at the end of this block. *(Updated 2026-10-23, `P3-T16`:
 ## `rh-error-budget` left the list, and its entry closes this block; two remain.)*
 ## `src/i18n/keys.ts` exports that list as `DEFERRED_ERROR_MESSAGE_IDS` and
@@ -386,6 +387,24 @@ rh-error-seed-no-match = No paper matched this item's title closely enough, and 
 rh-error-recommend-too-few-items = { $count ->
     [one] This collection has { $count } item. Recommendations need at least 5.
    *[other] This collection has { $count } items. Recommendations need at least 5.
+}
+
+# `TTSError` (docs/07 §10.1 and its note of 2026-11-17; P6-T14; FR-43, FR-40).
+# `$reason` is a selector only (`TTS_ERROR_REASONS` in src/core/errors.ts):
+# one variant for each of P6-T14's six reasons, the default for the rest.
+# Each names what failed and the service, says the written report is
+# unchanged, and offers the spoken script as text, the one action every case
+# shares (FR-43); no second provider is tried (owner, plan/00 §6 item 378(c)).
+# The window's buttons ("Save script as text…", and "Save audio as…" when only
+# the Zotero write failed) are P6-T17's.
+rh-error-tts = { $reason ->
+    [unentitled] This Gemini key cannot use Gemini text-to-speech, so no audio was made. Your report is unchanged. Check the key's access in Google AI Studio, or save the spoken script as text.
+    [model-gone] The Gemini text-to-speech model is no longer available, so no audio was made. Your report is unchanged. Try again later, or save the spoken script as text.
+    [no-audio] Gemini answered without audio, so no audio was made. Your report is unchanged. Try again, or save the spoken script as text.
+    [sample-rate] Gemini returned the parts of the audio at different sample rates, so they could not be joined. Your report is unchanged. Try again, or save the spoken script as text.
+    [script-rejected] The spoken script still contained written formatting after one retry, so no audio was made and nothing was sent to Gemini. Your report is unchanged. Save the script as text, or try again.
+    [rate-limited] Gemini text-to-speech is receiving too many requests, so no audio was made. Your report is unchanged. Try again in a few minutes, or save the spoken script as text.
+   *[other] Gemini text-to-speech could not make the audio. Your report is unchanged. Try again, or save the spoken script as text.
 }
 
 
@@ -807,6 +826,61 @@ research-helper-cost-report-review =
         [one] Checking the report against the summaries: up to 1 call to { $model }.
        *[other] Checking the report against the summaries: up to { $calls } calls to { $model }.
     }
+
+
+## The audio run in the cost dialog (P6-T15; docs/10 FR-42, FR-37; docs/09
+## §3 row 5, §3.4 rules 4–5, §3.5's Gemini row, §3.6 items 2–3; docs/07 §4.5's
+## note of 2026-11-17)
+##
+## Shown in the same cost dialog as the sections above, never in a second
+## one; built by `src/ui/dialogs/costConfirmDialog.ts` (`AUDIO_COST_L10N`).
+## The audio notice names both hosts when a script call is due and Gemini's
+## alone when the script is stored. `$script` (`due` | `stored`), `$unit`
+## (`words` | `syllables`) and `$mode` (`imported` | `linked`) are selectors
+## only; `$calls` and `$chunks` are numbers; `$chars`, `$count`, `$target`,
+## `$minutes`, `$duration` and `$size` arrive formatted with Intl over the
+## application locale (docs/08 §10.3); models and hosts are names, never
+## translated. The tier question is asked once (owner, plan/00 §6 item
+## 378(b)); its three labels are radio choices, "Don't know" pre-selected. The
+## refusal is strict mode's, before any call (`assertAudioAllowed`). Korean
+## pending review (G-41).
+
+research-helper-egress-audio-notice =
+    { $script ->
+        [due] To make the audio, the report's sections, the collection's name, its counts and year range, and one line for each cited paper (its Zotero item key, first author's surname and year) are sent to { $scriptModel } at { $scriptHost } to write a spoken script. The spoken script, which can name the collection and cited authors aloud, is then sent to { $ttsModel } at { $ttsHost } to be read aloud.
+       *[stored] The spoken script already written for this report, which can name the collection and cited authors aloud, is sent to { $ttsModel } at { $ttsHost } to be read aloud. No script is written this time, so nothing else is sent.
+    }
+research-helper-cost-audio-script =
+    { $calls ->
+        [one] Writing the spoken script: 1 call to { $model }, for about { $minutes } of audio.
+       *[other] Writing the spoken script: up to { $calls } calls to { $model }, for about { $minutes } of audio.
+    }
+research-helper-cost-audio-provisional = Then reading it aloud with { $model }: about { $duration }, estimated from the target length. Once the script is written you confirm again, with its real length, before any audio is made.
+research-helper-cost-audio-length =
+    { $chunks ->
+        [one] Spoken script: { $chars } characters, read aloud in 1 part.
+       *[other] Spoken script: { $chars } characters, read aloud in { $chunks } parts.
+    }
+research-helper-cost-audio-length-warning =
+    { $unit ->
+        [syllables] The script is { $count } Hangul syllables long, against a target of about { $target }, so the audio will be longer or shorter than planned.
+       *[words] The script is { $count } words long, against a target of about { $target }, so the audio will be longer or shorter than planned.
+    }
+research-helper-cost-audio-duration = Audio: about { $duration }, about { $size } as a WAV file.
+research-helper-cost-audio-attach =
+    { $mode ->
+        [linked] The file is too large to store in Zotero, so it is saved in a folder you choose and linked from the report's collection. Zotero does not sync a linked file.
+       *[imported] The file is stored in Zotero, in the report's collection, and syncs like your other attachments.
+    }
+research-helper-cost-audio-rate-unmeasured = This cost uses an audio token rate measured on a different Gemini text-to-speech model, so it may be less accurate.
+research-helper-cost-audio-tier-question = Is this Google API key's Google Cloud project billing-linked (Google's paid tier)? Research Helper cannot check this itself, so it asks once. "Don't know" counts as the free tier. You can change the answer later in Research Helper's settings, under the Gemini key.
+research-helper-cost-audio-tier-paid =
+    .label = Yes, billing is linked (paid tier)
+research-helper-cost-audio-tier-free =
+    .label = No, it is on the free tier
+research-helper-cost-audio-tier-unknown =
+    .label = Don't know
+research-helper-audio-tier-refused = Strict privacy mode makes no audio with this Google API key, because it may be on the free tier, where Google may use what you send to improve its products. To make audio, mark the key as paid in Research Helper's settings if its Google Cloud project is billing-linked, or choose a less strict privacy mode.
 
 
 ## The LLM Test, the model suggestions and the user price table (P3-T14;

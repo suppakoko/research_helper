@@ -5,8 +5,10 @@
  *
  * **Caller.** `audioReportPipeline.ts` (`P6-T16`) calls
  * {@link synthesizeChunks} after the second confirmation; it passes the TTS
- * client `registerProviders` built (`LLMServices.tts`), the per-chunk estimate
- * of `P6-T10` and the job's `LLMCallContext`. Constructed nowhere: a function.
+ * client `registerProviders` built (`LLMServices.tts`), the model's TTS
+ * prices (`ttsPricesFor`, `P6-T10`), from which each chunk's reservation is
+ * `chunkReservation` (`./estimate.ts`), and the job's `LLMCallContext`.
+ * Constructed nowhere: a function.
  *
  * **Authority.** `docs/04` §5.3 (one voice, one model, one style prefix, all
  * captured once; a retried chunk is identical), §5.4 (sequential; the note of
@@ -57,6 +59,7 @@ import {
 } from "../../core/http/retry";
 import type { Logger } from "../../core/logger";
 import { LLM_RETRY_BUDGET } from "../../core/rateLimit/hostLimiter";
+import type { ModelPrices } from "../../llm/shared/pricing";
 import type { BudgetGuard, LLMCallContext } from "../../llm/types";
 import type { AudioChunk, AudioLanguage, AudioPlan } from "../../model/audio";
 import type { Usage } from "../../model/usage";
@@ -70,6 +73,7 @@ import type {
   ReservationEstimate,
   RunBudgetGuard,
 } from "../shared/budget";
+import { chunkReservation } from "./estimate";
 
 /**
  * `docs/04` §5.3's style instruction, verbatim: prepended, byte for byte, to
@@ -121,12 +125,13 @@ export interface SynthesisDeps {
   /** `LLMServices.tts` (`src/bootstrap/registerProviders.ts`). */
   readonly tts: Pick<TTSProvider, "synthesize">;
   /**
-   * One chunk's reservation (`P6-T10`): its input and audio tokens and, when
-   * the model is priced, the cost and the prices the reported tokens are
-   * settled at (`ReservationEstimate.prices`).
+   * The plan's model's TTS prices, `ttsPricesFor(plan.model, overrides)`
+   * (`src/tts/pricing.ts`); `undefined` is an unknown cost. Each chunk's
+   * reservation is `chunkReservation` (`./estimate.ts`, `P6-T10`) at these
+   * prices, which replaced the `estimateChunk` stand-in of 2026-11-16.
    */
-  readonly estimateChunk: (chunk: AudioChunk) => ReservationEstimate;
-  /** For the waits between attempts and the request budget. */
+  readonly prices: ModelPrices | undefined;
+  /** For the waits between attempts, the request budget and the price date. */
   readonly clock: Clock;
   /**
    * The retry policy; Gemini's `LLM_RETRY_BUDGET` by default, as the HTTP
@@ -312,7 +317,12 @@ export async function synthesizeChunks(
     ctx.progress?.setProgress(index, total);
 
     const request = requestFor(input, chunk);
-    const estimate = deps.estimateChunk(chunk);
+    const estimate = chunkReservation(
+      chunk,
+      plan,
+      deps.prices,
+      deps.clock.now(),
+    );
     let audio: AudioArtifact;
     try {
       audio = await withRetry(
