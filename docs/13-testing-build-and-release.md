@@ -399,7 +399,7 @@ Module paths below are `07-architecture-and-data-model.md` §2.2's; an earlier d
 | Token/cost estimation (`src/llm/shared/tokenEstimate.ts`) | estimate monotonicity, per-model pricing lookup, currency formatting, budget-ceiling arithmetic, and that a stored `llm.tokenEstimateCalibration` factor is applied before the headroom margin |
 | HTTP client (`src/core/http/client.ts`, `retry.ts`) | that Zotero's own retry loop stays disabled (`noRetryOnThrottle`, `errorDelayMax: 0` — `07-architecture-and-data-model.md` §7.4), `Retry-After` parsing, cancellation via `cancellerReceiver` |
 | Citation binding (`src/pipeline/trendReport/`) | marker extraction, resolution against a collection index, rejection of unresolvable markers |
-| Script preparation (`src/tts/ssml.ts`) | markdown stripping, citation removal, number/abbreviation expansion, segmentation at the TTS length limit |
+| ~~Script preparation (`src/tts/ssml.ts`)~~ Chunker (`src/tts/chunk.ts`) | ~~markdown stripping, citation removal, number/abbreviation expansion,~~ segmentation at the TTS length limit on paragraph and sentence boundaries, the English abbreviation guard, exact re-joining (`test/unit/tts/chunk.test.ts`). *Corrected 2026-11-16 (`plan/09` `P6-T09`; `plan/09` §0.4 line 22): `ssml.ts` is renamed `chunk.ts`, and v1.0's script call does the rewriting, so the file only splits; the rewriting is checked by the script pass's tests (`P6-T07`).* |
 | Provenance (`src/core/provenance.ts`) | conformance of a `SearchProvenance` object (`07-architecture-and-data-model.md` §5.3) against `schema/provenance.schema.json`, and key redaction in `transmittedUrl` |
 | Rate limiter (`src/core/rateLimit/tokenBucket.ts`) | token-bucket behaviour under fake timers, `Retry-After` honouring, jitter bounds |
 

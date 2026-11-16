@@ -57,7 +57,7 @@ documents, `plan/reports/` and the tree:
 | `docs/10` §5 Q9 and Q10 answered | **Met 2026-11-16.** Q9 and Q10 marked decided (coordinator, under item 313; Q10 within the owner's item 378(a)) | `P6-T06`, `P6-T08` |
 | `docs/12` §19 item 6 answered | **Met 2026-11-16.** Owner, item 378(a): one call from the English report, a script newly written in Korean | `P6-T08` |
 | Voice-set question closed | **Moot for v1.0.** `docs/04` §2.7's question is whether the Interactions voice set matches the legacy one; v1.0 builds the legacy path only (§0.4 line 5). The voice list is still not hardcoded: it is the documented default list, validated by a real call (`docs/07` §8.5) | `P6-T05` |
-| Attachment API signature confirmed | **Met.** `P0-T26` read `importFromFile` and `linkFromFile` in Zotero's source; `chooseAttachmentMode` and `IMPORT_MAX_BYTES` are built. **Not recorded anywhere:** whether a note may be an attachment's parent — `P6-T13` checks it (§0.4 line 7) | `P6-T13` |
+| Attachment API signature confirmed | **Met.** `P0-T26` read `importFromFile` and `linkFromFile` in Zotero's source; `chooseAttachmentMode` and `IMPORT_MAX_BYTES` are built. **Not recorded anywhere:** whether a note may be an attachment's parent — `P6-T13` checks it (§0.4 line 7). *Recorded 2026-11-16 (`P6-T13`): it may not — `Zotero.Item.prototype._saveData` in `xpcom/data/item.js` requires a regular-item parent; `docs/07` §6.5* | `P6-T13` |
 | Gemini tier position settled and disclosed | **Settled 2026-11-16** (owner, item 378(b)); `docs/09` §3.4 rule 4 and §8 item 3 carry it. `plan/06` `G-06` (the owner's acknowledgement of Google's free-tier terms) has **no status note** in `plan/06`; `P6-T19` needs it | `P6-T15`, `P6-T19` |
 
 **Deliverables (docs/11 §1 Phase 6) → cards.**
@@ -191,7 +191,7 @@ may be overturned by the owner. Each card named carries the decision as a `DECID
 | 3 | v1.0 ships Gemini TTS only; on failure the script is saved as text (FR-43); OpenAI TTS is a later-release candidate, with no cards | owner, item 378(c) | `P6-T14`; §4; `docs/04` §7.5 marked 2026-11-16 |
 | 4 | The offline "Read aloud" (`speechSynthesis`, `W6-9`) is not in v1.0; later-release candidate, no cards | owner, item 378(d) | §4; `docs/04` §7.1 marked 2026-11-16 |
 | 5 | Primary Gemini surface: **legacy `generateContent` only**; Interactions is a later-release candidate | coordinator | `P6-T05`; `docs/04` §2.1 marked 2026-11-16 |
-| 6 | `tts.outputFormat` ships `"wav"`; v1.0 writes WAV only. Import at most 10 MiB, link above, into `tts.linkedFileDir` chosen on first use; the data-directory copy an import leaves is deleted | coordinator | `P6-T02`, `P6-T13`; `docs/04` §6.4 and §10.2, `docs/07` §8.5, `docs/08` §7.3, `docs/13` §8.6 marked 2026-11-16 |
+| 6 | `tts.outputFormat` ships `"wav"`; v1.0 writes WAV only. Import at most 10 MiB, link above, into `tts.linkedFileDir` chosen on first use; the data-directory copy an import leaves is deleted. *Note 2026-11-16 (`P6-T13`): Zotero links a file only in the personal library, so a group report over 10 MiB is refused before synthesis until the owner answers `plan/00` §6 item 383* | coordinator | `P6-T02`, `P6-T13`; `docs/04` §6.4 and §10.2, `docs/07` §8.5, `docs/08` §7.3, `docs/13` §8.6 marked 2026-11-16 |
 | 7 | The audio is a **standalone attachment in the report's collection**, its key kept in `TrendReport.audioAttachmentKeys`; `P6-T13` checks in Zotero's source whether a note can parent an attachment and records it, and writes a standalone attachment either way | coordinator | `P6-T13`; `docs/04` §10.1 marked 2026-11-16 |
 | 8 | Register: conversational, no citation markers read aloud, the written report is the source of record (`docs/10` Q9) | coordinator | `P6-T06`; `docs/10` §5 Q9, `docs/12` §14 marked 2026-11-16 |
 | 9 | The Korean script is written natively, not translated (`docs/10` Q10) | coordinator, within item 378(a) | `P6-T08`; `docs/10` §5 Q10 marked 2026-11-16 |
@@ -588,7 +588,7 @@ of what it records: the contract and pipeline tests of `P6-T05`, `P6-T07` and `P
 | Field | Value |
 |---|---|
 | **ID** | `P6-T05` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-16, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T05.md`. |
 | **Depends on** | `P6-T01`, `P6-T03` |
 | **Blocks** | `P6-T10`, `P6-T11`, `P6-T15`, `P6-T16` |
 | **Retires** | part of `R-8` |
@@ -658,6 +658,8 @@ npm run typecheck && npm run lint:check && npm run test:unit -- geminiTts && npm
 **Notes.** Needs: `P0-T25` (the measured response shape), Phase 3's Gemini provider. Which secret it
 reads is a constructor argument; `P6-T16` passes `GEMINI_SECRET_ID` (`llm.gemini`), as §0.4 line 24
 decided on 2026-11-16.
+
+**Findings, 2026-11-16 — done; all four criteria pass; full report at `plan/reports/P6-T05.md`.** `createGeminiTts` (`src/tts/geminiTts.ts`) synthesizes one chunk over the legacy `generateContent` path with `singleAttempt` (retries are `P6-T11`'s), reads the key from its constructor's secret id into `x-goog-api-key` only, and refuses a 200 without audio, a non-`audio/L16` type or an odd byte count as a `TTSError` with its own reason; `resolveModel` reads `tts.model`, then the recommendation if listed, then the first TTS model, then the one compiled-in fallback (the `src` grep finds that line alone). It is constructed in `registerProviders` as `LLMServices.tts`. Five coordinator decisions are in `docs/07` §4.4's note; 46 unit and 9 contract tests; 10 of 10 mutants killed. No finding.
 
 ---
 
@@ -889,7 +891,7 @@ report.
 | Field | Value |
 |---|---|
 | **ID** | `P6-T09` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-16, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T09.md`. |
 | **Depends on** | `P6-T01` |
 | **Blocks** | `P6-T10`, `P6-T11` |
 | **Retires** | none |
@@ -933,6 +935,8 @@ npm run typecheck && npm run lint:check && npm run test:unit -- chunk
 ```
 
 **Notes.** Needs: nothing built beyond §0.1.
+
+**Findings, 2026-11-16 — done; all three criteria pass; full report at `plan/reports/P6-T09.md`.** `chunkScript` and `splitSentences` (`src/tts/chunk.ts`) cut a script into exact slices, so chunks plus separators rebuild it; the 900/450 ceiling is hard, an over-long sentence is cut at a clause, then a space outside an abbreviation, then the ceiling, never inside a surrogate pair, and each forced cut is logged without text. Six coordinator decisions in the file header; 27 tests on seeded samples; 10 of 10 mutants killed. `docs/13` §2.1's `ssml.ts` row is corrected (batch 1's finding closed). No new finding.
 
 ---
 
@@ -1011,7 +1015,7 @@ until then it uses `P3-T13`'s ratios, as every other call does.
 | Field | Value |
 |---|---|
 | **ID** | `P6-T11` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-16, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T11.md`. |
 | **Depends on** | `P6-T01`, `P6-T05`, `P6-T09` |
 | **Blocks** | `P6-T12`, `P6-T16` |
 | **Retires** | none |
@@ -1077,6 +1081,8 @@ npm run typecheck && npm run lint:check && npm run test:unit -- audioSynthesize
 
 **Notes.** Needs: Phase 3's budget and egress log. Caller: `audioReportPipeline.ts` (`P6-T16`).
 
+**Findings, 2026-11-16 — done; all three criteria pass; full report at `plan/reports/P6-T11.md`.** `synthesizeChunks` (`src/pipeline/audioReport/synthesize.ts`) sends chunks one at a time, each attempt under `withRetry`, a per-attempt budget reservation and `ctx.beforeSend`, with the same request object every time; it fails closed without a budget, returns a `done`/`stopped` union, and a cancel drops every chunk. Prices come in through `estimateChunk` until `P6-T10`'s `ttsCostOf` exists; the egress log stays `P6-T16`'s. One finding, not carded: step 3 calls a timeout retryable, but owner item 230 does not retry timeouts, and the loop follows item 230 (`docs/04` §5.4's note). 18 tests; 10 of 10 mutants killed.
+
 ---
 
 ### P6-T12 — WAV assembly: silence, one header, sample-rate check
@@ -1084,7 +1090,7 @@ npm run typecheck && npm run lint:check && npm run test:unit -- audioSynthesize
 | Field | Value |
 |---|---|
 | **ID** | `P6-T12` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-16, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T12.md`. |
 | **Depends on** | `P6-T01`, `P6-T11` |
 | **Blocks** | `P6-T13`, `P6-T16` |
 | **Retires** | part of `R-8` |
@@ -1136,6 +1142,8 @@ npm run typecheck && npm run lint:check && npm run test:unit -- audioStore
 **Notes.** Needs: `P0-T26`. Grep `audioStore.ts`'s importers before changing an export
 (`test/integration/zotero/attachments.spec.ts` is one); extend, do not replace (`plan/README.md` §4).
 
+**Findings, 2026-11-16 — done; all three criteria pass; full report at `plan/reports/P6-T12.md`.** `silencePcm`, `wavHeader`, `concatPcm` and `AudioStore.writeChunkedWav` are in `src/tts/audioStore.ts`, every `P0-T26` export kept. The file is written header first and appended chunk by chunk through the new optional `AudioFileSystem.appendFile`, which is `IOUtils.write(path, bytes, { mode: "append" })` as Zotero's `xpcom/http.js` calls it, so no flat copy is built in Zotero. Every chunk is checked first (one rate, whole frames); a stray WAV is stripped by walking its sub-chunks and logged without content. 24 tests; 14 of 14 mutants killed. No finding.
+
 ---
 
 ### P6-T13 — Delivery into Zotero: import or link, naming
@@ -1143,7 +1151,7 @@ npm run typecheck && npm run lint:check && npm run test:unit -- audioStore
 | Field | Value |
 |---|---|
 | **ID** | `P6-T13` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-16, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T13.md`. |
 | **Depends on** | `P6-T01`, `P6-T02`, `P6-T12` |
 | **Blocks** | `P6-T14`, `P6-T16` |
 | **Retires** | none |
@@ -1214,6 +1222,8 @@ npm run typecheck && npm run lint:check && npm run test:unit -- audioDeliver
 **Notes.** Needs: `P0-T26`, `P4-T14`. Callers: `audioReportPipeline.ts` (`P6-T16`). §0.4 line 25 (a
 linked file does not reach the phone) was accepted for v1.0 by the owner on 2026-11-16 (item 379):
 a WAV over 10 MiB is linked, not imported.
+
+**Findings, 2026-11-16 — done; all four criteria pass; full report at `plan/reports/P6-T13.md`.** Step 1: a note cannot parent an attachment (`Zotero.Item.prototype._saveData`, `xpcom/data/item.js`), recorded in `docs/07` §6.5. `createZoteroAudioAttachments` (`src/zotero/attachments.ts`) and `deliverAudio` / `checkAudioDestination` (`src/pipeline/audioReport/deliver.ts`) import at most 10 MiB with no parent into the collection and delete the written copy, link above into the folder the user chose (asked once, stored, never logged, never temporary), and refuse a read-only library before any write. One owner question, not blocking: Zotero allows a linked file only in the personal library, so a group report over 10 MiB is refused before synthesis until the owner decides (`plan/00` §6 item 383, draft not adopted). 24 unit tests, two integration cases, three clean integration runs; 20 of 20 mutants killed.
 
 ---
 

@@ -1767,6 +1767,29 @@ export type { AudioChunk } from "../model/audio";
 > TTS client through its construction deps (`plan/09` `P6-T16`), so the alias is harmless; replacing it with the real
 > type is recorded in `plan/reports/P6-T01.md`.
 
+> **As built 2026-11-16 (`plan/09` `P6-T05`): `createGeminiTts` in `src/tts/geminiTts.ts` implements the block above**
+> over the legacy `generateContent` path, constructed once in `registerProviders` and held on `LLMServices.tts`
+> (`src/bootstrap/registerProviders.ts`). Five readings, each *DECIDED 2026-11-16 (coordinator, under `plan/00` §6
+> item 313)*:
+>
+> 1. **`synthesize` sends one attempt** (`HttpOptions.singleAttempt`), because the HTTP client's host retry policy
+>    would otherwise re-send it before the synthesis loop sees the error; the loop (`P6-T11`) retries.
+> 2. **A 2xx without usable audio is a `TTSError` whose `context.reason` names why**: `no-audio` (no `inlineData`
+>    part, or an empty or undecodable one), `unsupported-format` (a `mimeType` that is not `audio/L16`),
+>    `malformed-response` (not a JSON object, or a byte count that is not whole 16-bit samples, `04-…` §6.3), and
+>    `model-gone` (a model list with no TTS model). `P6-T14` turns these into `TTSError` reasons with Fluent variants.
+>    An error status keeps the class `mapProviderError` gives it: 400 `API_KEY_INVALID` and 401 → `AuthenticationError`,
+>    403 → `AuthorizationError`, 404 → `BadRequestError` (HTTP 404), 429 → `RateLimitError`, 5xx → `UpstreamServerError`.
+> 3. **`resolveModel`**: `tts.model` when set; else `04-…` §7.5's dated recommendation when the live list holds it;
+>    else the list's first TTS model; a list with none is `model-gone`. The recommendation is also the one compiled-in
+>    id (`GEMINI_TTS_FALLBACK_MODEL`, the marked last-resort fallback of `04-…` §2.2), used only when the list cannot
+>    be read — never on a missing key or a cancel, which are thrown.
+> 4. **`maxInputChars`** returns `GEMINI_TTS_MAX_CHUNK_CHARS` (900 English, 450 Korean); a language v1.0 does not ship
+>    gets the smaller figure. The chunker (`src/tts/chunk.ts`, `P6-T09`) reads the same constant.
+> 5. **The secret id is a constructor argument**; `registerProviders` passes `GEMINI_SECRET_ID` (`llm.gemini`; owner,
+>    `plan/00` §6 item 379). The chat adapter's transport reads that id unconditionally and is not exported, so the
+>    TTS client sends through its own few lines over the same `geminiHeaders`, `mapProviderError` and client.
+
 ### 4.5 `Pipeline`, `JobHandle`
 
 > **`PipelineContext.llm`. Decided 2026-10-21 (owner; `plan/00` §6 item 248).** The member's type
@@ -4132,6 +4155,7 @@ A summary is stored as a **child note** on the item, not in `extra`:
   *As built 2026-10-30 (`P4-T14`): `writeReportNote` in `src/zotero/notes.ts` writes it, `findReportNote` finds it by the stored key and the tag, and the marker reads `<!-- rh:report v=1 id=<report id> lang=<en|ko> generatedAt=<ISO-8601 UTC> -->`; every run writes a new note, a read-only library gets the export only, and a group library is written only with the user's answer to a confirmation naming the group (`06-summarization-and-trend-report.md` §14.2's note of that date, §16 items 6 and 7).*
 - Cited works are linked via `zotero://select/library/items/<key>` anchors so the narrative is clickable.
 - ~~Audio is attached as a **child attachment of the report note** — an imported file attachment (`linkMode: "imported_file"`) with the audio MIME type, so it syncs and is deletable through normal Zotero UI.~~ *Decided 2026-11-16 (coordinator, under `plan/00` §6 item 313; `plan/09` §0.4 line 7; `04-audio-report-tts.md` §10.1's note of that day): the audio is a **standalone attachment in the report's collection**, with no parent item, and its key is kept in the stored report's `TrendReport.audioAttachmentKeys[language]` (§5.2), which is how the report window finds it. The report note is a standalone note (above), v1.0 creates no parent item and does not move or edit the note. A WAV of at most 10 MiB is imported (`linkMode` `imported_file`, `audio/wav`); a larger one is linked from `tts.linkedFileDir` (§8.5; `plan/09` §0.4 lines 6 and 25). Whether Zotero 10 lets a note be an attachment's parent at all is **not recorded** in this corpus: `plan/09` `P6-T13` reads Zotero's item and attachment source, records the answer here with the file and function, and writes a standalone attachment either way.* Filenames: `<collection-slug>-trends-<yyyymmdd>-<lang>.<ext>` (v1.0 writes `.wav` only).
+  *Recorded 2026-11-16 (`plan/09` `P6-T13` step 1), read in the installed Zotero 10 client's `omni.ja`: **a note cannot parent an attachment.** `Zotero.Item.prototype._saveData` in `chrome/content/zotero/xpcom/data/item.js` throws "Parent item … must be a regular item" for any child item whose parent is not a regular item; its only exceptions are an embedded image, whose parent must be a note, and an annotation, whose parent must be a file attachment. So the 2026-11-16 decision above is also the only one Zotero allows. The same source holds a second rule this section did not foresee: **a linked file can only be in the personal library** ("Linked files can only be added to user library", in `_saveData` and in the `attachmentPath` setter of the same file; `linkFromFile` in `xpcom/attachments.js` takes no `libraryID`, and `Zotero.Item.prototype.setCollections` sets an unset library to the personal one). A report in a group library whose WAV is over 10 MiB therefore cannot be linked; as built, `checkAudioDestination` and `deliverAudio` (`src/pipeline/audioReport/deliver.ts`) refuse it before synthesis with the reason `linked-needs-personal-library`, pending the owner question recorded in `plan/00` §6 the same day. As built: `createZoteroAudioAttachments` in `src/zotero/attachments.ts` is the Zotero half; the stem caps the slug so `-trends-<yyyymmdd>-<lang>-<n>` always fits the 60-code-point stem (`MAX_FILE_STEM_LENGTH`), and the date is the local calendar date.*
 
 ### 6.6 Reading from Zotero
 

@@ -550,3 +550,53 @@ export function readModelList(
   }
   return out;
 }
+
+/** One TTS model of `GET /v1beta/models`, as {@link readTtsModelList} reads it. */
+export interface TtsModelEntry {
+  /** The model id, `models/` stripped. */
+  readonly id: string;
+  /** `displayName`, or the id when the entry has none. */
+  readonly displayName: string;
+}
+
+/**
+ * Read `GET /v1beta/models` for its **TTS** models (`plan/09` `P6-T05` step
+ * 3; `docs/04` §2.2): the complement of {@link readModelList}'s
+ * {@link TTS_MODEL_ID} filter, over the same envelope (ASSUMPTION 4).
+ *
+ * - Only entries whose `supportedGenerationMethods` contains
+ *   `generateContent`, the method the legacy TTS path calls (`docs/04` §2.2's
+ *   "more robustly" filter), **and** whose id matches {@link TTS_MODEL_ID}.
+ * - `models/` stripped from `name`; an entry without a `name` is skipped.
+ * - No token limits are required: a TTS entry may list no `outputTokenLimit`,
+ *   and nothing here reads one.
+ * - The order is the list's own; `createGeminiTts`'s `resolveModel` takes the
+ *   first entry when the dated recommendation is absent.
+ *
+ * Caller: `resolveModel` in `src/tts/geminiTts.ts`.
+ *
+ * @param raw - the parsed answer
+ * @returns the TTS models, in list order
+ */
+export function readTtsModelList(
+  raw: Record<string, unknown>,
+): TtsModelEntry[] {
+  const out: TtsModelEntry[] = [];
+  for (const entry of arrayAt(raw, "models").filter(isRecord)) {
+    const name = stringAt(entry, "name");
+    if (name === undefined) continue;
+    if (
+      !arrayAt(entry, "supportedGenerationMethods").includes(
+        CHAT_GENERATION_METHOD,
+      )
+    ) {
+      continue;
+    }
+    const id = name.startsWith(GEMINI_MODEL_PREFIX)
+      ? name.slice(GEMINI_MODEL_PREFIX.length)
+      : name;
+    if (id === "" || !TTS_MODEL_ID.test(id)) continue;
+    out.push({ id, displayName: stringAt(entry, "displayName") ?? id });
+  }
+  return out;
+}

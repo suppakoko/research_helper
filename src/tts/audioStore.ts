@@ -6,7 +6,11 @@
  * from the Zotero **data** directory (`docs/07` §8.4), and register it as an
  * attachment on an item (`docs/01` §5.6, `docs/04` §10.2). Chunk
  * concatenation is `docs/04` §6 and Phase 6; the card's `Do NOT` list keeps it
- * out of here. Nothing in this file synthesizes audio or talks to a provider —
+ * out of here. *(Extended 2026-11-16, `plan/09` `P6-T12`: section 2a below now
+ * joins N PCM chunks into one WAV — 250 ms of silence between chunks, exactly
+ * one header, written header-first and appended chunk by chunk — and every
+ * `P0-T26` export is kept, since `test/integration/zotero/attachments.spec.ts`
+ * imports them.)* Nothing in this file synthesizes audio or talks to a provider —
  * `src/tts/types.ts` (`P0-T25`) owns the wire shapes and
  * `scripts/spike-tts-korean.ts` owns the probe.
  *
@@ -34,6 +38,9 @@
  * **There is no wiring yet.** `src/bootstrap/container.ts` does not exist and
  * is not in this card's `Files` list, so today the only composition root is
  * `test/integration/zotero/attachments.spec.ts`. Phase 6 wires it for real.
+ * *(2026-11-16, `P6-T13`: `createZoteroAudioAttachments` in
+ * `src/zotero/attachments.ts` now builds the store over the platform, and
+ * `P6-T16` constructs that in `src/bootstrap/registerPipelines.ts`.)*
  *
  * ## The attachment API, read from the shipped client rather than remembered
  *
@@ -56,6 +63,9 @@
  * is a subset of it, so `Zotero.Attachments` is assignable to the port with no
  * cast.
  */
+
+import { TTSError } from "../core/errors";
+import type { Logger } from "../core/logger";
 
 import type { PcmFormat } from "./types";
 
@@ -164,6 +174,18 @@ export function pcmToWav(
   pcm: Uint8Array,
   format: PcmFormat = GEMINI_PCM_FORMAT,
 ): Uint8Array {
+  assertPcmFormat(format);
+  const out = new Uint8Array(WAV_HEADER_BYTES + pcm.byteLength);
+  out.set(wavHeader(pcm.byteLength, format), 0);
+  out.set(pcm, WAV_HEADER_BYTES);
+  return out;
+}
+
+/**
+ * `pcmToWav`'s format guard, shared with {@link wavHeader} and
+ * {@link silencePcm} since `P6-T12` (the message is unchanged).
+ */
+function assertPcmFormat(format: PcmFormat): PcmFormat {
   const { sampleRateHz, channels, bitsPerSample } = format;
   if (
     !Number.isInteger(sampleRateHz) ||
@@ -179,12 +201,38 @@ export function pcmToWav(
         `${bitsPerSample}-bit`,
     );
   }
+  return format;
+}
 
+/** Bytes per sample frame: every channel's sample once. */
+function frameBytes(format: PcmFormat): number {
+  return format.channels * (format.bitsPerSample / 8);
+}
+
+/**
+ * The canonical 44-byte RIFF/WAVE header for `dataBytes` of PCM in `format`
+ * (`plan/09` `P6-T12` step 2): the header {@link pcmToWav} prepends, built
+ * on its own so a chunked file can be written header first and its samples
+ * appended after it (`docs/04` §6.3's memory note). The two §3.3 details hold:
+ * every multi-byte field is little-endian, and `ChunkSize` at offset 4 is
+ * `36 + dataBytes`.
+ *
+ * @param dataBytes - the PCM byte count the file will carry
+ * @param format - defaults to Gemini's legacy output (`docs/04` §3.1)
+ * @returns the 44 header bytes
+ */
+export function wavHeader(
+  dataBytes: number,
+  format: PcmFormat = GEMINI_PCM_FORMAT,
+): Uint8Array {
+  const { sampleRateHz, channels, bitsPerSample } = assertPcmFormat(format);
+  if (!Number.isInteger(dataBytes) || dataBytes < 0) {
+    throw new RangeError(`invalid PCM byte count: ${dataBytes}`);
+  }
   const bytesPerSample = bitsPerSample / 8;
   const blockAlign = channels * bytesPerSample;
   const byteRate = sampleRateHz * blockAlign;
-  const dataSize = pcm.byteLength;
-
+  const dataSize = dataBytes;
   // Not in §3.3. `setUint32` truncates silently, so a payload this large would
   // write a header that disagrees with the file — a WAV is a 32-bit format and
   // the caller has to chunk (which is docs/04 §6, Phase 6). Fail loudly.
@@ -221,10 +269,7 @@ export function pcmToWav(
   ascii(36, "data");
   view.setUint32(40, dataSize, true);
 
-  const out = new Uint8Array(WAV_HEADER_BYTES + dataSize);
-  out.set(new Uint8Array(header), 0);
-  out.set(pcm, WAV_HEADER_BYTES);
-  return out;
+  return new Uint8Array(header);
 }
 
 /**
@@ -250,6 +295,224 @@ export function pcmFormatFromMimeType(
     channels: GEMINI_PCM_FORMAT.channels,
     bitsPerSample: GEMINI_PCM_FORMAT.bitsPerSample,
   };
+}
+
+// ---------------------------------------------------------------------------
+// 2a. Joining chunks — docs/04 §6 (`plan/09` `P6-T12`)
+// ---------------------------------------------------------------------------
+
+/** `docs/04` §6.2's `SILENCE_MS`: the beat between two chunks. */
+export const CHUNK_SILENCE_MS = 250;
+
+/**
+ * `ms` milliseconds of digital silence (all-zero samples) in `format`
+ * (`docs/04` §6.2's `silencePcm`, `plan/09` `P6-T12` step 1).
+ *
+ * The length is `round(ms × rate / 1000)` sample frames times the frame
+ * size, so it is a whole number of frames by construction — for 16-bit mono,
+ * always even, which is §6.3's first correctness note (an odd length shifts
+ * every later sample by one byte and turns the rest of the file into noise).
+ * 250 ms at 24 kHz is 6,000 frames, 12,000 bytes.
+ *
+ * @param ms - a non-negative duration
+ * @param format - defaults to Gemini's legacy output (`docs/04` §3.1)
+ */
+export function silencePcm(
+  ms: number,
+  format: PcmFormat = GEMINI_PCM_FORMAT,
+): Uint8Array {
+  assertPcmFormat(format);
+  if (!Number.isFinite(ms) || ms < 0) {
+    throw new RangeError(`invalid silence length: ${ms} ms`);
+  }
+  const frames = Math.round((ms * format.sampleRateHz) / 1000);
+  return new Uint8Array(frames * frameBytes(format));
+}
+
+/** One synthesized chunk as the assembler takes it. */
+export interface PcmChunk {
+  /** Raw PCM; a whole WAV handed in by mistake is tolerated (§2.4). */
+  readonly pcm: Uint8Array;
+  /** The rate the provider reported for this chunk (`docs/04` §3.3). */
+  readonly sampleRateHz: number;
+}
+
+/** `RIFF` — the first four bytes of a WAV file (`docs/04` §2.4). */
+function startsWithRiff(bytes: Uint8Array): boolean {
+  return (
+    bytes.byteLength >= 4 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46
+  );
+}
+
+function asciiAt(bytes: Uint8Array, offset: number): string {
+  return String.fromCharCode(
+    bytes[offset] ?? 0,
+    bytes[offset + 1] ?? 0,
+    bytes[offset + 2] ?? 0,
+    bytes[offset + 3] ?? 0,
+  );
+}
+
+/**
+ * `docs/04` §2.4's sanity check, acted on (`plan/09` `P6-T12` step 4): a
+ * chunk whose first four bytes are `RIFF` is a whole WAV, not bare samples.
+ * Its sub-chunks are walked from offset 12 to the `data` sub-chunk, and only
+ * the samples after that are kept — wrapping it again would give the
+ * double-headered file §2.4 describes. A `fmt ` sub-chunk that disagrees
+ * with `format` stops the join (§6.4: no transcoding or resampling).
+ * The strip is logged by chunk index and header length, never by content.
+ */
+function stripRiffHeader(
+  bytes: Uint8Array,
+  index: number,
+  format: PcmFormat,
+  logger: Logger | undefined,
+): Uint8Array {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (bytes.byteLength < 12 || asciiAt(bytes, 8) !== "WAVE") {
+    throw new TTSError(
+      `chunk ${index} begins with RIFF but is not a WAVE file; refusing to join it`,
+      { reason: "unsupported-format", chunk: index },
+    );
+  }
+  let offset = 12;
+  while (offset + 8 <= bytes.byteLength) {
+    const id = asciiAt(bytes, offset);
+    const size = view.getUint32(offset + 4, true);
+    const body = offset + 8;
+    if (id === "fmt " && size >= 16 && body + 16 <= bytes.byteLength) {
+      const channels = view.getUint16(body + 2, true);
+      const rate = view.getUint32(body + 4, true);
+      const bits = view.getUint16(body + 14, true);
+      if (rate !== format.sampleRateHz) {
+        throw sampleRateMismatch(index, rate, format.sampleRateHz);
+      }
+      if (channels !== format.channels || bits !== format.bitsPerSample) {
+        throw new TTSError(
+          `chunk ${index} is a ${channels}-channel ${bits}-bit WAV; ` +
+            "refusing to join it (docs/04 §6.4: no transcoding)",
+          { reason: "unsupported-format", chunk: index },
+        );
+      }
+    }
+    if (id === "data") {
+      const end = Math.min(body + size, bytes.byteLength);
+      logger?.warn("tts.chunk.wav-header-stripped", {
+        chunk: index,
+        headerBytes: body,
+      });
+      return bytes.subarray(body, end);
+    }
+    offset = body + size + (size % 2);
+  }
+  throw new TTSError(
+    `chunk ${index} is a WAVE file with no data sub-chunk; refusing to join it`,
+    { reason: "unsupported-format", chunk: index },
+  );
+}
+
+/**
+ * The same `TTSError` reason `P6-T11`'s `synthesizeChunks` uses for a rate
+ * change between chunks, so the job reports one failure either way.
+ */
+function sampleRateMismatch(
+  index: number,
+  got: number,
+  expected: number,
+): TTSError {
+  return new TTSError(
+    `sample rate changed: chunk ${index} is ${got} Hz, expected ` +
+      `${expected} Hz; refusing to join them (docs/04 §6.3)`,
+    { reason: "sample-rate", chunk: index, expected, got },
+  );
+}
+
+/**
+ * Check every chunk against `format` and reduce each to bare samples: one
+ * sample rate for the whole file (`docs/04` §6.3), a whole number of sample
+ * frames per chunk, and a stray WAV header stripped.
+ */
+function prepareChunks(
+  chunks: readonly PcmChunk[],
+  format: PcmFormat,
+  logger: Logger | undefined,
+): Uint8Array[] {
+  assertPcmFormat(format);
+  if (chunks.length === 0) {
+    throw new RangeError("no audio chunks to join");
+  }
+  const frame = frameBytes(format);
+  return chunks.map((chunk, index) => {
+    if (chunk.sampleRateHz !== format.sampleRateHz) {
+      throw sampleRateMismatch(index, chunk.sampleRateHz, format.sampleRateHz);
+    }
+    const pcm = startsWithRiff(chunk.pcm)
+      ? stripRiffHeader(chunk.pcm, index, format, logger)
+      : chunk.pcm;
+    if (pcm.byteLength % frame !== 0) {
+      throw new RangeError(
+        `chunk ${index} is ${pcm.byteLength} bytes, not a whole number of ` +
+          `${frame}-byte sample frames`,
+      );
+    }
+    return pcm;
+  });
+}
+
+/** Options shared by {@link concatPcm} and {@link AudioStore.writeChunkedWav}. */
+export interface JoinOptions {
+  /** Defaults to {@link GEMINI_PCM_FORMAT}. */
+  readonly format?: PcmFormat;
+  /** Told when a chunk's stray WAV header is stripped. */
+  readonly logger?: Logger;
+}
+
+function joinedByteLength(
+  pcms: readonly Uint8Array[],
+  silence: Uint8Array,
+): number {
+  const samples = pcms.reduce((total, pcm) => total + pcm.byteLength, 0);
+  return samples + silence.byteLength * (pcms.length - 1);
+}
+
+/** Copy `pcms` into `out` from `start`, with `silence` between them. */
+function fillJoined(
+  out: Uint8Array,
+  start: number,
+  pcms: readonly Uint8Array[],
+  silence: Uint8Array,
+): void {
+  let offset = start;
+  pcms.forEach((pcm, index) => {
+    if (index > 0) {
+      out.set(silence, offset);
+      offset += silence.byteLength;
+    }
+    out.set(pcm, offset);
+    offset += pcm.byteLength;
+  });
+}
+
+/**
+ * Join chunks into one flat PCM buffer: chunk 1, 250 ms of silence, chunk 2,
+ * … — no silence after the last (`docs/04` §6.2). Every check of
+ * {@link prepareChunks} applies. The store's chunked write does not use this
+ * when the file system can append; it is the fallback and the reference.
+ */
+export function concatPcm(
+  chunks: readonly PcmChunk[],
+  options: JoinOptions = {},
+): Uint8Array {
+  const format = options.format ?? GEMINI_PCM_FORMAT;
+  const pcms = prepareChunks(chunks, format, options.logger);
+  const silence = silencePcm(CHUNK_SILENCE_MS, format);
+  const out = new Uint8Array(joinedByteLength(pcms, silence));
+  fillJoined(out, 0, pcms, silence);
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -434,6 +697,16 @@ export interface AudioFileSystem {
   makeDirectory(path: string): Promise<unknown>;
   /** `IOUtils.write`. Overwrites. */
   writeFile(path: string, bytes: Uint8Array): Promise<unknown>;
+  /**
+   * `IOUtils.write(path, bytes, { mode: "append" })` — added 2026-11-16 by
+   * `plan/09` `P6-T12`. The option's name was read from the installed
+   * Zotero's `chrome/content/zotero/xpcom/http.js`, which appends with
+   * exactly that call, and `zotero-types` declares `WriteMode` as
+   * `"append" | "appendOrCreate" | "create" | "overwrite"`. Optional so the
+   * `P0-T26` adapters keep compiling; without it
+   * {@link AudioStore.writeChunkedWav} builds one flat buffer instead.
+   */
+  appendFile?(path: string, bytes: Uint8Array): Promise<unknown>;
   /** `IOUtils.exists`. */
   exists(path: string): Promise<boolean>;
 }
@@ -441,8 +714,16 @@ export interface AudioFileSystem {
 /**
  * The options both attachment calls take, as the shipped
  * `xpcom/attachments.js` declares them (see the file header). Only the
- * members this module passes are listed; `collections`, `charset`,
- * `fileBaseName`, `libraryID` and `saveOptions` exist but are not used here.
+ * members this module passes are listed; `charset`, `fileBaseName` and
+ * `saveOptions` exist but are not used here.
+ *
+ * *(Extended 2026-11-16, `plan/09` `P6-T13`: `libraryID` and `collections`,
+ * for a standalone attachment in a collection.)* Read again in the installed
+ * client's `attachments.js` that day: `importFromFile` sets the new item's
+ * library from `libraryID` when there is no parent and calls
+ * `setCollections(collections)`; `linkFromFile` reads **no** `libraryID` —
+ * its `_addToDB` takes the library from the parent only — and both throw
+ * "parentItemID and collections cannot both be provided".
  *
  * `file` is typed `string` because Zotero calls `Zotero.File.pathToFile()` on
  * it and accepts `nsIFile|String`; a path keeps the port Node-testable.
@@ -452,11 +733,17 @@ export interface AttachmentFromFileOptions {
   readonly parentItemID?: number;
   readonly title?: string;
   readonly contentType?: string;
+  /** `importFromFile` only; `linkFromFile` ignores it. */
+  readonly libraryID?: number;
+  /** Collection keys or ids the new item is added to. */
+  readonly collections?: string[];
 }
 
 /** As much of a created attachment item as this module reads back. */
 export interface AttachedItem {
   readonly id: number;
+  /** `Zotero.DataObject.key`; added by `P6-T13` for `audioAttachmentKeys`. */
+  readonly key: string;
 }
 
 /**
@@ -508,6 +795,8 @@ export interface WrittenAudioFile {
 /** The outcome of registering a {@link WrittenAudioFile} on an item. */
 export interface AudioAttachment {
   readonly itemID: number;
+  /** The attachment item's key (`P6-T13`: `audioAttachmentKeys`). */
+  readonly itemKey: string;
   /** Which `docs/04` §10.2 mode was used — `P0-T26` step 5 records this. */
   readonly mode: AttachmentMode;
   readonly path: string;
@@ -525,6 +814,20 @@ export interface WriteWavRequest {
   readonly format?: PcmFormat;
 }
 
+/** What {@link AudioStore.writeChunkedWav} is asked for (`P6-T12`). */
+export interface WriteChunkedWavRequest extends JoinOptions {
+  /** Filename stem; sanitised before use, so any string is safe to pass. */
+  readonly stem: string;
+  /** The synthesized chunks, in reading order. */
+  readonly chunks: readonly PcmChunk[];
+  /**
+   * An absolute folder to write into instead of {@link AudioStore.directory}
+   * — the linked-file folder of `plan/09` `P6-T13` step 4. Created when
+   * missing, like the default.
+   */
+  readonly directory?: string;
+}
+
 /** What {@link AudioStore.attach} is asked for. */
 export interface AttachRequest {
   readonly file: WrittenAudioFile;
@@ -536,16 +839,71 @@ export interface AttachRequest {
   readonly mode?: AttachmentMode;
 }
 
+/**
+ * What {@link AudioStore.attachStandalone} is asked for (`plan/09` `P6-T13`):
+ * an attachment with no parent, in one collection (`plan/09` §0.4 line 7).
+ */
+export interface AttachStandaloneRequest {
+  readonly file: WrittenAudioFile;
+  /** The library the attachment is created in (imported files only). */
+  readonly libraryID: number;
+  /** The report's collection, by key. */
+  readonly collectionKey: string;
+  readonly title: string;
+  readonly mode: AttachmentMode;
+}
+
 /** Write audio into the data directory and register it on an item. */
 export interface AudioStore {
   /** `<dataDirectory>/research-helper/audio`. */
   readonly directory: string;
   /** The absolute path a given leaf name would occupy. */
   pathFor(fileName: string): string;
+  /**
+   * The same in another folder (`P6-T13`'s linked-file folder); the leaf name
+   * is checked as {@link pathFor} checks it.
+   */
+  pathIn(folder: string, fileName: string): string;
   /** Wrap PCM in a WAV container and write it. Creates the directory. */
   writeWav(request: WriteWavRequest): Promise<WrittenAudioFile>;
+  /**
+   * Join chunks into one WAV with exactly one header and write it
+   * (`plan/09` `P6-T12` step 3): the header for the total length first, then
+   * each chunk, with {@link CHUNK_SILENCE_MS} of silence between, appended in
+   * order — so nothing beyond the chunks already held and one silence buffer
+   * is in memory. Without {@link AudioFileSystem.appendFile}, one flat buffer
+   * is built and written instead. Creates the folder.
+   */
+  writeChunkedWav(request: WriteChunkedWavRequest): Promise<WrittenAudioFile>;
   /** Register a written file as an attachment (`docs/04` §10.2). */
   attach(request: AttachRequest): Promise<AudioAttachment>;
+  /**
+   * Register a written file as a **standalone** attachment in a collection,
+   * no parent (`plan/09` `P6-T13`). Linked mode is valid only in the
+   * personal library — Zotero refuses a linked file elsewhere ("Linked files
+   * can only be added to user library", `Zotero.Item.prototype._saveData` in
+   * `chrome/content/zotero/xpcom/data/item.js`) — so the caller checks that
+   * first; this method passes `libraryID` only to `importFromFile`.
+   */
+  attachStandalone(request: AttachStandaloneRequest): Promise<AudioAttachment>;
+}
+
+/**
+ * The size of the WAV {@link AudioStore.writeChunkedWav} would write for
+ * `chunks`: 44 + every chunk's samples + one silence between each pair. Runs
+ * every check the write runs, so a bad chunk fails here, before any file or
+ * folder is touched (`plan/09` `P6-T13`: the mode is chosen from this).
+ */
+export function chunkedWavByteLength(
+  chunks: readonly PcmChunk[],
+  options: JoinOptions = {},
+): number {
+  const format = options.format ?? GEMINI_PCM_FORMAT;
+  const pcms = prepareChunks(chunks, format, undefined);
+  return (
+    WAV_HEADER_BYTES +
+    joinedByteLength(pcms, silencePcm(CHUNK_SILENCE_MS, format))
+  );
 }
 
 /**
@@ -576,14 +934,19 @@ export function createAudioStore(deps: {
     AUDIO_DIRECTORY_NAME,
   );
 
-  const pathFor = (fileName: string): string => {
+  const pathIn = (folder: string, fileName: string): string => {
     assertLeafName(fileName);
-    return files.join(directory, fileName);
+    if (folder.trim() === "") {
+      throw new RangeError("an audio folder must be an absolute path");
+    }
+    return files.join(folder, fileName);
   };
+  const pathFor = (fileName: string): string => pathIn(directory, fileName);
 
   return {
     directory,
     pathFor,
+    pathIn,
 
     async writeWav(request) {
       const format = request.format ?? GEMINI_PCM_FORMAT;
@@ -598,6 +961,39 @@ export function createAudioStore(deps: {
         path,
         fileName,
         byteLength: bytes.byteLength,
+        format,
+        contentType: WAV_CONTENT_TYPE,
+      };
+    },
+
+    async writeChunkedWav(request) {
+      const format = request.format ?? GEMINI_PCM_FORMAT;
+      const pcms = prepareChunks(request.chunks, format, request.logger);
+      const silence = silencePcm(CHUNK_SILENCE_MS, format);
+      const dataBytes = joinedByteLength(pcms, silence);
+      const header = wavHeader(dataBytes, format);
+      const folder = request.directory ?? directory;
+      const fileName = audioFileName(request.stem, "wav");
+      const path = pathIn(folder, fileName);
+
+      await files.makeDirectory(folder);
+      if (files.appendFile === undefined) {
+        const flat = new Uint8Array(WAV_HEADER_BYTES + dataBytes);
+        flat.set(header, 0);
+        fillJoined(flat, WAV_HEADER_BYTES, pcms, silence);
+        await files.writeFile(path, flat);
+      } else {
+        await files.writeFile(path, header);
+        for (const [index, pcm] of pcms.entries()) {
+          if (index > 0) await files.appendFile(path, silence);
+          await files.appendFile(path, pcm);
+        }
+      }
+
+      return {
+        path,
+        fileName,
+        byteLength: WAV_HEADER_BYTES + dataBytes,
         format,
         contentType: WAV_CONTENT_TYPE,
       };
@@ -621,6 +1017,39 @@ export function createAudioStore(deps: {
 
       return {
         itemID: item.id,
+        itemKey: item.key,
+        mode,
+        path: file.path,
+        fileName: file.fileName,
+        contentType: file.contentType,
+      };
+    },
+
+    async attachStandalone(request) {
+      const { file, mode } = request;
+      assertLeafName(file.fileName);
+      if (request.collectionKey.trim() === "") {
+        throw new RangeError(
+          "a standalone audio attachment needs a collection",
+        );
+      }
+      const shared = {
+        file: file.path,
+        title: request.title,
+        contentType: file.contentType,
+        collections: [request.collectionKey],
+      };
+      const item =
+        mode === "imported"
+          ? await attachments.importFromFile({
+              ...shared,
+              libraryID: request.libraryID,
+            })
+          : await attachments.linkFromFile(shared);
+
+      return {
+        itemID: item.id,
+        itemKey: item.key,
         mode,
         path: file.path,
         fileName: file.fileName,

@@ -544,6 +544,8 @@ Run chunks **sequentially, or at most 2-way concurrent**. Rationale:
 - Sequential gives a clean, honest progress bar: "Generating audio: chunk 4 of 11".
 - **Persist completed chunks** (as PCM in a temp directory keyed by a run ID) so a failure at chunk 9 of 11 resumes rather than restarts. At $0.03/min this is more about the user's time than the money.
 
+> **Decided 2026-11-16 (coordinator, under `plan/00` §6 item 313; `plan/09` §0.4 line 14 and `P6-T11`): v1.0 does not persist chunks.** Chunks are synthesized **sequentially** (never two at once) and held **in memory**; a failure or a ceiling hands the finished ones back, and a retry in the same session (the user presses Retry in the report window) sends only the rest; nothing survives a restart, and a cancel discards them all. A 10-minute report is about ten one-minute chunks and costs about $0.15 on the cheaper model, so a second store, its clean-up and its key are more code than the money saved; a content-hashed chunk cache is a later-release candidate (`plan/09` §4). **As built** (`synthesizeChunks` in `src/pipeline/audioReport/synthesize.ts`): each chunk is reserved and settled on the job's budget guard; a failed attempt is retried with the same request object under the Gemini host's retry policy, which does not retry a timeout (owner, `plan/00` §6 item 230), so a timed-out chunk stops the run with the chunks before it kept; a sample-rate change stops it with `TTSError` (§6.3).
+
 ---
 
 ## 6. Concatenating audio client-side

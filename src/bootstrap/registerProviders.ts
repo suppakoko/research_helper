@@ -13,7 +13,9 @@
  * {@link LLMServices.baseUrls}. Until then the router throws
  * `MissingCredentialError` (no key flag) or `ConfigurationError` (a key flag but
  * no adapter) before any request — which is the correct answer for a build
- * that can reach no provider. TTS providers are Phase 5's.
+ * that can reach no provider. *(Corrected 2026-11-16, `plan/09` `P6-T05`: this
+ * sentence read "TTS providers are Phase 5's"; the Gemini TTS client is built
+ * below and held on {@link LLMServices.tts}.)*
  *
  * **Why the settings are built here.** `llm/` may not import `src/prefs/`
  * (`docs/07` §2.3); `bootstrap/` may. {@link createPrefLLMSettings} is the one
@@ -27,7 +29,10 @@ import type { HttpClient } from "../core/http/client";
 import type { Logger } from "../core/logger";
 import type { SecretStore } from "../core/secretStore";
 import { createAnthropicProvider } from "../llm/anthropic/anthropicProvider";
-import { createGeminiProvider } from "../llm/gemini/geminiProvider";
+import {
+  createGeminiProvider,
+  GEMINI_SECRET_ID,
+} from "../llm/gemini/geminiProvider";
 import {
   createBaseUrlResolver,
   type BaseUrlResolver,
@@ -43,6 +48,8 @@ import { createLLMRouter } from "../llm/router";
 import type { LLMRouter } from "../llm/types";
 import type { ProviderId } from "../model/ids";
 import { getPref, type PrefName } from "../prefs";
+import { createGeminiTts } from "../tts/geminiTts";
+import type { TTSProvider } from "../tts/types";
 
 /** One provider's three per-provider preference names. */
 interface ProviderPrefNames {
@@ -150,6 +157,12 @@ export interface LLMServices {
   readonly baseUrls: BaseUrlResolver;
   /** `docs/07` §4.3's router — the value of every job's `PipelineContext.llm`. */
   readonly router: LLMRouter;
+  /**
+   * The Gemini TTS client (`plan/09` `P6-T05`), built here beside the Gemini
+   * chat adapter. Not yet passed to a pipeline: the audio job takes it through
+   * its construction deps (`P6-T16`).
+   */
+  readonly tts: TTSProvider;
 }
 
 /**
@@ -205,5 +218,15 @@ export function registerProviders(deps: ProviderWiringDeps): LLMServices {
     }),
   );
   const router = createLLMRouter({ registry, settings });
-  return { settings, registry, baseUrls, router };
+  // Gemini TTS (`P6-T05`): the legacy `generateContent` path, reading the chat
+  // key (`GEMINI_SECRET_ID`, owner, `plan/00` §6 item 379). Constructed here
+  // and nowhere else (`plan/09` §0.2; `plan/04` §0.2 item 9).
+  const tts = createGeminiTts({
+    secrets: deps.secrets,
+    secretId: GEMINI_SECRET_ID,
+    baseUrls,
+    http: deps.http,
+    logger: deps.logger,
+  });
+  return { settings, registry, baseUrls, router, tts };
 }

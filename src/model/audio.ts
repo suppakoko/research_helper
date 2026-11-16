@@ -124,8 +124,10 @@ export interface AudioCostEstimate {
   readonly outputTokens: number;
   /**
    * `false` when the audio token rate used was measured on another model
-   * (`docs/04` §4.2 measured it on `gemini-2.5-flash-preview-tts` only); the
-   * dialog then says so and shows no per-minute quote.
+   * (`docs/04` §4.2 measured it on one model only, `P0-T25`'s); the
+   * dialog then says so and shows no per-minute quote. *(Reworded 2026-11-16,
+   * `plan/09` `P6-T05`: this comment named that model's id, and `src/` may
+   * name a TTS model id on one marked fallback line only.)*
    */
   readonly rateMeasuredOnModel: boolean;
 }

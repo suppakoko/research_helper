@@ -38,6 +38,15 @@
  *    a Windows device name, the empty string) never reaches Zotero as a
  *    filename — `docs/01` §12 gotchas 18 and 19.
  *
+ * 5. *(Added 2026-11-16, `plan/09` `P6-T13`.)* `deliverAudio` over the real
+ *    adapter (`createZoteroAudioAttachments`, `src/zotero/attachments.ts`)
+ *    puts a chunked WAV into a collection as a **standalone** attachment: a
+ *    small one imported, with the data-directory copy removed afterwards; one
+ *    over `IMPORT_MAX_BYTES` linked into a folder chosen through the injected
+ *    picker. The folder is a permanent one under the throwaway data
+ *    directory, never a temporary path (`docs/04` §10.2), and no path is
+ *    logged by these two cases.
+ *
  * **What it cannot assert: that the audio plays.** That needs ears. `P0-T26`'s
  * third `Done when` box stays open until a human opens the attachment from the
  * item pane and hears it.
@@ -53,6 +62,11 @@
  */
 
 import {
+  deliverAudio,
+  type AudioDeliveryDeps,
+} from "../../../src/pipeline/audioReport/deliver";
+import {
+  CHUNK_SILENCE_MS,
   GEMINI_PCM_FORMAT,
   IMPORT_MAX_BYTES,
   WAV_CONTENT_TYPE,
@@ -62,9 +76,12 @@ import {
   createAudioStore,
   pcmFormatFromMimeType,
   sanitizeFileStem,
+  silencePcm,
   type AttachmentApi,
   type AudioFileSystem,
+  type PcmChunk,
 } from "../../../src/tts/audioStore";
+import { createZoteroAudioAttachments } from "../../../src/zotero/attachments";
 
 // Mocha and Chai globals injected by the scaffold runner's index.xhtml. Typed
 // locally, to exactly what this file uses: no Mocha types are installed.
@@ -558,5 +575,206 @@ describe("Audio file storage and attachment (P0-T26, V-11)", function () {
     }
     assert.isTrue(item.isAttachment(), "Zotero accepted the sanitised name");
     log(`hostile-name attachment stored as "${written.fileName}"`);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P6-T13: delivery as a standalone attachment in a collection
+// ---------------------------------------------------------------------------
+
+const DELIVERY_PREFIX = "[P6-T13]";
+const deliveryItemIDs: number[] = [];
+const deliveryCollectionIDs: number[] = [];
+const deliveryFolders: string[] = [];
+
+/** `n` chunks of `bytesEach` of a quiet tone, as `synthesizeChunks` returns them. */
+function toneChunks(n: number, bytesEach: number): PcmChunk[] {
+  const one = new Uint8Array(bytesEach);
+  const tone = syntheticPcm();
+  for (let at = 0; at < bytesEach; at += tone.byteLength) {
+    one.set(tone.subarray(0, Math.min(tone.byteLength, bytesEach - at)), at);
+  }
+  return Array.from({ length: n }, () => ({ pcm: one, sampleRateHz: 24000 }));
+}
+
+async function deliveryCollection(): Promise<Zotero.Collection> {
+  await Zotero.Schema.schemaUpdatePromise;
+  const collection = new Zotero.Collection({
+    libraryID: Zotero.Libraries.userLibraryID,
+    name: `research_helper P6-T13 delivery ${Date.now()}`,
+  });
+  await collection.saveTx();
+  deliveryCollectionIDs.push(collection.id);
+  return collection;
+}
+
+function deliveryDeps(
+  linkedFolder: { value: string },
+  picked: string | undefined,
+  asked: { count: number },
+): AudioDeliveryDeps {
+  return {
+    zotero: createZoteroAudioAttachments(),
+    clock: { now: () => Date.now() },
+    pickFolder: () => {
+      asked.count += 1;
+      return Promise.resolve(picked);
+    },
+    readLinkedFolder: () => linkedFolder.value,
+    writeLinkedFolder: (path) => {
+      linkedFolder.value = path;
+    },
+  };
+}
+
+async function checkStandaloneInCollection(
+  key: string,
+  collection: Zotero.Collection,
+  linkMode: number,
+): Promise<Zotero.Item> {
+  const item = Zotero.Items.getByLibraryAndKey(
+    Zotero.Libraries.userLibraryID,
+    key,
+  );
+  if (item === false) assert.fail(`no attachment with the returned key`);
+  deliveryItemIDs.push(item.id);
+  assert.isTrue(item.isAttachment(), "an attachment");
+  assert.isFalse(Boolean(item.parentItemID), "standalone: no parent item");
+  assert.isTrue(
+    item.getCollections().includes(collection.id),
+    "in the report's collection",
+  );
+  assert.strictEqual(item.attachmentContentType, WAV_CONTENT_TYPE, "audio/wav");
+  assert.strictEqual(item.attachmentLinkMode, linkMode, "link mode");
+  const path = await item.getFilePathAsync();
+  if (path === false) assert.fail("Zotero cannot resolve the attachment file");
+  assert.isTrue(await IOUtils.exists(path), "the attachment's file exists");
+  return item;
+}
+
+describe("Audio delivery into a collection (P6-T13)", function () {
+  after(async function () {
+    for (const id of deliveryItemIDs.splice(0)) {
+      const item = Zotero.Items.get(id) as Zotero.Item | false;
+      if (item) await item.eraseTx().catch(() => undefined);
+    }
+    for (const id of deliveryCollectionIDs.splice(0)) {
+      const collection = Zotero.Collections.get(id);
+      if (collection) await collection.eraseTx().catch(() => undefined);
+    }
+    for (const folder of deliveryFolders.splice(0)) {
+      await IOUtils.remove(folder, { recursive: true, ignoreAbsent: true });
+    }
+  });
+
+  it("imports a small WAV with no parent and removes the written copy", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    const collection = await deliveryCollection();
+    const deps = deliveryDeps({ value: "" }, undefined, { count: 0 });
+    const chunks = toneChunks(3, 24_000);
+    const result = await deliverAudio(
+      {
+        report: {
+          id: "rpt_p6t13_import",
+          libraryID: Zotero.Libraries.userLibraryID,
+          collectionKey: collection.key,
+          collectionName: collection.name,
+        },
+        language: "en",
+        chunks,
+        sampleRateHz: 24000,
+        usage: undefined,
+        scriptUsage: undefined,
+      },
+      deps,
+    );
+    if (result.kind !== "delivered") assert.fail(`refused: ${result.reason}`);
+    const { outcome } = result;
+    const silence = silencePcm(CHUNK_SILENCE_MS).byteLength;
+    assert.strictEqual(
+      outcome.bytes,
+      WAV_HEADER_BYTES + 3 * 24_000 + 2 * silence,
+      "44 + chunks + two silences",
+    );
+    assert.strictEqual(outcome.mode, "imported", "at most 10 MiB is imported");
+    const item = await checkStandaloneInCollection(
+      outcome.attachmentKey,
+      collection,
+      Zotero.Attachments.LINK_MODE_IMPORTED_FILE,
+    );
+    assert.isTrue(
+      String(item.getField("title")).startsWith("Audio report (English), "),
+      "FR-40's descriptive title",
+    );
+    const path = await item.getFilePathAsync();
+    if (path === false) assert.fail("no file");
+    const header = parseWavHeader(await IOUtils.read(path));
+    assert.strictEqual(
+      header.dataSize,
+      outcome.bytes - WAV_HEADER_BYTES,
+      "one header over the whole",
+    );
+    assert.isFalse(
+      await IOUtils.exists(deps.zotero.store.pathFor(outcome.fileName)),
+      "the data-directory copy is removed after the import (plan/09 §0.4 line 6)",
+    );
+    debug(
+      `${DELIVERY_PREFIX} imported ${outcome.bytes} bytes as a standalone attachment`,
+    );
+  });
+
+  it("links a WAV over 10 MiB into the chosen folder, asking once", async function () {
+    this.timeout(TEST_TIMEOUT_MS * 2);
+    const collection = await deliveryCollection();
+    const folder = PathUtils.join(
+      Zotero.DataDirectory.dir,
+      `rh-p6t13-linked-${Date.now()}`,
+    );
+    await IOUtils.makeDirectory(folder, { createAncestors: true });
+    deliveryFolders.push(folder);
+    const stored = { value: "" };
+    const asked = { count: 0 };
+    const deps = deliveryDeps(stored, folder, asked);
+    const half = Math.ceil(IMPORT_MAX_BYTES / 2 / 2) * 2 + 2;
+    const result = await deliverAudio(
+      {
+        report: {
+          id: "rpt_p6t13_link",
+          libraryID: Zotero.Libraries.userLibraryID,
+          collectionKey: collection.key,
+          collectionName: collection.name,
+        },
+        language: "ko",
+        chunks: toneChunks(2, half),
+        sampleRateHz: 24000,
+        usage: undefined,
+        scriptUsage: undefined,
+      },
+      deps,
+    );
+    if (result.kind !== "delivered") assert.fail(`refused: ${result.reason}`);
+    const { outcome } = result;
+    assert.strictEqual(outcome.mode, "linked", "over 10 MiB is linked");
+    assert.isAbove(outcome.bytes, IMPORT_MAX_BYTES, "over the threshold");
+    assert.strictEqual(asked.count, 1, "the empty setting asked once");
+    assert.strictEqual(stored.value, folder, "and stored the answer");
+    const item = await checkStandaloneInCollection(
+      outcome.attachmentKey,
+      collection,
+      Zotero.Attachments.LINK_MODE_LINKED_FILE,
+    );
+    const path = await item.getFilePathAsync();
+    assert.strictEqual(
+      path,
+      PathUtils.join(folder, outcome.fileName),
+      "the linked file is in the chosen folder",
+    );
+    assert.isTrue(
+      outcome.fileName.endsWith("-ko.wav"),
+      "named per docs/04 §10.3",
+    );
+    debug(
+      `${DELIVERY_PREFIX} linked ${outcome.bytes} bytes as a standalone attachment`,
+    );
   });
 });
