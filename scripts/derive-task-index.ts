@@ -1,6 +1,6 @@
 /**
- * Regenerate `plan/00-task-index.md` §4's seven tables, and its header counts,
- * from the task cards in `plan/01`–`plan/04`, `plan/07`, `plan/08` and `plan/09`.
+ * Regenerate `plan/00-task-index.md` §4's eight tables, and its header counts,
+ * from the task cards in `plan/01`–`plan/04` and `plan/07`–`plan/10`.
  *
  * **Phase 4 added 2026-10-26** (`plan/00` §6 item 286): its cards live in
  * `plan/07-phase-4-trend-report.md` — numbered `07` because `05` and `06`
@@ -14,6 +14,9 @@
  * `plan/09-phase-6-audio-report.md`, numbered `09` because `05`–`08` were
  * taken.
  *
+ * **Phase 7 added 2026-11-16** (`plan/00` §6 item 380): its cards live in
+ * `plan/10-phase-7-release.md`, numbered `10` because `05`–`09` were taken.
+ *
  * **Why this exists.** `plan/00-task-index.md` §7 already says those tables are
  * *derived* from the cards' `ID`, `Depends on`, `Estimate` and `Human gate`
  * rows, and that they must be re-derived after editing any card. Nobody was
@@ -24,7 +27,7 @@
  * as a command.
  *
  * **Run it** with `npm run index:derive`, from the repository root, after
- * editing any card. It rewrites only the seven tables and the header's counts,
+ * editing any card. It rewrites only the eight tables and the header's counts,
  * and leaves every other word of that file alone.
  *
  * **What it does not do.** It never changes a card, and it never invents a
@@ -74,6 +77,11 @@ const PHASES: readonly PhaseSource[] = [
     file: "plan/09-phase-6-audio-report.md",
     prefix: "P6",
     heading: "### Phase 6",
+  },
+  {
+    file: "plan/10-phase-7-release.md",
+    prefix: "P7",
+    heading: "### Phase 7",
   },
 ];
 
@@ -236,13 +244,15 @@ function main(): void {
    * 2026-11-01 (`plan/reports/phase5-review.md`). `P5-T31`, added the same day
    * when the owner's decision (item 323(c)) was applied, counts as growth; plus
    * Phase 6's 19, the count `plan/09` was decomposed into on 2026-11-16
-   * (`plan/reports/P6-decomposition.md`). Every
+   * (`plan/reports/P6-decomposition.md`); plus Phase 7's 31, the count
+   * `plan/10` was decomposed into on 2026-11-16
+   * (`plan/reports/P7-decomposition.md`). Every
    * card beyond these exists because running the code (or deciding on it) found
    * work no reading of the corpus had, which is the growth figure the header
    * states. A later phase's decomposition adds its own count here, or the
    * header would call a whole new phase "growth".
    */
-  const DECOMPOSED = 98 + 25 + 30 + 19;
+  const DECOMPOSED = 98 + 25 + 30 + 19 + 31;
 
   // The header's figures, each rewritten in place so the prose around them
   // stays. Every replacement is checked, because a pattern that silently stops
@@ -260,6 +270,7 @@ function main(): void {
   const p4 = countOf("P4");
   const p5 = countOf("P5");
   const p6 = countOf("P6");
+  const p7 = countOf("P7");
   // The local calendar date. `toISOString()` is UTC, which stamped the
   // previous day on a run before 09:00 in Korea (measured 2026-10-26).
   const now = new Date();
@@ -305,6 +316,10 @@ function main(): void {
     [
       /Phase 6 \*\*\d+ of \d+\*\*/,
       `Phase 6 **${String(p6.done)} of ${String(p6.all)}**`,
+    ],
+    [
+      /Phase 7 \*\*\d+ of \d+\*\*/,
+      `Phase 7 **${String(p7.done)} of ${String(p7.all)}**`,
     ],
     [
       // `$1` keeps the parenthetical account of where the count comes from.

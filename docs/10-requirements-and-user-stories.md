@@ -609,6 +609,11 @@ The base-URL override is the `<provider>.baseUrl` preference — one key per pro
   **When** the user chooses "Research Helper → Generate audio report…",
   **Then** the plugin synthesizes speech via Gemini TTS and produces an audio file.
 
+> **DECIDED 2026-11-16 (owner, `plan/00` §6 item 379; `plan/09` §0.4 lines 25 and 29): v1.0 scope of FR-37.** In
+> v1.0 the source is **a trend report only**; "a per-paper summary set" is a later-release candidate. The file is a WAV;
+> a WAV over 10 MiB is **linked, not imported**, and so does not sync to Zotero's mobile apps (`04-audio-report-tts.md`
+> §10.4, note of this date). MP3 output is a later-release candidate.
+
 ---
 
 **FR-38 — Language choice: English or Korean.** (M)
@@ -869,6 +874,8 @@ All plugin dialogs shall be fully keyboard navigable (logical tab order, visible
 
 > **Unverified:** the exact assistive-technology support surface of Zotero 10's XHTML/XUL dialogs has not been tested; an accessibility smoke test with NVDA (Windows) and VoiceOver (macOS) is a Phase 7 deliverable.
 
+> **DECIDED 2026-11-16 (owner, `plan/00-task-index.md` §6 item 380, decision 1):** v1.0 runs the smoke test with **NVDA on Windows only**; VoiceOver on macOS is **recorded as waived**, with the reason, in the release checklist, and is run in a later release once a macOS machine exists (`plan/06` `G-09`, `G-33`).
+
 **NFR-14 — Error transparency.** (M)
 Every user-facing error shall state what failed, which service was involved, and one concrete next action. No bare "An error occurred". Provider error text is surfaced verbatim in a details disclosure.
 
@@ -880,6 +887,8 @@ API keys shall never be written to the debug log, to notes, to provenance record
 
 **NFR-17 — Compatibility.** (M)
 The plugin shall declare `strict_min_version` / `strict_max_version` for Zotero 10 and shall be verified on Windows, macOS, and Linux builds of Zotero 10.x. See `13-testing-build-and-release.md` for the versioning policy under Zotero's 6–10-week release cadence.
+
+> **DECIDED 2026-11-16 (owner, `plan/00-task-index.md` §6 item 380, decision 1):** v1.0 is verified on **Windows**. macOS and Linux are marked **"untested"** in the README's compatibility table and recorded as **waived, with the reason** (no machine; `plan/06` `G-09`), in the release checklist; they are verified in a later release once machines exist. The Windows half of this requirement is measured; the other two are a recorded waiver, which `11-implementation-roadmap.md` §1 Phase 7's DoD permits.
 
 **NFR-18 — Bundle size.** (S)
 The built XPI shall be **≤ 3 MB**. No bundled model weights, no bundled Chromium, no unnecessary polyfills.
@@ -972,13 +981,16 @@ Each question has a **recommended default**. If no decision is made, the default
 13. **How aggressive should title-based deduplication be?**
     *Recommended default:* conservative. Auto-merge only on identifier match; title matches above the threshold are flagged for review, never auto-merged (FR-50). False merges are unrecoverable-feeling; false splits are not.
 
-14. **Do we ship a "remove all Research Helper content" command?**
+14. ~~**Do we ship a "remove all Research Helper content" command?**~~
+    **DECIDED 2026-11-16 (owner, `plan/00-task-index.md` §6 item 380, decision 2): yes, v1.0 ships "remove all Research Helper content".** Its scope is **the notes, attachments and stored data the plugin created**: the plugin's generated notes (summaries, trend reports and provenance notes), the audio attachments it wrote, and the plugin database's stored rows. It **shows the count of each kind and asks for confirmation before deleting**. Deleted Zotero items go to **Zotero's trash; nothing is hard-deleted**. **User-written notes and the original (imported or pre-existing) items are untouched.** `plan/10` `P7-T11` builds it; the reading of "stored data" and of what counts as plugin-created is recorded there as a coordinator decision.
     *Recommended default:* yes (FR-20). It costs little and materially reduces adoption risk for Persona C.
 
 15. **Minimum supported Zotero version — 10.0 only, or 10.0 with a floor at 9.x?**
+    *Settled, noted 2026-11-16 (`plan/00` §6 item 380): `strict_min_version` is `10.0`, as `addon/manifest.json` already declares; the recommended default was built. `plan/10` cites it and does not re-decide it.*
     *Recommended default:* `strict_min_version` at the 10.0 series only. Zotero 10 changed selection and search APIs in breaking ways (see `01-zotero-plugin-platform.md`); supporting 9.x means a compatibility shim for a version that will be superseded in weeks.
 
 16. **What is the update-manifest hosting strategy?**
+    *Settled, noted 2026-11-16 (`plan/00` §6 item 380): `update.json` on the `release` branch, referenced by `update_url` in `addon/manifest.json`; V-18 answered YES on 2026-09-16. `plan/10` cites it and does not re-decide it.*
     *Recommended default:* a `release` git tag/branch in the GitHub repo serving `update.json`, referenced by `update_url` in `manifest.json`, as generated by `zotero-plugin-scaffold`. See `13-testing-build-and-release.md`.
 
 17. **Do we support a user-supplied custom OpenAI-compatible base URL (self-hosted / vLLM / Ollama)?**
@@ -992,7 +1004,8 @@ Each question has a **recommended default**. If no decision is made, the default
     **DECIDED 2026-10-26 (owner, `plan/00-task-index.md` §6 item 286) — both, as recommended:** the note is the primary artifact, and "Export as Markdown" writes a `.md` file to a location the user picks, with numeric markers and DOI links and no setting. The `.html` export and the "attach the Markdown file to the note" variant are deferred to the backlog (`plan/00` §6 item 287(c)); `plan/07` `P4-T15` builds the export.
     *Recommended default:* both — a note is the primary artifact (syncs, searchable), with an "Export as Markdown" action for pasting into a manuscript.
 
-20. **Do we pursue listing in the community plugin registry at v1.0 or wait?**
+20. ~~**Do we pursue listing in the community plugin registry at v1.0 or wait?**~~
+    **DECIDED 2026-11-16 (owner, `plan/00-task-index.md` §6 item 380, decision 4): list at v1.0.** At v1.0 the plugin is announced on the Zotero Forums and submitted to the community lists (`13-testing-build-and-release.md` §7.2). Posting and submitting are the owner's (`plan/06` `G-36`); `plan/10` `P7-T23` drafts the texts and `P7-T31` stops for the owner.
     *Recommended default:* list at v1.0. There is currently no official Zotero plugin directory, so listing means announcing in the Zotero Forums and submitting to the community lists (see `13-testing-build-and-release.md`); this is cheap and reversible.
 
 ---

@@ -1127,6 +1127,15 @@ Notes: keep Unicode letters (`\p{L}`) so Korean collection names survive; cap th
 
 **Set `contentType` correctly**: `audio/mpeg` for MP3, `audio/wav` for WAV. Getting this wrong is the most common reason a Zotero attachment fails to open in the right application.
 
+> **DECIDED 2026-11-16 (owner, `plan/00` §6 item 379; `plan/09` §0.4 lines 25 and 29): what v1.0 accepts here.**
+> (1) **A WAV over 10 MiB is linked, not imported** (`IMPORT_MAX_BYTES` in `src/tts/audioStore.ts`; §10.2 and
+> `plan/09` §0.4 line 6). At 24,000 Hz mono 16-bit the audio runs 48,000 bytes a second, so about 3.6 minutes fits under
+> the threshold and a 10-minute report (about 28.8 MB) is linked. **A linked file does not sync to Zotero's mobile apps;
+> the owner accepts that for v1.0.** The "Sync to phone" row above therefore holds only for short reports in v1.0.
+> (2) **Audio comes only from a trend report** in v1.0, not from a per-paper summary set (`10-requirements-and-user-stories.md`
+> FR-37, note of this date). (3) **MP3** output and **per-paper summary-set audio** are later-release candidates; neither
+> has a card.
+
 ---
 
 ## 11. Worked cost example

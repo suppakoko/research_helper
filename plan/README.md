@@ -36,11 +36,12 @@ and report**, never work around it.
 | [`02-phase-1-pubmed.md`](02-phase-1-pubmed.md) | Phase 1 — keyword → PubMed → Zotero collection |
 | [`03-phase-2-multi-source-dedup.md`](03-phase-2-multi-source-dedup.md) | Phase 2 — six more sources, normalization, deduplication |
 | [`04-phase-3-llm-summaries.md`](04-phase-3-llm-summaries.md) | Phase 3 — provider adapters, key storage, per-paper summaries |
-| [`05-phases-4-7-outline.md`](05-phases-4-7-outline.md) | Phase 7 — outline only, deliberately not decomposed yet (Phase 4's section is a pointer to `07`, Phase 5's to `08`, Phase 6's to `09`; *updated 2026-11-16*, it read "Phases 6–7") |
+| [`05-phases-4-7-outline.md`](05-phases-4-7-outline.md) | The outline Phases 4–7 were decomposed from; every phase section is now a pointer (Phase 4's to `07`, Phase 5's to `08`, Phase 6's to `09`, Phase 7's to `10`), and §5 is kept as the record of what gated each phase (*updated 2026-11-16, later*; it read "Phase 7 — outline only, deliberately not decomposed yet", and before that "Phases 6–7") |
 | [`06-human-gates.md`](06-human-gates.md) | Every point where a human must act, and what happens if they don't |
 | [`07-phase-4-trend-report.md`](07-phase-4-trend-report.md) | Phase 4 — synthesis pipeline, citations, report note and window, evaluation (numbered `07` because `05` and `06` were taken) |
 | [`08-phase-5-related-papers.md`](08-phase-5-related-papers.md) | Phase 5 — related papers from one item, recommendations from a collection (numbered `08` because `05`–`07` were taken) |
 | [`09-phase-6-audio-report.md`](09-phase-6-audio-report.md) | Phase 6 — spoken English and Korean briefings from a stored report, kept in Zotero (numbered `09` because `05`–`08` were taken) |
+| [`10-phase-7-release.md`](10-phase-7-release.md) | Phase 7 — localisation, accessibility, the preferences pane, diagnostics, security and offline checks, documentation, and the v1.0 release (numbered `10` because `05`–`09` were taken; *added 2026-11-16*) |
 
 **Phases 4–7 are outlined, not decomposed.** Nineteen unvalidated spikes sit in
 Phase 0 and their outcomes change the shape of everything after Phase 3 — most
@@ -56,6 +57,9 @@ entry conditions are still open.
 *Updated 2026-11-16:* Phase 6 is decomposed too — under the coordinator's brief of that day, with four owner
 decisions (`plan/00` §6 item 378) — so this paragraph now holds for Phase 7 alone; `09-phase-6-audio-report.md` §0
 records which of Phase 6's entry conditions are still open.
+*Updated 2026-11-16, later:* Phase 7 is decomposed too — under the coordinator's brief of that day, with four
+owner decisions (`plan/00` §6 item 380) — so this paragraph **no longer holds for any phase** and is kept as the
+record of why Phases 4–7 waited; `10-phase-7-release.md` §0 records which of Phase 7's entry conditions are still open.
 
 ## 3. Task ID scheme
 
@@ -375,7 +379,11 @@ cards, 35.75 d) and joins them under the same rule, with the same two provisos a
 shaved.* *Updated 2026-11-16: Phase 7 alone now. Phase 6 is decomposed (`09-phase-6-audio-report.md`, 19 cards,
 20.00 d) and joins them under the same rule, with the same two provisos as Phases 4 and 5 in sites 2–3 and 5; its
 sum landed 33 % above the scaled low end, and `docs/11` §1 was re-estimated rather than the cards shaved (`plan/00`
-§6 item 378).*
+§6 item 378).* *Updated 2026-11-16, later: no phase now. Phase 7 is decomposed (`10-phase-7-release.md`, 31 cards,
+28.50 d) and joins them under the same rule, with the same two provisos in sites 2–3 and 5; its sum landed 36 % above
+the scaled low end and 2 % below the scaled top, and `docs/11` §1 was re-estimated rather than the cards shaved
+(`plan/00` §6 item 380). With it every phase's band is a card sum, and this paragraph and the next are kept as the
+record of how the scaled figures behaved.*
 When one of those phases is decomposed, expect its per-task sum to land above
 the scaled figure — decomposition surfaces work that a phase-level guess hides.
 If a phase's task sum diverges from `docs/11` by more than ~30%, that is a

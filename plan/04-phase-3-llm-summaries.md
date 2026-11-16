@@ -3513,6 +3513,14 @@ stored new records without naming a gate.
 `NSSKeyStore` substitute, and routes the substitute into `P3-T03`'s degradation dialog, as `G-10`
 decided on 2026-09-30.
 
+> **Deferred 2026-11-16 (owner, `plan/00` §6 item 380, decision 1).** v1.0 is checked on Windows only;
+> macOS and Linux are marked "untested" in the README and recorded as waived in the release checklist,
+> and are checked in a later release once machines exist (`G-09`). This card is **deferred on the same
+> condition**: it runs when `G-09` provides the Linux machines, not before v1.0. Its State is not changed
+> by this note. Its **Blocks** row still names `P3-T31`; whether `P3-T31` may start without it is an open
+> line for the owner (`plan/reports/P7-decomposition.md`), and until it is answered the dependency stands
+> as written. The release checklist records this check as waived, with the reason (`plan/10` `P7-T24`).
+
 **Read first.**
 - `docs/09-security-privacy-and-api-keys.md` §1.7, the 2026-09-30 block — a missing libsecret does
   not make `encrypt()` throw; Gecko substitutes `NSSKeyStore`, so a round trip cannot tell

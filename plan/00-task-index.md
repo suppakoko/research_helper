@@ -1,9 +1,9 @@
 # 00 — Task Index
 
-> **Generated from the task cards in `01`–`04`, `07`, `08` and `09`** (Phase 4's file, read since 2026-10-26,
-> Phase 5's, read since 2026-11-01, and Phase 6's, read since 2026-11-16). If a row here disagrees with a card, the card wins — then regenerate
+> **Generated from the task cards in `01`–`04` and `07`–`10`** (Phase 4's file, read since 2026-10-26,
+> Phase 5's, read since 2026-11-01, and Phase 6's and Phase 7's, read since 2026-11-16). If a row here disagrees with a card, the card wins — then regenerate
 > this file.
-> **Last updated:** 2026-11-16 · **238 tasks: 112 `DONE`, 126 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 40**, Phase 3 **0 of 41**, Phase 4 **0 of 25**, Phase 5 **0 of 32**, Phase 6 **0 of 19**. **The plan has grown from the 172 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25, plus the 30 Phase 5 was drafted and reviewed with on 2026-11-01; its 31st card, `P5-T31`, added when the owner's decisions were applied, counts as growth; plus the 19 Phase 6 was decomposed into on 2026-11-16) to 238, so 66 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-11-16 · **269 tasks: 112 `DONE`, 157 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 40**, Phase 3 **0 of 41**, Phase 4 **0 of 25**, Phase 5 **0 of 32**, Phase 6 **0 of 19**, Phase 7 **0 of 31**. **The plan has grown from the 203 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25, plus the 30 Phase 5 was drafted and reviewed with on 2026-11-01; its 31st card, `P5-T31`, added when the owner's decisions were applied, counts as growth; plus the 19 Phase 6 was decomposed into on 2026-11-16; plus the 31 Phase 7 was decomposed into on 2026-11-16) to 269, so 66 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -29,7 +29,19 @@ Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0
 | 4 — Trend report | 25 | 25.75 d | 25.75–36 d | 8–11 d (+134%) |
 | 5 — Related + recommendations | 32 | 36.25 d | 36.25–51 d | 10–14 d (+159%) |
 | 6 — TTS audio report | 19 | 20.00 d | 20.00–28 d | 7–10 d (+100%) |
-| 7 | not decomposed | — | 21–29 d ⚠ **scaled, not measured** | 10–14 d |
+| 7 — Polish, i18n, release | 31 | 28.50 d | 28.50–40 d | 10–14 d (+104%) |
+| **All phases** | **269** | **224.50 d** | **224.50–315 d** | 74–101 d |
+
+**2026-11-16, later: Phase 7 decomposed, 31 cards, 28.50 d** (§6 item 380). The coordinator's brief of that day carried
+four owner decisions for Phase 7 (item 380(a)) and the owner's answers to `plan/09` §0.4's open lines (item 379); the cards
+are `plan/10-phase-7-release.md`, not yet independently reviewed. The sum is re-read from the cards' `Estimate` rows by
+script; 28.50 × 1.4 = 39.9 → 40, so the band is 28.50–40 d, replacing the scaled 21–29 d. The last column is 28.5 ÷ 14 =
+2.036 → +104% against the old 10–14 d. **Every phase is now measured; no figure in this table is scaled.** The project
+total is 114.00 + 25.75 + 36.25 + 20.00 + 28.50 = **224.50 d** low and 160 + 36 + 51 + 28 + 40 = **315 d** high (was
+217.00–304), ≈ 11–15 months at 21 working days (224.50 ÷ 21 ≈ 10.7; 315 ÷ 21 = 15.0). The critical path P0 → P1 → P2 →
+P4 → P6 → P7 becomes **156.25–219** (was 148.75–208); the Phase 3 route moves with it to 153.25–215, so the 3 d / 4 d
+margin is unchanged; Phase 5's float stays **9.5–13 d**, because Phase 7 lies on both the critical path and Phase 5's
+route. The "All phases" row was added the same day, since the total no longer mixes measured and scaled figures.
 
 **2026-11-16: Phase 6 decomposed, 19 cards, 20.00 d** (§6 item 378). The coordinator's brief of that day carried four
 owner decisions (item 378(a)–(d)) and asked for the remaining choices to be taken under item 313; the cards are
@@ -241,7 +253,7 @@ queue is what gates Phase 5 months later (`docs/11` R-3).
 re-carding. Phase 3's terminal is still `P3-T31`, which now also waits on `P3-T37`.
 
 **Phase terminals** (a phase is done when its terminal is `DONE`):
-`P0-T28`, `P1-T23`, `P2-T15`/`P2-T16`, `P3-T31`, `P4-T25`, `P5-T30`, `P6-T19`.
+`P0-T28`, `P1-T23`, `P2-T15`/`P2-T16`, `P3-T31`, `P4-T25`, `P5-T30`, `P6-T19`, `P7-T31`.
 
 **Phase 4, added 2026-10-26** (read from `plan/07`'s cards): entry points `P4-T01`, `P4-T02` and
 `P4-T03`; terminal `P4-T25`. Phase 4's cards list only Phase 4 IDs in `Depends on`; what each needs
@@ -254,6 +266,10 @@ earlier phases is in its `Notes` and in `plan/08` §0.3.
 **Phase 6, added 2026-11-16** (read from `plan/09`'s cards): entry points `P6-T01`, `P6-T02`, `P6-T03` and
 `P6-T06`; terminal `P6-T19`. Phase 6's cards list only Phase 6 IDs in `Depends on`; what each needs from earlier
 phases is in its `Notes` and in `plan/09` §0.3.
+
+**Phase 7, added 2026-11-16** (read from `plan/10`'s cards): entry points `P7-T01`, `P7-T04`, `P7-T12`,
+`P7-T21`, `P7-T22` and `P7-T28`; terminal `P7-T31`. Phase 7's cards list only Phase 7 IDs in `Depends on`; what each
+needs from earlier phases is in its `Notes` and in `plan/10` §0.3.
 
 `P2-T15` is both, and deliberately so: it records a decision that was settled
 upstream rather than building anything, so it waits on no card and no card waits
@@ -551,6 +567,42 @@ uses a synthetic API-key-shaped string, never a real key.
 | `P6-T17` | Report window audio section and menu entry | `P6-T02`, `P6-T16` | 1.75 d |  |
 | `P6-T18` | Prove the offline paths end to end on recorded answers | `P6-T04`, `P6-T17` | 0.75 d |  |
 | `P6-T19` | Phase-6 acceptance run against the definition of done | `P6-T18` | 1.0 d | 🔒 |
+
+### Phase 7
+
+| Task | Title | Depends on | Est. | Gate |
+|---|---|---|---|---|
+| `P7-T01` | Reconcile Phase 7 documents: debug bundle, pane sections… | — | 0.75 d |  |
+| `P7-T02` | Key-parity check script as a blocking CI step | `P7-T04` | 0.75 d |  |
+| `P7-T03` | Hard-coded string and `Intl` sweep | `P7-T08`, `P7-T09`, `P7-T10`, `P7-T11`, `P7-T12`, `P7-T13` | 1.5 d |  |
+| `P7-T04` | Retire the spike command; keep its fixture in the tests | — | 0.75 d |  |
+| `P7-T05` | Korean review of the UI, the prompts and `README.ko.md` | `P7-T02`, `P7-T03`, `P7-T20` | 0.75 d | 🔒 |
+| `P7-T06` | Keyboard, focus, accessible names and contrast pass | `P7-T03` | 2.0 d |  |
+| `P7-T07` | NVDA smoke test on the release candidate | `P7-T06`, `P7-T26` | 0.25 d | 🔒 |
+| `P7-T08` | Pane: Search, Report & audio, Privacy; defaults review | `P7-T01` | 1.5 d |  |
+| `P7-T09` | Pane: Advanced section, cache usage, verbose logging, data… | `P7-T01`, `P7-T08` | 1.0 d |  |
+| `P7-T10` | Clear actions, delete all plugin data, reset, uninstall… | `P7-T09` | 1.5 d |  |
+| `P7-T11` | Remove all Research Helper content | `P7-T01`, `P7-T10` | 1.5 d |  |
+| `P7-T12` | Error-message audit against NFR-14 | — | 1.25 d |  |
+| `P7-T13` | Log ring buffer and diagnostics: save and copy | `P7-T01`, `P7-T09` | 1.5 d |  |
+| `P7-T14` | Log-redaction audit of a full job at debug level | `P7-T13` | 0.75 d |  |
+| `P7-T15` | Startup, memory and main-thread profiling | `P7-T06`, `P7-T13` | 1.5 d | 🔒 |
+| `P7-T16` | `docs/09` §7 security review, `SECURITY.md`, dependency audit | `P7-T10`, `P7-T14`, `P7-T21` | 1.5 d |  |
+| `P7-T17` | Provider-policy re-verification and dated retention text | `P7-T08` | 0.75 d |  |
+| `P7-T18` | Offline verification | `P7-T12` | 1.0 d |  |
+| `P7-T19` | README and CHANGELOG | `P7-T11`, `P7-T13`, `P7-T17` | 1.5 d |  |
+| `P7-T20` | `README.ko.md` | `P7-T19` | 0.5 d |  |
+| `P7-T21` | Release workflow hardening | — | 1.0 d |  |
+| `P7-T22` | `compat.yml`: the scheduled Zotero-beta job | — | 0.5 d |  |
+| `P7-T23` | Forum announcement and community-list drafts | `P7-T19` | 0.5 d |  |
+| `P7-T24` | The release checklist document | `P7-T02`, `P7-T15`, `P7-T16`, `P7-T17`, `P7-T18`, `P7-T22` | 1.0 d |  |
+| `P7-T25` | Windows manual QA run on the release candidate | `P7-T26` | 1.0 d | 🔒 |
+| `P7-T26` | Publish the release candidate v0.9.0 | `P7-T05`, `P7-T16`, `P7-T19`, `P7-T20`, `P7-T21`, `P7-T24` | 0.25 d | 🔒 |
+| `P7-T27` | Fresh-profile README walkthrough and screenshots | `P7-T26` | 0.5 d | 🔒 |
+| `P7-T28` | NCBI registration on file | — | 0.25 d | 🔒 |
+| `P7-T29` | Release checklist sign-off | `P7-T07`, `P7-T25`, `P7-T27`, `P7-T28` | 0.25 d | 🔒 |
+| `P7-T30` | Publish v1.0.0 and verify the upgrade from v0.9.0 | `P7-T29` | 0.5 d | 🔒 |
+| `P7-T31` | Forum post and community-list submissions | `P7-T23`, `P7-T30` | 0.25 d | 🔒 |
 
 ---
 
@@ -3369,12 +3421,31 @@ the caller of what the card builds; if it does not, the caller is added with a d
     - (g) **Gates** (`plan/06`): `G-28` closed by (b); `G-29` given a status note (the token rate is measured for `gemini-2.5-flash-preview-tts` only, by `P0-T25`; other models unmeasured; re-verified by `P6-T04` or `P6-T19`; the gate stays open); `G-30` left open, with a note. No new gate added: `G-44` is open line 28.
     - (h) **Index.** `scripts/derive-task-index.ts` reads `plan/09` as a seventh table (`PHASES` gains Phase 6; `DECOMPOSED` becomes 98 + 25 + 30 + 19; the header's "Phase 6 **n of m**" is kept current); `npm run index:derive` regenerated §4: 238 tasks. `plan/README` §2 lists `09`, and §2 and §7 carry notes of this date.
     - (i) **Open lines for the owner** (`plan/09` §0.4 lines 24–31): which secret TTS reads (`llm.gemini` recommended); a linked WAV not reaching the phone; whether the declared-paid reminder still shows; balanced mode refusing a free or unknown key; a spend gate `G-44` modelled on `G-43`; FR-37's per-paper summary-set audio to the backlog; the Korean wording through `G-41`; macOS testing under `G-09`. Phase 6 was decomposed before `plan/05` §0's exit conditions (a) and (c) held; `plan/09` §0's entry-condition table records which are met. Whether the owner accepts 20.00–28 d is not recorded. No card set to DONE.
+379. **`plan/09` §0.4's open lines 24–31 answered, 2026-11-16** (coordinator's brief of that day; `plan/reports/P7-decomposition.md` §1). Every line is closed in `plan/09` §0.4, which now reads "answered 2026-11-16".
+    - (a) **Owner — line 24, the TTS secret.** TTS reads the same Gemini secret as chat, `llm.gemini` (`GEMINI_SECRET_ID`); `tts.gemini` in `SECRET_IDS` stays unused, with a comment. Recorded in `docs/09` §3.3 (note of this date); carried by `P6-T16` step 2 (no longer stopped) and `P6-T05`'s Notes.
+    - (b) **Owner — lines 25 and 29, accepted for v1.0.** A WAV over 10 MiB is linked, not imported, and does not reach Zotero's phone apps; audio comes only from a trend report. MP3 and per-paper summary-set audio are later-release candidates. Recorded in `docs/04` §10.4 (note of this date), `docs/10` FR-37 (note of this date), `plan/09` §4; carried by `P6-T13`.
+    - (c) **Owner — line 26, the declared-paid reminder.** Kept: the one-line reminder (item 269(b)) shows on every audio confirmation for a key declared paid; the free-tier warning is not shown for that key. Recorded in `docs/09` §3.4 (note of this date); carried by `P6-T15` step 4 (no longer stopped).
+    - (d) **Owner — line 27, changed.** Balanced mode with a free or unknown Gemini key shows the warning and proceeds only after the user confirms; only strict mode refuses. Recorded as a correction of `docs/09` §3.5's Gemini row, for audio (TTS) jobs, with a dated note; `plan/09` §0.4 line 18 corrected; carried by `P6-T15` (Goal, step 3, Done when, Notes). **Not decided:** whether Gemini chat in balanced mode follows; `plan/10` §0.4 line 20 asks. No card's estimate changed: the warn-and-confirm path is the one full mode already needed.
+    - (e) **Coordinator, under item 313 — line 28.** `G-44` added to `plan/06` §8, modelled on `G-43`, for `P6-T04` and `P6-T19`; `P6-T19`'s Human gate cell and step 1 now name it.
+    - (f) **Coordinator, under item 313 — lines 30 and 31.** The Korean wording goes through `G-41` as usual. macOS is recorded as untested under `G-09`'s degraded path, by the owner's Phase 7 decision 1 (item 380(a)); `P6-T19` step 2 and `plan/09`'s DoD line say so.
+    - (g) **Estimate.** Phase 6's sum is unchanged at **20.00 d**; no card's scope grew enough to re-price.
+
+380. **Phase 7 decomposed: 31 cards, 28.50 d, with four owner decisions, 2026-11-16** (`plan/reports/P7-decomposition.md`; the cards in the new file `plan/10-phase-7-release.md`, numbered `10` because `05`–`09` were taken; not yet independently reviewed).
+    - (a) **Owner decisions.** (1) **OS matrix:** v1.0 is checked on Windows; macOS and Linux are marked "untested" in the README and recorded as waived, with the reason, in the release checklist, and are checked in a later release once machines exist (`G-09`); the Linux keyring-less check `P3-T37` is deferred on the same condition (dated note on the card; State unchanged); the screen-reader test is NVDA only, VoiceOver waived. Recorded in `docs/13` §8 and §7.3, `docs/10` NFR-13 and NFR-17, `plan/04` `P3-T37`, `plan/06` `G-09`, `G-33`, `G-34`, `G-37`. (2) **"Remove all Research Helper content" ships**: the notes, attachments and stored data the plugin created; counts per kind; confirmation; to the Zotero trash, never hard-deleted; user-written notes and the original items untouched. Recorded in `docs/10` §5 Q14; carried by `P7-T11`. (3) **No prompt overrides in v1.0**; later-release candidate. Recorded in `docs/12` §19 item 5. (4) **List at v1.0**: announce on the Zotero Forums and submit to the community lists; posting and submitting are the owner's (`G-36`), `P7-T23` drafts. Recorded in `docs/10` §5 Q20, `docs/13` §7.2, `plan/06` `G-36`.
+    - (b) **Settled, cited:** Q15 (`strict_min_version` 10.0, `addon/manifest.json`), Q16 (`update.json` on the `release` branch; V-18 YES 2026-09-16), `G-10` (session-only Linux fallback, no passphrase tier), `G-20` (session ceiling 500 cents, per-run 0), MIT (`G-32` closed). `docs/10` §5 Q15 and Q16 carry notes of this date.
+    - (c) **Coordinator default recorded:** `docs/09` §8 item 7 — re-verify the provider policy claims at each minor release and stamp the verification date next to the retention text in the UI (`P7-T17`).
+    - (d) **Coordinator decisions, under item 313** (the owner may overturn any; `plan/10` §0.4 lines 10–17): a spend gate `G-45` for `P7-T25` and `P7-T27`; the release checklist as the file `docs/release/v1.0-checklist.md`; the debug bundle as a plain-text file with "Save diagnostics…" and "Copy diagnostics" in the pane, no zip, no Help-menu entry; no paid voice preview in the pane; v0.9.0 as the published release candidate, with the v0.9.0 → v1.0.0 upgrade recorded after v1.0.0 is published; the reading of "plugin-created content" (generated notes, provenance notes, audio attachments a stored report names, the plugin database's rows; imported items, their tags and Related links untouched); Korean through `G-41`; the redaction audit on recorded fixtures.
+    - (e) **Estimate.** The 31 cards sum to **28.50 d** (read from the `Estimate` rows by script; ten cards are gated); 28.50 × 1.4 = 39.9 → 40, so Phase 7 is **28.50–40 d measured**, replacing the scaled 21–29 d, 36 % above its low end and +104 % against the old 10–14 d. Propagated by the cards-sum rule to `plan/README` §7's five sites: `docs/11` §1 (Phase 7 row, subtotal 110.50–155, total **224.50–315 d**, was 217.00–304; ≈ 11–15 months at 21 working days; contingency ≈ 34–47 d), the Gantt node, §2's critical path **156.25–219** (was 148.75–208; the Phase 3 route 153.25–215, margin unchanged; Phase 5's float unchanged at 9.5–13 d; no scaled node remains), the R-23 row and §5's Phase 7 row; `plan/00` §1 (the Phase 7 row, and an "All phases" row); `plan/05` §4, reduced to a pointer whose contents moved verbatim to `plan/10` §5. `plan/10`'s own critical path is `P7-T01` → `T08` → `T09` → `T10` → `T11` → `T03` → `T06` → `T15` → `T24` → `T26` → `T25` → `T29` → `T30` → `T31`, 14.5 d.
+    - (f) **Gates** (`plan/06`): `G-44` (item 379(e)) and `G-45` added; `G-04`, `G-09`, `G-31`, `G-33`, `G-34`, `G-35`, `G-36`, `G-37` given notes of this date; §1's start-order rows updated.
+    - (g) **Index.** `scripts/derive-task-index.ts` reads `plan/10` as an eighth table (`PHASES` gains Phase 7; `DECOMPOSED` becomes 98 + 25 + 30 + 19 + 31; the header's "Phase 7 **n of m**" is kept current); `npm run index:derive` regenerated §4. `plan/README` §2 lists `10`, and §2 and §7 carry notes of this date.
+    - (h) **Open lines for the owner** (`plan/10` §0.4 lines 18–23): the `live-contract` job (defer and waive recommended); `docs/09` §7's `sha256:` blocker against the scaffold's `sha512:`; whether Gemini chat in balanced mode follows item 379(d); R-19's at-scale validation; whether `P3-T31` may run without the deferred `P3-T37`; `autoSummarize` against the "no background processing" blocker. Phase 7 was decomposed before `plan/05` §0's exit conditions (a) and (c) held; `plan/10` §0's entry-condition table records which are met. Whether the owner accepts 28.50–40 d is not recorded. No card set to DONE.
+
 
 ## 7. Regenerating this file
 
 **Run `npm run index:derive`.** *(Since 2026-10-26 it also reads `plan/07` and builds the Phase 4
 table, and since 2026-11-01 `plan/08` and the Phase 5 table, so "all four tables" below is six; since 2026-11-16 `plan/09`
-and the Phase 6 table, so it is seven.)* Added 2026-10-12, because this section's rule could not be
+and the Phase 6 table, so it is seven; since 2026-11-16, later, `plan/10` and the Phase 7 table, so it is eight.)* Added 2026-10-12, because this section's rule could not be
 run and so was not: `P1-T23`'s report found the header counts stale, and measuring further found §4's tables
 stale too — **Phase 1's held 23 of its 46 cards, Phase 2's 18 of 25, Phase 0's 33 of 35, and Phase 1's
 `DONE` ticks had never been applied at all.** `scripts/derive-task-index.ts` rebuilds all four tables

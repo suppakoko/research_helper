@@ -23,7 +23,9 @@
 > obligations are `docs/13` §7 and §8's.
 >
 > **Last updated:** 2026-09-09 · **Status:** no gate has been passed; no code
-> exists.
+> exists. *(Header not rewritten since; dated notes inside each gate carry later
+> status. 2026-11-16: `G-44` and `G-45` added; Phase 7 gates noted for
+> `plan/00` §6 item 380.)*
 
 ---
 
@@ -72,11 +74,13 @@ in this plan.
 | Before Phase 6 | ~~G-28~~ | ~~Decide the audio register and the Korean-script source~~ **Decided 2026-11-16** (`plan/00` §6 item 378(a); register under item 313) | Script prompts (`plan/09` `P6-T06`, `P6-T08`) | Done |
 | Phase 6 | G-29 | Approve the paid calibration call that measures the audio token rate — **measured 2026-09-29 by `P0-T25` on one model; re-verification due by 2026-12-01** (note under G-29, 2026-11-16) | Phase 6 cost model (`plan/09` `P6-T10`) | Minutes |
 | Phase 6 | G-30 | Rate 3 Korean audio samples | Phase 6 DoD (`plan/09` `P6-T19`) | Hours, native speaker |
-| Phase 7 | G-33 | Screen-reader smoke test (NVDA, VoiceOver) | NFR-13 | Hours, on two OSes |
-| Phase 7 | G-34 | Provide three-OS QA machines and a ~10k-item library copy | `docs/13` §8 | Days if hardware must be arranged |
-| Phase 7 | G-35 | Publish the GitHub Release and update manifest | v1.0 | Minutes |
-| Phase 7 | G-36 | Announce in the Zotero Forums; submit to community lists | R-20 | Hours; list turnaround unknown |
-| Phase 7 | G-37 | Sign off the release checklist, including NFR waivers | v1.0 | Hours |
+| Phase 6 | G-44 | Approve each paid Phase 6 run before it runs | `plan/09` `P6-T04`, `P6-T19` | Minutes per run; **added 2026-11-16** (coordinator, item 313; `plan/09` §0.4 line 28) |
+| Phase 7 | G-33 | Screen-reader smoke test — **NVDA on Windows only for v1.0; VoiceOver waived** (`plan/00` §6 item 380) | NFR-13 (`plan/10` `P7-T07`) | Hours, on one OS |
+| Phase 7 | G-34 | Provide the QA machine and a ~10k-item library copy — **Windows only for v1.0** (item 380) | `docs/13` §8 (`plan/10` `P7-T15`, `P7-T25`) | Hours; macOS and Linux moved to `G-09` for a later release |
+| Phase 7 | G-35 | Publish the GitHub Release and update manifest — v0.9.0 candidate, then v1.0.0 | v1.0 (`plan/10` `P7-T26`, `P7-T30`) | Minutes |
+| Phase 7 | G-36 | Announce in the Zotero Forums; submit to community lists — **at v1.0** (`docs/10` Q20, item 380) | R-20 (`plan/10` `P7-T31`) | Hours; list turnaround unknown |
+| Phase 7 | G-37 | Sign off the release checklist, including NFR waivers | v1.0 (`plan/10` `P7-T29`) | Hours |
+| Phase 7 | G-45 | Approve each paid Phase 7 run before it runs | `plan/10` `P7-T25`, `P7-T27` | Minutes per run; **added 2026-11-16** (coordinator, item 313) |
 | Ongoing | G-38 | Any destructive action against the user's real Zotero library | Any phase | Per occurrence |
 | Ongoing | G-39 | Rotate or revoke a key after suspected exposure | Any phase | Per occurrence |
 
@@ -330,6 +334,10 @@ for the release**; a compliant release requires this.
 exact `tool` and `email` values decided by D10, that registration is separate from
 sending them, and that `docs/13` §8.9 blocks the release until it is on file.
 
+> *Noted 2026-11-16: still IN MOTION as recorded on 2026-10-08; no confirmation of the registration is
+> recorded in this file or in `plan/reports/`. `plan/10` `P7-T28` is the card that stops for the owner to
+> confirm it is on file before the release checklist is signed.*
+
 ---
 
 ### G-05 — Create provider accounts and obtain LLM and TTS keys
@@ -525,6 +533,14 @@ discovery. Three things, in order of how much rests on them:
 
 **Nothing established so far was observed running** — it is read from the ESR 140 source and from
 the shipped JS module, and the gate stays open until it is run.
+
+**Decided 2026-11-16 (owner, `plan/00` §6 item 380, decision 1) — v1.0 takes the degraded path.** v1.0
+is checked on Windows. macOS and Linux are marked "untested" in the README's compatibility table and
+recorded as **waived, with the reason** (no machine), in the release checklist
+(`docs/release/v1.0-checklist.md`, `plan/10` `P7-T24`); this overrides, for v1.0, the sentence above that
+`docs/13` §8 does not permit it (`docs/13` §8, note of this date). They are checked in a **later release
+once machines exist** — this gate stays open for that release. The Linux keyring-less check `P3-T37` is
+deferred on the same condition (`plan/04` `P3-T37`, note of this date; its State is unchanged).
 
 ---
 
@@ -1509,9 +1525,56 @@ scale, and the specific pronunciation cases to listen for.
 
 ---
 
+### G-44 — Approve each paid Phase 6 run before it runs
+
+**Added 2026-11-16** by the coordinator under `plan/00` §6 item 313, answering `plan/09` §0.4 line 28
+(`plan/00` §6 item 379), modelled on `G-43`. The number is the next free one.
+
+**Blocks:** the two `plan/09` cards that spend: `P6-T04` (the owner's recorded Gemini TTS and script
+fixtures) and `P6-T19` (the Phase 6 acceptance run), and through `P6-T19` `docs/11` §1 Phase 6's DoD. No
+other Phase 6 card may make a paid call (`plan/09` §0.2 item 20).
+
+**What the human must do.** Before each paid run, read the audio confirmation — for the script step, the
+`reportModel` provider, the target length and its estimate; for the audio step, the real character count,
+chunk count, duration, file size, import-or-link, the TTS model, the cost, both destination hosts, the
+privacy mode and, on a free or unknown key, the free-tier warning (`plan/09` `P6-T15`; `docs/09` §3 row
+"5. Audio") — compare it with the expected spend stated on the card's **Human gate** cell, and approve or
+decline. Afterwards, compare the estimate with the provider's reported usage (`usageMetadata`), as `G-21`
+does for summaries.
+
+**Why an agent cannot do it.** It spends the human's money, and it sends a spoken script that can name the
+collection and cited authors to Google, and the report's sections to the `reportModel` provider.
+`docs/09` §7 marks "no content is sent to any provider without an explicit user action" a `[BLOCKER]`.
+
+**Lead time.** Minutes per run.
+
+**If it is not done.** `P6-T19`'s lines stay unmeasured and Phase 6's DoD is unmet. No degraded path:
+the recorded fixtures prove the offline paths only (`P6-T18`).
+
+**Agent behaviour on reaching it.** Stop before the first call. Report the dialog's exact contents, the
+card's expected spend and `P6-T10`'s estimate side by side, and which run this is; never start a paid
+run, and never reuse one approval for a later run.
+
+---
+
 ## 9. Phase 7 gates
 
+> **Noted 2026-11-16 (`plan/00` §6 item 380).** Phase 7 is decomposed in `plan/10-phase-7-release.md`.
+> The owner decided four things that change the gates below: (1) v1.0 is checked on **Windows only**;
+> macOS and Linux are marked "untested" in the README and recorded as waived, with the reason, in the
+> release checklist, and are checked in a later release once machines exist (`G-09`); (2) v1.0 ships
+> "remove all Research Helper content" (`docs/10` §5 Q14); (3) no prompt overrides in v1.0 (`docs/12`
+> §19 item 5); (4) v1.0 is announced on the Zotero Forums and submitted to the community lists (`docs/10`
+> §5 Q20). Each gate below carries a dated note saying what it now asks. A new spend gate, `G-45`, is
+> added at the end of this section for Phase 7's paid runs.
+
 ### G-31 — Korean prompt and UI review by a native-speaking researcher
+
+> **Noted 2026-11-16 (`plan/00` §6 item 380).** Folded into `G-41`'s existing review process: the
+> coordinator drafts the Korean strings, prompts and `README.ko.md` into `plan/reports/ko-review-*.ftl`
+> files (and a Markdown file for the README), and the owner reviews them in chat. `plan/10` `P7-T05` is the
+> card that stops for it. Prompt overrides are not in v1.0 (`docs/12` §19 item 5), so the reviewed
+> prompts are the ones every user gets.
 
 **Blocks:** the release. `docs/12` §19 item 4 states the Korean prompts "were
 written by a non-native-reviewed process" and "need review by a Korean-speaking
@@ -1566,6 +1629,10 @@ MIT, for this project, under its current affiliation.
 
 ### G-33 — Screen-reader smoke test (NVDA, VoiceOver)
 
+> **Noted 2026-11-16 (`plan/00` §6 item 380, decision 1).** v1.0 runs **NVDA on Windows only**.
+> VoiceOver is **recorded as waived** in the release checklist, with the reason (no macOS machine,
+> `G-09`), and is run in a later release. `plan/10` `P7-T07` is the card that stops for it.
+
 **Blocks:** NFR-13; `docs/11` §1 Phase 7's accessibility deliverable; `docs/13`
 §8.7's QA item.
 
@@ -1593,6 +1660,13 @@ test cannot be run.
 
 ### G-34 — Provide three-OS QA machines and a ~10k-item library copy
 
+> **Noted 2026-11-16 (`plan/00` §6 item 380, decision 1).** The owner decided that v1.0 is checked on
+> **Windows only**: macOS and Linux are marked "untested" in the README and recorded as waived, with the
+> reason, in the release checklist (`docs/13` §8, note of this date). That overrides the "a v1.0 cannot
+> take it" sentence below for v1.0. What this gate still asks for v1.0 is the Windows machine with a
+> fresh profile and the **copy** of a large real library for the performance runs (`plan/10` `P7-T15`,
+> `P7-T25`). The macOS and Linux machines move to `G-09` for a later release.
+
 **Blocks:** `docs/13` §8, which requires Windows, macOS and Linux for a minor or
 major release, a fresh profile with a fresh data directory for the install tests,
 and a copy of a large real library (~10k items) for the performance tests.
@@ -1616,6 +1690,11 @@ missing, and insist on a copy rather than the live library.
 ---
 
 ### G-35 — Publish the GitHub Release and the update manifest
+
+> **Noted 2026-11-16 (`plan/00` §6 item 380).** Two publications under this gate: the release
+> candidate **v0.9.0** (`plan/10` `P7-T26`), which the QA run and the walkthrough test, and **v1.0.0**
+> (`P7-T30`), whose in-place upgrade from v0.9.0 is the third line of `docs/11` §1 Phase 7's DoD. Agents
+> build and harden the release workflow (`P7-T21`); they never push a tag or publish.
 
 **Blocks:** v1.0 and every later release.
 
@@ -1644,6 +1723,10 @@ green first.
 
 ### G-36 — Announce in the Zotero Forums and submit to community lists
 
+> **Noted 2026-11-16 (`plan/00` §6 item 380, decision 4).** `docs/10` §5 Q20 is answered: **list at
+> v1.0** — announce on the Zotero Forums and submit to the community lists when v1.0 is published.
+> `plan/10` `P7-T23` drafts the texts; `P7-T31` is the card that stops for the owner to post and submit.
+
 **Blocks:** R-20's mitigation; `docs/13` §7.2's distribution plan.
 
 **What the human must do.** Post the announcement in the Zotero Forums covering
@@ -1671,6 +1754,12 @@ item 2's required points and report that the agent will not post it.
 
 ### G-37 — Sign off the release checklist, including NFR waivers
 
+> **Noted 2026-11-16 (`plan/00` §6 item 380).** The checklist is a file in the repository,
+> `docs/release/v1.0-checklist.md` (created by `plan/10` `P7-T24`), rather than a release issue
+> (coordinator, item 313). It already carries the waivers decision 1 requires: macOS and Linux, VoiceOver,
+> and the Linux keyring-less check `P3-T37`, each with its reason. `plan/10` `P7-T29` is the card that
+> stops for the sign-off.
+
 **Blocks:** v1.0 (`docs/11` §1 Phase 7's DoD requires every NFR to have a measured
 or explicitly waived result recorded).
 
@@ -1688,6 +1777,34 @@ judgements (G-24, G-27, G-30, G-33).
 
 **Agent behaviour on reaching it.** Stop. Report the checklist with every item's
 state and every unmeasured NFR listed as requiring an explicit waiver.
+
+---
+
+### G-45 — Approve each paid Phase 7 run before it runs
+
+**Added 2026-11-16** by the coordinator under `plan/00` §6 item 313, modelled on `G-43` and `G-44`. The
+number is the next free one.
+
+**Blocks:** the two `plan/10` cards that spend: `P7-T25` (the Windows QA run, whose `docs/13` §8.4–§8.6
+lines summarize, report and make audio on real keys) and `P7-T27` (the fresh-profile walkthrough, which
+ends in a summary, a report and an audio file), and through them `docs/11` §1 Phase 7's DoD. No other
+Phase 7 card may make a paid call (`plan/10` §0.2).
+
+**What the human must do.** Before each paid run, read the pre-flight or audio confirmation the run
+opens, compare it with the expected spend stated on the card's **Human gate** cell, and approve or
+decline. Afterwards, compare the estimate with the provider's reported usage, as `G-21` does.
+
+**Why an agent cannot do it.** It spends the human's money and sends library content to third parties;
+`docs/09` §7 marks "no content is sent to any provider without an explicit user action" a `[BLOCKER]`.
+
+**Lead time.** Minutes per run.
+
+**If it is not done.** The paid lines of the QA run and the walkthrough stay unmeasured; the DoD's second
+line is unmet. No degraded path.
+
+**Agent behaviour on reaching it.** Stop before the first call. Report the dialog's exact contents and the
+card's expected spend side by side, and which run this is; never start a paid run, and never reuse one
+approval for a later run.
 
 ---
 

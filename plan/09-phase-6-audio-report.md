@@ -4,8 +4,8 @@
 > 2026-11-16, which carried four owner decisions recorded as `plan/00` §6 item 378(a)–(d) and asked
 > for the remaining `plan/05` §3.3 decisions to be taken by the coordinator under item 313. Every card
 > is `TODO`. Unlike `plan/07` and `plan/08`, this file has had **no independent review** yet; the
-> author's report is `plan/reports/P6-decomposition.md`, and §0.4 lists the lines the owner still
-> has to answer. The card sum replaced `docs/11`'s scaled 15–21 d on 2026-11-16 at the five places
+> author's report is `plan/reports/P6-decomposition.md`. §0.4's lines 24–31, open when the file was
+> written, were answered on 2026-11-16 (`plan/00` §6 item 379); no line is open now. The card sum replaced `docs/11`'s scaled 15–21 d on 2026-11-16 at the five places
 > `plan/README.md` §7 names (`docs/11` §1–§2, `plan/00` §1, `plan/05` §3, now a pointer here).
 >
 > **What this file is.** The task-card decomposition of `docs/11-implementation-roadmap.md` §1
@@ -90,7 +90,8 @@ days went and where the sum is still likely low.
 Taken from `docs/11` §1 Phase 6 "Definition of done":
 
 - [ ] A 1,000-word English script produces a single playable file opened from Zotero on Windows and
-      macOS. (`P6-T12`, `P6-T13`, `P6-T19`; macOS needs `G-09`, §0.4 line 31)
+      macOS. (`P6-T12`, `P6-T13`, `P6-T19`; macOS is recorded as untested under `G-09`'s degraded
+      path, §0.4 line 31, decided 2026-11-16)
 - [ ] A Korean briefing is judged natural by a native Korean speaker on a 5-point scale (≥ 4 average
       over 3 samples), with correct pronunciation of English technical terms embedded in Korean
       sentences. (`P6-T08`, `P6-T19` with `G-30`)
@@ -202,26 +203,29 @@ may be overturned by the owner. Each card named carries the decision as a `DECID
 | 15 | `REPORT_MARKDOWN` is the report's eleven sections, without the bibliography, the retracted list and the appendices; `COLLECTION_NAME` is the name already in the report; `CITATION_MAP` is built from Zotero items through a port | coordinator | `P6-T07` |
 | 16 | The retry's correction list is written in English for both languages | coordinator | `P6-T07` |
 | 17 | A script outside ±30 % of its target length is a warning shown in the second confirmation, not a reject; marker leaks after the one retry stop before any TTS spend and offer FR-43's save-as-text; Korean numerals are logged, not rejected; no glossary in v1.0 | coordinator | `P6-T07`, `P6-T08`; §4 |
-| 18 | The tier answer is a new preference `gemini.tierAnswer` (`""` \| `paid` \| `free` \| `unknown`), asked inside the first audio confirmation; "paid" also sets `gemini.paidTier`; the privacy table governs (strict and balanced refuse a free or unknown key, full warns) | coordinator | `P6-T02`, `P6-T15` |
+| 18 | The tier answer is a new preference `gemini.tierAnswer` (`""` \| `paid` \| `free` \| `unknown`), asked inside the first audio confirmation; "paid" also sets `gemini.paidTier`; the privacy table governs (strict refuses a free or unknown key; balanced and full warn — balanced corrected 2026-11-16 by line 27) | coordinator | `P6-T02`, `P6-T15` |
 | 19 | The collection menu gets "Generate Audio Report…", which opens the report window on the collection's newest stored report (a new `ReportStore` lookup) | coordinator | `P6-T16`, `P6-T17` |
 | 20 | A hidden preference `audio.enabled`, off until `P6-T19` passes (item 307(d)'s pattern) | coordinator | `P6-T02`, `P6-T19` |
 | 21 | TTS prices come from a dated table mirrored from `docs/04` §4.2 with a row test; a user override wins; an unknown model's cost is unknown and forces the confirmation; 25 tok/s is labelled measured only for `gemini-2.5-flash-preview-tts` | coordinator | `P6-T10` |
 | 22 | `src/tts/ssml.ts` (named in `docs/07` §4.4 and `docs/11`) becomes `src/tts/chunk.ts`: v1.0 sends plain text, not SSML | coordinator | `P6-T01`, `P6-T09` |
 | 23 | Script-call output ceilings: `docs/12`'s 2,500 (English) and 3,500 (Korean) tokens are floors; above the length they cover the ceiling scales with the target | coordinator | `P6-T07` |
 
-**Open lines for the owner.** Each card that depends on one says so; a step that depends on an open
-line is not executed on the recommendation (`plan/04` §0.2 item 10).
+**Lines 24–31, answered 2026-11-16.** These were open lines for the owner until the coordinator's
+brief of 2026-11-16 carried the answers, recorded as `plan/00` §6 item 379. No line of this table is
+open any more; the steps that stopped on them (`plan/04` §0.2 item 10) may now be executed as the
+answer says. "Owner" lines cite item 379; "coordinator" lines were taken under item 313 and may be
+overturned by the owner.
 
-| Line | Question | Recommendation | Card that stops |
-|---|---|---|---|
-| 24 | Which secret does TTS read: the chat key `llm.gemini` (the one the pane fills today) or the unused `tts.gemini`? `docs/09` §3.3 says TTS uses the same Gemini key | `llm.gemini`; leave `tts.gemini` unused and note it | `P6-T16` step 2 |
-| 25 | A 10-minute WAV is about 28.8 MB, so the typical report is **linked** and does not reach Zotero's mobile apps (`docs/04` §10.4). Accept for v1.0? | Accept; MP3 through Interactions is the later fix | none — `P6-T13` builds the decided rule; the answer may reopen line 6 |
-| 26 | Does the declared-paid one-line reminder (item 269(b)) still show on every audio job, given item 378(b)'s "not warned repeatedly"? | Keep it: it is a reminder, not the warning, and costs one line | `P6-T15` step 4 |
-| 27 | Balanced mode refuses audio on a free or unknown key, by `docs/09` §3.5's table. Is that what item 378(b) intended, or should balanced warn as full does? | Keep the table (refuse) | none — `P6-T15` builds the table; the answer may change one row |
-| 28 | A spend gate for Phase 6's paid runs, modelled on `G-43` (`G-44`)? | Yes, numbered `G-44`; until then `P6-T19` stops before each paid run under `G-07`'s rule | `P6-T19` step 1 |
-| 29 | FR-37 also names "a per-paper summary set" as a source. v1.0 builds audio from a trend report only. Accept? | Accept; summary-set audio is backlog (§4) | none |
-| 30 | The Korean wording of every new string, including the line that says a Korean script was written from an English report | Through `G-41` as usual | `P6-T17` (Korean bundle only) |
-| 31 | `docs/11`'s first DoD line says "Windows and macOS". `G-09` (machines) has a degraded path: ship Windows-tested, mark macOS untested | Run macOS if `G-09` provides a Mac; otherwise record macOS as untested under `G-09`'s degraded path | `P6-T19` step 2 |
+| Line | Question | Answer, DECIDED 2026-11-16 | By | Where |
+|---|---|---|---|---|
+| 24 | Which secret does TTS read: the chat key `llm.gemini` or the unused `tts.gemini`? | TTS reads **the same Gemini secret as chat, `llm.gemini`** (`GEMINI_SECRET_ID`). `tts.gemini` stays in `SECRET_IDS` unused, with a note saying so | owner, item 379 | `P6-T16` step 2; `docs/09` §3.3 marked 2026-11-16 |
+| 25 | A 10-minute WAV is about 28.8 MB, so the typical report is **linked** and does not reach Zotero's mobile apps. Accept for v1.0? | **Accepted for v1.0.** A WAV over 10 MiB is linked, not imported; line 6 stands. MP3 is a later-release candidate | owner, item 379 | `P6-T13`; §4; `docs/04` §10.4, `docs/10` FR-37 note marked 2026-11-16 |
+| 26 | Does the declared-paid one-line reminder (item 269(b)) still show on every audio job? | **Keep it.** The one-line reminder shows on every audio confirmation for a key declared paid; the free-tier warning is not shown for that key | owner, item 379 | `P6-T15` step 4 |
+| 27 | Balanced mode refuses audio on a free or unknown key. Is that what item 378(b) intended? | **Changed.** Balanced mode with a free or unknown Gemini key **shows the free-tier warning and proceeds only after the user confirms**; only strict mode refuses. Line 18's "strict and balanced refuse" is superseded for audio | owner, item 379 | `P6-T15`; `docs/09` §3.5's Gemini row corrected 2026-11-16 |
+| 28 | A spend gate for Phase 6's paid runs, modelled on `G-43`? | **Yes: `G-44`**, added to `plan/06` §8; `P6-T19` stops before each paid run under it | coordinator, item 313 | `P6-T19`; `plan/06` `G-44` |
+| 29 | FR-37 also names "a per-paper summary set" as a source. Accept trend-report-only audio? | **Accepted for v1.0.** Audio comes only from a trend report; per-paper summary-set audio is a later-release candidate | owner, item 379 | §4; `docs/04` §10.4, `docs/10` FR-37 note marked 2026-11-16 |
+| 30 | The Korean wording of every new string | **Through `G-41` as usual** | coordinator, item 313 | `P6-T14`, `P6-T17` |
+| 31 | `docs/11`'s first DoD line says "Windows and macOS" | **macOS is recorded as untested under `G-09`'s degraded path**, by the owner's Phase 7 decision 1 (item 380: v1.0 is checked on Windows; macOS and Linux are checked in a later release once machines exist) | coordinator, item 313 | `P6-T19` step 2; the DoD line above |
 
 ---
 
@@ -617,7 +621,8 @@ npm run typecheck && npm run lint:check && npm run test:unit -- geminiTts && npm
 ```
 
 **Notes.** Needs: `P0-T25` (the measured response shape), Phase 3's Gemini provider. Which secret it
-reads is a constructor argument, so this card does not wait for §0.4 line 24; `P6-T16` passes it.
+reads is a constructor argument; `P6-T16` passes `GEMINI_SECRET_ID` (`llm.gemini`), as §0.4 line 24
+decided on 2026-11-16.
 
 ---
 
@@ -1160,7 +1165,8 @@ npm run typecheck && npm run lint:check && npm run test:unit -- audioDeliver
 ```
 
 **Notes.** Needs: `P0-T26`, `P4-T14`. Callers: `audioReportPipeline.ts` (`P6-T16`). §0.4 line 25 (a
-linked file does not reach the phone) is the owner's; this card builds the decided rule either way.
+linked file does not reach the phone) was accepted for v1.0 by the owner on 2026-11-16 (item 379):
+a WAV over 10 MiB is linked, not imported.
 
 ---
 
@@ -1257,8 +1263,8 @@ string (§0.4 line 30); the English lands with the card.
 
 **Goal.** Before any audio spend the user sees, in the existing cost dialog: the character count, chunks,
 duration, file size, import-or-link and cost (FR-42); both hosts and what each receives; the tier
-question the first time; the free-tier warning on a free or unknown key; and strict or balanced mode
-refuses such a key with the reason.
+question the first time; the free-tier warning on a free or unknown key; and strict mode refuses such
+a key with the reason (balanced warns and asks, §0.4 line 27, decided 2026-11-16).
 
 **Read first.**
 - `docs/09-security-privacy-and-api-keys.md` §3 row 5 (clarified 2026-11-16), §3.4 rules 4–5 (with the
@@ -1288,13 +1294,21 @@ refuses such a key with the reason.
    paid; `free`, `unknown` or `""` → free-or-unknown (item 378(b)). The tier question is three choices
    inside the first audio confirmation while the answer is `""`; the answer is written to
    `gemini.tierAnswer`, and `paid` also sets `gemini.paidTier` (§0.4 line 18).
-3. `assertAudioAllowed(mode, tier)`: strict and balanced refuse free-or-unknown with a message naming
-   the reason and the way out (declare the key paid in the settings, or switch privacy mode), before any
-   call; full allows it with the free-tier warning on **every** audio confirmation, with no "don't ask
-   again" path (`docs/09` §3.6 items 2–3).
-4. A paid answer does not show the warning again. Whether the declared-paid one-line reminder still
-   shows is §0.4 line 26: **this step is not executed until the owner answers**; until then the reminder
-   stays as `docs/09` §3.6 item 3 has it.
+3. `assertAudioAllowed(mode, tier)`: strict refuses free-or-unknown with a message naming the reason
+   and the way out (declare the key paid in the settings, or switch privacy mode), before any call.
+   Balanced and full allow it with the free-tier warning on **every** audio confirmation, and the job
+   proceeds only after the user confirms that confirmation; there is no "don't ask again" path
+   (`docs/09` §3.5's Gemini row as corrected 2026-11-16, §3.6 items 2–3).
+
+   > **DECIDED 2026-11-16 (owner, `plan/00` §6 item 379):** §0.4 line 27. Balanced mode with a free or
+   > unknown Gemini key shows the warning and proceeds only after the user confirms. Only strict mode
+   > refuses.
+4. A paid answer does not show the free-tier warning again. The declared-paid one-line reminder
+   (`docs/09` §3.6 item 3, `plan/00` §6 item 269(b)) shows on **every** audio confirmation for that key.
+
+   > **DECIDED 2026-11-16 (owner, `plan/00` §6 item 379):** §0.4 line 26. Keep the one-line reminder
+   > for a key declared paid on every audio confirmation; the free-tier warning is not shown for that
+   > key.
 5. `docs/09` §3.4 rule 5: the first audio run with a given Gemini key shows the destination
    confirmation even when the routine one is suppressed; the record holds a hash of the key's secret id
    and a fingerprint, never the key (`redactRecord` on the record).
@@ -1311,7 +1325,9 @@ refuses such a key with the reason.
 
 **Done when.**
 - [ ] For each of strict, balanced and full × paid, free, unknown, unanswered, the outcome matches
-      `docs/09` §3.5's Gemini row and item 378(b), in a table-driven test.
+      `docs/09` §3.5's Gemini row (as corrected 2026-11-16) and items 378(b) and 379, in a table-driven
+      test: strict refuses free, unknown and unanswered; balanced and full warn and wait for the
+      confirmation; paid shows the one-line reminder and no warning in every mode.
 - [ ] The audio notice names both hosts when a script call is due and one when it is not.
 - [ ] The tier question appears once, writes `gemini.tierAnswer`, and never again once answered.
 - [ ] Mutation sweep per `plan/08` §0.2 item 24.
@@ -1322,7 +1338,9 @@ npm run typecheck && npm run lint:check && npm run test:unit -- audioDisclosure 
 ```
 
 **Notes.** Needs: `P3-T15`, `P3-T16`, `P3-T35`. Caller: `audioReportPipeline.ts` and `confirmRunCost`
-(`P6-T16`). §0.4 line 27 (whether balanced refuses) is the owner's; the table is built as written.
+(`P6-T16`). §0.4 lines 26 and 27 were answered on 2026-11-16 (item 379). Line 27 changes one cell of
+the outcome table (balanced × free-or-unknown: warn and confirm instead of refuse); the estimate is
+unchanged, since the warn-and-confirm path is the one full mode already needed.
 
 ---
 
@@ -1359,6 +1377,7 @@ script (or the stored script), confirm, synthesize, assemble, attach, record —
   citation map and the attachment writer of `P6-T13`)
 - modify `src/bootstrap/container.ts` (pass the TTS client from `registerProviders`)
 - modify `src/zotero/db.ts` (`ReportStore.latestForCollection(libraryID, collectionKey)`; §0.4 line 19)
+- modify `src/core/secretStore.ts` (a comment beside `"tts.gemini"` in `SECRET_IDS`: unused, §0.4 line 24)
 - create `test/unit/pipeline/audioReportPipeline.test.ts`
 
 **Do.**
@@ -1366,9 +1385,12 @@ script (or the stored script), confirm, synthesize, assemble, attach, record —
    (`P6-T13` step 5) and a refused tier (`P6-T15` step 3) **before** any call; resolve the language
    (`P6-T08`) and the model (`P6-T05`); return the script-step estimate when no script is stored for
    that language, else the audio-step plan.
-2. The TTS client reads the Gemini key by the secret id §0.4 line 24 settles. **This step is not
-   executed until the owner answers that line**; everything else in this card can be built and tested
-   with an injected key source.
+2. The TTS client reads the Gemini key by the same secret id as chat, `GEMINI_SECRET_ID`
+   (`"llm.gemini"`). `"tts.gemini"` in `SECRET_IDS` stays unused; add a comment beside it saying so and
+   citing `docs/09` §3.3. Tests use an injected key source.
+
+   > **DECIDED 2026-11-16 (owner, `plan/00` §6 item 379):** §0.4 line 24. TTS reads the same Gemini
+   > secret as chat, `llm.gemini`; `tts.gemini` stays unused.
 3. `execute`: script (`P6-T07`/`P6-T08`), written at once to `audioScripts[language]` through
    `ReportStore.put` → chunks (`P6-T09`) → the audio confirmation (`P6-T15`) → `synthesizeChunks`
    (`P6-T11`) → assemble and deliver (`P6-T12`, `P6-T13`) → `audioAttachmentKeys[language]` through
@@ -1537,14 +1559,14 @@ the card stays open until it has.
 | **Retires** | closes `R-8` |
 | **Implements** | `FR-37`–`FR-43` |
 | **Estimate** | 1.0 d |
-| **Human gate** | **Yes** — gates `G-06` (the owner acknowledges Google's free-tier terms for the key used), `G-18` (a Gemini key and an LLM key entered in the pane), `G-30` (a native Korean speaker rates three Korean briefings, ≥ 4 of 5 on average), and the owner's approval of each paid run before it runs (`G-07`'s rule, or `G-44` if the owner adds it, §0.4 line 28) — expected under US$2 in all at `docs/04` §4.2's prices: one English briefing of about 7 minutes and three Korean briefings of about 5 minutes are about 22 minutes of audio, about $0.33 on `gemini-2.5-flash-preview-tts` or $0.66 on `gemini-3.1-flash-tts-preview`, plus four script calls on `reportModel` priced by the dialog. |
+| **Human gate** | **Yes** — gates `G-06` (the owner acknowledges Google's free-tier terms for the key used), `G-18` (a Gemini key and an LLM key entered in the pane), `G-30` (a native Korean speaker rates three Korean briefings, ≥ 4 of 5 on average), and `G-44` (the owner's approval of each paid run before it runs, modelled on `G-43`; §0.4 line 28, decided 2026-11-16) — expected under US$2 in all at `docs/04` §4.2's prices: one English briefing of about 7 minutes and three Korean briefings of about 5 minutes are about 22 minutes of audio, about $0.33 on `gemini-2.5-flash-preview-tts` or $0.66 on `gemini-3.1-flash-tts-preview`, plus four script calls on `reportModel` priced by the dialog. |
 
 **Goal.** Every line of the Phase 6 definition of done and `docs/13` §8.6 is demonstrated on a real
 Zotero profile and recorded, and audio is switched on.
 
 **Read first.**
 - `docs/11-implementation-roadmap.md` §1 Phase 6 "Definition of done"; `docs/13` §8.6
-- `plan/06` `G-06`, `G-09`, `G-18`, `G-29`, `G-30`
+- `plan/06` `G-06`, `G-09`, `G-18`, `G-29`, `G-30`, `G-44`
 - `plan/reports/P6-T18.md` — which lines are already proved offline
 
 **Files.**
@@ -1554,11 +1576,12 @@ Zotero profile and recorded, and audio is switched on.
 - modify `docs/04-audio-report-tts.md` (§4.2: the rate on the model used, if it differs; dated note)
 
 **Do.**
-1. Stop for spend approval before the first paid run, with the dialog's figures beside this card's;
-   stop again before each later one (§0.4 line 28).
+1. Stop for spend approval under `G-44` before the first paid run, with the dialog's figures beside
+   this card's; stop again before each later one (§0.4 line 28).
 2. English: a report whose script is about 1,000 words → one WAV, opened from Zotero on Windows by
-   double-click; on macOS too if `G-09` gives a Mac, else record "macOS untested" under `G-09`'s
-   degraded path (§0.4 line 31). Record its size, whether it was imported or linked, and the seconds.
+   double-click. Record "macOS untested" under `G-09`'s degraded path (§0.4 line 31, decided
+   2026-11-16 with the owner's Phase 7 decision 1, `plan/00` §6 item 380). Record its size, whether it
+   was imported or linked, and the seconds.
 3. Korean: three briefings, at least one from an English-only report; stop for `G-30`; record the three
    scores and the speaker's notes on embedded English terms verbatim; read `P6-T08`'s numeral count.
 4. FR-43: with the key's TTS access removed by the owner (or a key without it), run again: a specific
@@ -1630,13 +1653,14 @@ dialog; if the audio variant fits the preflight model with little change, 0.25�
 - **OpenAI TTS** as a second provider — owner, item 378(c). Later release.
 - **The offline "Read aloud"** (`speechSynthesis`, `W6-9`) — owner, item 378(d). Later release.
 - **The Interactions API path**, its `language` field and its MP3 output — §0.4 line 5; the single-chunk
-  MP3 of `docs/04` §6.4 option 1 goes with it, as does `docs/04` §2.7's voice-set question.
+  MP3 of `docs/04` §6.4 option 1 goes with it, as does `docs/04` §2.7's voice-set question. MP3 is a
+  later-release candidate (owner, item 379, §0.4 line 25): v1.0 links a WAV over 10 MiB.
 - **A content-hashed chunk cache and resume after a restart** — §0.4 line 14; backlog.
 - **A per-collection glossary and pronunciation hints** (`docs/04` §9.1) — `P0-T25` found the owner
   satisfied without them; backlog, to be reopened by `G-30`'s notes.
 - **A per-collection audio-language memory** (`docs/04` §9.4's first paragraph) — §0.4 line 10; backlog.
-- **Audio from a per-paper summary set** (FR-37's parenthesis) — §0.4 line 29; backlog unless the owner
-  says otherwise.
+- **Audio from a per-paper summary set** (FR-37's parenthesis) — §0.4 line 29; a later-release
+  candidate (owner, item 379): v1.0 makes audio from a trend report only.
 - **Chapter boundaries for a player** (`docs/12` §13's "best-effort; used only for player navigation") and
   **an in-app player** (`docs/04` §10.4) — no player in v1.0.
 - **The pane's audio controls** (`docs/08` §7.3) — §0.4 line 11; Phase 7's `W7-4`.

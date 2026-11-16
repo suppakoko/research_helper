@@ -1493,6 +1493,8 @@ The [Zotero Plugin Dev](https://zotero-plugin.dev/) community hub confirms the i
 
 > **Unverified:** the exact submission mechanics (repository, file format, PR template) for each community list, and the current maintenance status of `zotero-chinese/zotero-plugins` — its README carried a "maintenance suspended" note at the time of writing. Confirm the live process immediately before submitting rather than relying on this document.
 
+> **DECIDED 2026-11-16 (owner, `plan/00-task-index.md` §6 item 380, decision 4; `10-requirements-and-user-stories.md` §5 Q20): steps 2 and 3 happen at v1.0.** The owner posts the announcement and makes the submissions (`plan/06` `G-36`, `plan/10` `P7-T31`); an agent drafts the texts (`P7-T23`) and confirms the live submission process, as the note above asks, immediately before the owner submits.
+
 ### 7.3 README and documentation requirements
 
 The README is the primary user-facing artifact and, per §7.2, the main trust signal. It must contain:
@@ -1510,11 +1512,17 @@ The README is the primary user-facing artifact and, per §7.2, the main trust si
 
 A Korean-language README (`README.ko.md`) ships at v1.0, matching the Korean UI commitment (FR-55).
 
+> **Noted 2026-11-16 (`plan/00-task-index.md` §6 item 380, decision 1).** For v1.0 the compatibility table (item 2) lists Windows as tested and macOS and Linux as **untested**. `plan/10` `P7-T19` writes the README and CHANGELOG to these ten requirements; `P7-T20` writes `README.ko.md`, reviewed under `plan/06` `G-31`.
+
 ---
 
 ## 8. Manual QA checklist (run before every release)
 
 Run on **Windows, macOS, and Linux** for a minor or major release; Windows plus one other for a patch release. Use a **fresh Zotero profile with a fresh data directory** for the install tests, and a **copy of a large real library (~10k items)** for the performance tests. Record results in the release issue.
+
+> **DECIDED 2026-11-16 (owner, `plan/00-task-index.md` §6 item 380, decision 1): the OS matrix for v1.0.** v1.0 is checked on **Windows**. macOS and Linux are marked **"untested"** in the README's compatibility table (§7.3 item 2) and are **recorded as waived, with the reason** (no machine; `plan/06` `G-09`), in the release checklist. They are checked in a later release once machines exist. This overrides, for v1.0 only, the three-OS rule above; the rule stands for later minor and major releases. The Linux keyring-less check (`plan/04` `P3-T37`) is deferred on the same condition, and the VoiceOver half of §8.7's screen-reader line is waived with it (NVDA on Windows is run).
+>
+> **Noted 2026-11-16 (coordinator, under item 313): where results are recorded.** For v1.0 the "release issue" above is a file in the repository, `docs/release/v1.0-checklist.md` (`plan/10` `P7-T24` creates it; `P7-T25` fills it; `plan/06` `G-37` signs it), so the results are reviewed and kept with the code.
 
 ### 8.1 Install and lifecycle
 

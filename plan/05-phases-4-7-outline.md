@@ -23,6 +23,8 @@
 > too and its band is measured (35.75–50 d); the two of §3–§4 are still scaled.*
 > *Updated 2026-11-16 (`plan/00` §6 item 378): Phase 6 is decomposed (`plan/09`), so §3 is a pointer
 > too and its band is measured (20.00–28 d); only §4's Phase 7 is still scaled.*
+> *Updated 2026-11-16, later (`plan/00` §6 item 380): Phase 7 is decomposed (`plan/10`), so §4 is a pointer
+> too and its band is measured (28.50–40 d); no phase in this file is scaled any more.*
 > *Re-priced 2026-11-05 (`plan/00` §6 item 344(b)): Phase 5's measured band is 36.25–51 d; it read 35.75–50 d.*
 > *Re-priced 2026-11-02 (`plan/00` §6 item 335(g)): Phase 4's measured band is 25.25–35 d; it read 23.75–33 d.*
 > *Re-priced again 2026-11-02 (`plan/00` §6 item 336(d)): it is 25.75–36 d; it read 25.25–35 d.*
@@ -50,6 +52,8 @@
 > the outline of Phases 6–7 only, and §1 and §2 are pointers.*
 > *Updated 2026-11-16: Phase 6's cards `P6-T01`–`P6-T19` are in `plan/09`; this file is
 > the outline of Phase 7 only, and §1–§3 are pointers.*
+> *Updated 2026-11-16, later: Phase 7's cards `P7-T01`–`P7-T31` are in `plan/10`; every section
+> §1–§4 is a pointer, and §5 is kept as the record of what gated each phase.*
 
 ---
 
@@ -188,126 +192,23 @@ below, Phase 6's gating list, is kept as the record it was.
 
 ## 4. Phase 7 — Polish, i18n, prefs, release
 
-**Goal, deliverables, definition of done:** `docs/11` §1, Phase 7.
-**Effort:** 21–29 developer-days — ⚠ **scaled ×1.50, not decomposed**
-(`docs/11` §1, Phase 7, and the effort summary table; re-derived 2026-09-09 from
-the old 10–14 band, not measured). `docs/11` §1 flags this as the phase whose
-listed-but-unpriced work — the accessibility pass, the redaction audit, the
-three-platform QA run, the Korean native-speaker review — is hardest to bound in
-advance, which is the failure mode the ×1.50 factor was measured on.
-**Risks retired:** R-10, R-15, R-20, R-22; R-1 moves to ongoing operational
-handling (`docs/11` §1 and §3.1).
-**Upstream:** Phases 4, 5 and 6 all (`docs/11` §2 — Phase 7 gates the release on
-everything).
+**Decomposed — see [`10-phase-7-release.md`](10-phase-7-release.md).** Reduced to this pointer on
+**2026-11-16**, as §0 "Exit from outline into cards" requires: Phase 7 was decomposed into 31 cards on
+2026-11-16 under the coordinator's brief of that day, with four owner decisions (`plan/00-task-index.md`
+§6 item 380(a)) and the remaining choices taken by the coordinator under item 313. It was decomposed
+before §0's exit conditions (a) and (c) held — Phases 3–6 are not `DONE`, and Phase 6 is not built;
+`plan/10` §0 records which entry conditions are met. It has had no independent review yet.
 
-### 4.1 Work areas
+**Effort:** **28.50–40 developer-days — measured**, the sum of `plan/10`'s 31 cards (28.50 × 1.4 =
+39.9 → 40), replacing the 21–29 d **scaled ×1.50, not decomposed** figure this section quoted from
+2026-09-09 to 2026-11-16 (`docs/11` §1, Phase 7, and the effort summary table carry the change). With
+it, no phase of the plan carries a scaled figure.
 
-| # | Work area | One sentence |
-|---|---|---|
-| W7-1 | **Localization completion** | Complete `en-US` and `ko-KR` Fluent bundles, no hard-coded strings, `Intl` formatting, and the CI key-parity check flipped from warn to error (FR-55, NFR-11; R-22's mitigation in `docs/11` §3). |
-| W7-2 | **Korean review by a native speaker** | Review of the UI strings *and* the Korean prompts, whose academic register and term-with-English-in-parentheses convention `docs/12` §19 item 4 flags as written by a non-native-reviewed process. |
-| W7-3 | **Accessibility pass** | Keyboard navigation, focus order, accessible names, light/dark contrast, and the NVDA/VoiceOver smoke test (NFR-13; `docs/08` §9). |
-| W7-4 | **Preferences consolidation** | Defaults review against `docs/07` §8.5, the "Clear cache" action, per-namespace storage accounting and cap enforcement (NFR-8), and the clear/delete coverage `docs/09` §3.7 requires. |
-| W7-5 | **Error-message and redaction audit** | Every message against NFR-14, the "Copy diagnostics" action, and the log-redaction audit that proves NFR-16 by grepping a full job's debug output (FR-54; `docs/09` §2, §7). |
-| W7-6 | **Performance and resource profiling** | Startup, idle and peak memory, and main-thread task duration against NFR-3, NFR-7, NFR-10, plus the XPI size cap NFR-18 (R-10). |
-| W7-7 | **Security review** | The `docs/09` §7 checklist end to end, with its `[BLOCKER]` items treated as release blockers rather than findings. |
-| W7-8 | **Documentation** | README with all ten required sections, `README.ko.md`, CHANGELOG and screenshots (`docs/13` §7.3), plus `SECURITY.md` with a contact address and a stated response expectation, which is `docs/09` §6.3's requirement and a line item in `docs/09` §7's supply-chain checklist rather than a `docs/13` §7.3 one. |
-| W7-9 | **Release engineering** | The tagged-build release workflow, generated `update.json`/`update-beta.json` with `sha256` hashes, the `strict_min_version`/`strict_max_version` policy, and a proven in-place upgrade (`docs/13` §5.2, §6.2, §6.3; R-15). |
-| W7-10 | **Manual QA execution** | `docs/13` §8's full checklist on Windows, macOS and Linux, including the offline behaviour section (NFR-9) and the large-library performance runs. |
-| W7-11 | **Distribution** | The Zotero Forums announcement, submission to the community lists, and the watch for the official registry (`docs/13` §7.2; R-20). |
-
-### 4.2 Entry conditions
-
-- **Phases 4, 5 and 6 are `DONE`.**
-- **V-17 has an answer** — Fluent registration on Zotero 10 including the `ko-KR`
-  bundle with English fallback (`docs/11` §4.3). Two related markers must be
-  closed with it: `docs/01` §9.2's `> **Unverified:**` about which
-  `Localization` argument form to use for a plugin's own files, and the
-  `Zotero.ftl.addResourceIds` marker in `docs/01` §10.4, mirrored in `docs/08`
-  §8.2.1.
-- **V-18 has an answer** — `update.json` delivery end to end. `docs/13` §6.3
-  additionally marks `> **Unverified:**` how Zotero reconciles a widened
-  `strict_max_version` in the manifest against the narrower value inside an
-  installed XPI, and says to verify this in V-18 *before relying on the
-  manifest-only bump as the primary compatibility strategy*. That strategy is
-  what `docs/13` §6.3 calls the project's single most valuable operational lever
-  against R-1.
-- **`docs/10` §5 question 20 is answered** — registry-listing timing. `docs/11`
-  §5 lists it as the one remaining Before-Phase-7 decision now that D8 has
-  settled the license.
-- **`docs/09` §8's open decisions 1, 2, 3, 6 and 7 are answered.** All five become
-  user-facing text or shipped behaviour in this phase: the Linux-without-libsecret
-  path, whether the passphrase tier ships at all, Gemini tier detection, the
-  re-verification of every remaining `Unverified`/`Partially verified` policy
-  claim before it reaches user-facing text, and the policy-review cadence.
-- ~~**The MIT license is confirmed with the institution's IP office.**~~
-  **Satisfied — closed 2026-09-09.** D8 records MIT (`docs/00` §3) and
-  `docs/10` §5 question 18 carried the instruction to confirm with the
-  institution's IP office before first public release; the project owner closed
-  that confirmation on 2026-09-09, question 18 is now struck through and records
-  the decision itself, and it is recorded at
-  [`06-human-gates.md`](06-human-gates.md) G-32. This is no longer an entry
-  condition. Reopen it only if the licence changes or the work is reassigned to a
-  different institution — the clearance was given for MIT, for this project,
-  under its current affiliation.
-- **NCBI registration is on file** for the `tool`/`email` pair. `docs/09` §5.1
-  states that sending the values is not itself compliance and that registration
-  is a release task; `docs/13` §8.9 carries it as a release-hygiene checkbox.
-- **The accessibility surface is understood.** `docs/10` §3 marks Zotero 10's
-  assistive-technology support surface `> **Unverified:**` and makes the
-  NVDA/VoiceOver smoke test a Phase 7 deliverable; `docs/08` §9 additionally marks
-  `> **Unverified:**` whether Zotero ships a high-contrast stylesheet that plugin
-  panes inherit.
-- **The build/test toolchain markers from `docs/13` are closed by Phase 0's
-  report.** Specifically the scaffold `test` key names, the `esbuildOptions`
-  shape and `xpiDownloadLink` templating, the Gecko target version, whether
-  `zotero-plugin test` provisions a Zotero build in CI, and whether a
-  `ZOTERO_CHANNEL` variable selects the beta build — all `> **Unverified:**` in
-  `docs/13` §1.4, §1.5, §2, §5.1 and §5.3, and all load-bearing for W7-9 and
-  W7-10.
-
-### 4.3 Decisions required before decomposition
-
-| Decision | Recorded in |
-|---|---|
-| Registry-listing timing — list at v1.0 or wait (`docs/10` §5 question 20) | `docs/13` §7.2 |
-| Linux-without-libsecret fallback: session-only or passphrase first, and whether the passphrase tier ships in v1 at all | `docs/09` §1.7 and the open note under D5 in `docs/00` §3; questions are `docs/09` §8 items 1 and 2 |
-| ~~Gemini tier-detection fallback behaviour when no programmatic billing signal exists~~ **Decided 2026-11-16** (owner, `plan/00` §6 item 378(b)): ask once, unknown counts as free, warn on every audio confirmation, strict makes no audio | `docs/09` §3.4 rule 4; question is `docs/09` §8 item 3, marked 2026-11-16 |
-| Provider-policy re-verification cadence and the date stamp shown next to retention text in the UI | `docs/09` §3.3; question is `docs/09` §8 item 7 |
-| Whether advanced users may override prompts in v1 | `docs/12` §19 item 5, with cache-namespace and bug-report consequences |
-| The supported-OS matrix for v1.0, given `docs/13` §8 requires all three for a minor or major release | `docs/13` §8 and the README compatibility table (`docs/13` §7.3 item 2) |
-| Which NFRs, if any, ship waived rather than measured | the release checklist; `docs/11` §1 Phase 7 DoD requires each to be measured *or explicitly waived* |
-| Final shipped values for the two spend ceilings (`docs/10` §5 question 6's residual half) | `docs/07` §8.5, "and nowhere else" |
-
-### 4.4 What would change the plan
-
-- **V-18 shows the manifest-only compatibility bump does not work.** The fallback
-  `docs/13` §6.3 names is a patch release whose only change is the manifest. R-1's
-  ongoing cost rises from a one-line commit to a full release cycle per Zotero
-  major, which changes the maintenance budget `docs/11` R-1 assumes (~1
-  developer-day per major version). **That multiplier grew on 2026-09-09:**
-  `docs/11` R-1 now reckons the corrected 7–10-month span at roughly **3–7**
-  Zotero majors rather than the 2–3 the old 4–5-month span implied, with §1's
-  separate ~15% compatibility contingency (≈ 23–32 d) sitting on top of the
-  per-version budget rather than inside it.
-- **V-17 fails or is awkward.** W7-1's approach changes at the root — how strings
-  are registered, and therefore what R-22's CI parity check reads. This is the
-  work area most likely to change shape entirely rather than in degree.
-- **The Korean review returns register-level problems, not typos.** W7-2 stops
-  being a Phase 7 polish item: `docs/12` §19 item 4 names the Korean *prompts*,
-  which means the `TREND_REPORT_KO` and `AUDIO_SCRIPT_KO` outputs from Phases 4
-  and 6 must be regenerated and re-judged, and `docs/12` §17.6's "changing a
-  prompt costs money" applies. Budget a re-run of the Phase 4 and Phase 6 Korean
-  DoD items, not a string sweep.
-- **Accessibility support is worse than assumed.** NFR-13 items get explicitly
-  waived in the release checklist with the reason recorded, rather than silently
-  missed — `docs/11` §1 Phase 7 DoD allows a waiver but not an omission.
-- **The official plugin registry opens before v1.0.** W7-11 gains a submission
-  task and possibly a review or signing requirement — `docs/01` §11.5 marks
-  `> **Unverified:**` whether the planned directory will introduce one.
-- **A `docs/09` §7 `[BLOCKER]` cannot be satisfied.** The release does not ship.
-  These are the only items in the plan explicitly labelled as must-not-ship-
-  unresolved.
+**Where this section's contents went.** The work areas `W7-1`–`W7-11` (§4.1), the entry conditions
+(§4.2), the decisions required before decomposition (§4.3) and what would change the plan (§4.4) are
+`plan/10` §5.1–§5.4, moved verbatim; `plan/10` §0's table tracks the entry conditions, and every §4.3
+decision is made (`plan/10` §0.4 lines 1–9; `plan/10` §5.3 carries a note saying where each landed).
+§5.4 below, Phase 7's gating list, is kept as the record it was.
 
 ---
 
@@ -404,6 +305,12 @@ answered before Phase 5 opens. See [`06-human-gates.md`](06-human-gates.md) G-03
 | Q10 — Korean native generation vs. translation | `docs/10` §5 | Same; and `docs/12` §19 item 6 asks the narrower version |
 
 ### 5.4 Phase 7 — Polish, i18n, prefs, release
+
+> *Kept as the record it was, 2026-11-16: Phase 7 is decomposed (`plan/10`), and `plan/10` §0's entry-condition
+> table and §0.4 say what each row below became. In short: Q14, Q20 and the prompt-override question are decided by
+> the owner (item 380); Q6's ceilings, Q15 and Q16 were already settled and are cited; Q18 stays settled; the
+> policy-claim row is `plan/10` `P7-T17`'s work; the `Unverified` markers in the other rows are each named by the
+> card that measures or narrows them (`P7-T01`, `P7-T06`, `P7-T21`, `P7-T22`, `P7-T23`, `P7-T30`).*
 
 | Gating item | Where | Why it gates Phase 7 |
 |---|---|---|
