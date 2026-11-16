@@ -1444,6 +1444,10 @@ Plain text. Validated in code before it reaches TTS:
 **Version:** `v1.0.0`
 **Purpose:** The Korean spoken script. Generated from the Korean report where one exists; otherwise from the English report, in which case the model both translates and adapts (state which in the UI).
 
+> **Decided 2026-11-16 (owner, `plan/00` §6 item 378(a); §19 item 6):** when only an English report exists, the Korean script is written from it in **one call** — a spoken script newly written in Korean, not a sentence-by-sentence translation; paper titles and venue names stay untranslated. "Translates and adapts" above is read that way. Whether the source was a Korean or an English report is still stated in the UI (`plan/09` `P6-T08`, `P6-T17`).
+>
+> **Decided 2026-11-16 (coordinator, under `plan/00` §6 item 313; `10-requirements-and-user-stories.md` §5 Q9):** the register of both audio prompts is conversational; no citation marker is read aloud; the written report stays the source of record. The rules in §13 and in the Korean system prompt below already say this, so their text does not change.
+
 ### Input variables
 
 Identical to `AUDIO_SCRIPT_EN`.
@@ -2055,7 +2059,8 @@ Concretely: `cheap` and `standard` both resolve to `summaryModel`, `strong` reso
 3. **Few-shot examples.** None of these prompts currently carry worked examples. Adding one gold example to `PAPER_SUMMARY_ABSTRACT` would likely improve field coverage on weaker models, at ~600 tokens per call × N papers. Worth measuring on the fixture set before deciding.
 4. **Korean prompt review.** The Korean prompts here were written by a non-native-reviewed process. They need review by a Korean-speaking researcher before release, particularly the academic-register choices and the term-with-English-in-parentheses convention.
 5. **Prompt editing by users.** Should advanced users be able to override a prompt? It is a powerful feature and a support nightmare; if yes, custom prompts need their own cache namespace and must be excluded from bug reports.
-6. **`AUDIO_SCRIPT_KO` source.** When only an English report exists, should the Korean script be generated from it (one call, translation + adaptation) or should a Korean report be generated first (two calls, better fidelity)?
+6. ~~**`AUDIO_SCRIPT_KO` source.** When only an English report exists, should the Korean script be generated from it (one call, translation + adaptation) or should a Korean report be generated first (two calls, better fidelity)?~~
+   **Decided 2026-11-16 (owner, `plan/00` §6 item 378(a)):** from the English report, in **one call**. The result is a spoken script newly written in Korean, not a sentence-by-sentence translation of the English report; paper titles and venue names stay untranslated. No Korean report is generated first. `AUDIO_SCRIPT_KO`'s Purpose line (§14) is corrected to match, and `plan/09` `P6-T06` and `P6-T08` build it.
 
 ---
 

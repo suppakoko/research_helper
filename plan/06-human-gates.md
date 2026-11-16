@@ -69,9 +69,9 @@ in this plan.
 | Phase 5 | G-26 | Enter the Semantic Scholar key, or decide to ship degraded | Phase 5 scope | Minutes once G-03 resolves |
 | Phase 5 | G-27 | Judge a collection profile and its recommendations | Phase 5 DoD | Hours of domain time |
 | Phase 5 | G-43 | Approve the first real recommendation run's cost estimate, and each paid Phase 5 run after it | Phase 5 DoD (`P5-T30`) | Minutes per run; **added 2026-11-02** (`plan/00` §6 item 321(a)) |
-| Before Phase 6 | G-28 | Decide the audio register and the Korean-script source | Script prompts | Product-owner turnaround |
-| Phase 6 | G-29 | Approve the paid calibration call that measures the audio token rate | Phase 6 cost model | Minutes |
-| Phase 6 | G-30 | Rate 3 Korean audio samples | Phase 6 DoD | Hours, native speaker |
+| Before Phase 6 | ~~G-28~~ | ~~Decide the audio register and the Korean-script source~~ **Decided 2026-11-16** (`plan/00` §6 item 378(a); register under item 313) | Script prompts (`plan/09` `P6-T06`, `P6-T08`) | Done |
+| Phase 6 | G-29 | Approve the paid calibration call that measures the audio token rate — **measured 2026-09-29 by `P0-T25` on one model; re-verification due by 2026-12-01** (note under G-29, 2026-11-16) | Phase 6 cost model (`plan/09` `P6-T10`) | Minutes |
+| Phase 6 | G-30 | Rate 3 Korean audio samples | Phase 6 DoD (`plan/09` `P6-T19`) | Hours, native speaker |
 | Phase 7 | G-33 | Screen-reader smoke test (NVDA, VoiceOver) | NFR-13 | Hours, on two OSes |
 | Phase 7 | G-34 | Provide three-OS QA machines and a ~10k-item library copy | `docs/13` §8 | Days if hardware must be arranged |
 | Phase 7 | G-35 | Publish the GitHub Release and update manifest | v1.0 | Minutes |
@@ -1407,6 +1407,14 @@ reuse one approval for a later run.
 
 ### G-28 — Decide the audio register and the Korean-script source
 
+> **Decided 2026-11-16 — this gate is closed.** The narrow half, `docs/12` §19 item 6, is the owner's
+> (`plan/00` §6 item 378(a)): when only an English report exists, the Korean script is written from it in
+> **one call**, as a spoken script newly written in Korean, not a sentence-by-sentence translation; titles
+> and venue names stay untranslated. Questions 9 and 10 were then decided by the coordinator under item
+> 313 as their recommended defaults (conversational, no citation markers read aloud, the written report as
+> the source of record; the Korean script written natively), and `docs/10` §5 marks both. `plan/09`
+> `P6-T06` and `P6-T08` build them. What follows is the gate as it was written.
+
 **Blocks:** the script prompts (`docs/11` §5 lists both as "Before Phase 6").
 
 **What the human must do.** Answer `docs/10` §5 question 9 (register — the length
@@ -1433,6 +1441,18 @@ proceed on the recommended defaults for questions 9 and 10 and say so.
 ---
 
 ### G-29 — Approve the paid calibration call that measures the audio token rate
+
+> **Status 2026-11-16 — the measurement exists for one model; the re-verification is still owed.**
+> `P0-T25` made one real, billed call on 2026-09-29 (`plan/01` `P0-T25`; `docs/04` §4.2's MEASURED
+> note): `gemini-2.5-flash-preview-tts` returned `usageMetadata.candidatesTokenCount = 2709` for
+> 108.37 s of audio, **24.998 tokens per second**, at a cost of $0.0273. The text below still calls the
+> 25 tok/s figure `Unverified`; that is no longer true for that model. Two things remain: the rate has
+> not been measured on any other TTS model (`gemini-3.1-flash-tts-preview`, `gemini-2.5-pro-preview-tts`),
+> so `plan/09` `P6-T10` labels it measured for `gemini-2.5-flash-preview-tts` only; and `docs/04` §4.2
+> asks for re-verification **by 2026-12-01**, because preview pricing changes. `plan/09` `P6-T04` (the
+> owner's recording) reads the rate from its two TTS bodies and serves as that re-verification if it runs
+> before 2026-12-01 on the same model; otherwise `P6-T19` does it. This gate stays open until one of them
+> records it.
 
 **Blocks:** Phase 6's cost estimator (`05-phases-4-7-outline.md` §3.2), and every
 cost figure in `docs/04` §11.
@@ -1461,6 +1481,9 @@ until it runs no per-minute cost may be shown as a quote.
 ---
 
 ### G-30 — Rate 3 Korean audio samples
+
+> *Noted 2026-11-16: still open. `plan/09` `P6-T19` is the card that stops for it; at least one of the
+> three samples is written from an English-only report, the path the owner's item 378(a) chose.*
 
 **Blocks:** `docs/11` §1 Phase 6's DoD, which requires a native Korean speaker to
 judge the briefing natural at ≥ 4 average on a 5-point scale across 3 samples,

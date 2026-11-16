@@ -21,6 +21,8 @@
 > pointer and its band is measured (23.75–33 d); the three of §2–§4 are still
 > scaled.* *Updated 2026-11-02: Phase 5 is decomposed (`plan/08`), so §2 is a pointer
 > too and its band is measured (35.75–50 d); the two of §3–§4 are still scaled.*
+> *Updated 2026-11-16 (`plan/00` §6 item 378): Phase 6 is decomposed (`plan/09`), so §3 is a pointer
+> too and its band is measured (20.00–28 d); only §4's Phase 7 is still scaled.*
 > *Re-priced 2026-11-05 (`plan/00` §6 item 344(b)): Phase 5's measured band is 36.25–51 d; it read 35.75–50 d.*
 > *Re-priced 2026-11-02 (`plan/00` §6 item 335(g)): Phase 4's measured band is 25.25–35 d; it read 23.75–33 d.*
 > *Re-priced again 2026-11-02 (`plan/00` §6 item 336(d)): it is 25.75–36 d; it read 25.25–35 d.*
@@ -46,6 +48,8 @@
 > are in `plan/07`; this file is the outline of Phases 5–7 only, and §1 is a pointer.*
 > *Updated 2026-11-02: Phase 5's cards `P5-T01`–`P5-T31` are in `plan/08`; this file is
 > the outline of Phases 6–7 only, and §1 and §2 are pointers.*
+> *Updated 2026-11-16: Phase 6's cards `P6-T01`–`P6-T19` are in `plan/09`; this file is
+> the outline of Phase 7 only, and §1–§3 are pointers.*
 
 ---
 
@@ -162,106 +166,23 @@ decision is made. §5.2 below, Phase 5's gating list, is kept as the record it w
 
 ## 3. Phase 6 — TTS audio report
 
-**Goal, deliverables, definition of done:** `docs/11` §1, Phase 6.
-**Effort:** 15–21 developer-days — ⚠ **scaled ×1.50, not decomposed**
-(`docs/11` §1, Phase 6, and the effort summary table; re-derived 2026-09-09 from
-the old 7–10 band, not measured), with `docs/11` naming audio container assembly
-and Korean quality iteration as the unpredictable parts — and noting that neither
-is bounded by the scaling.
-**Risks retired:** R-8.
-**Upstream:** Phase 4's report and Phase 3's provider layer (`docs/11` §2).
+**Decomposed — see [`09-phase-6-audio-report.md`](09-phase-6-audio-report.md).** Reduced to this
+pointer on **2026-11-16**, as §0 "Exit from outline into cards" requires: Phase 6 was decomposed into
+19 cards on 2026-11-16 under the coordinator's brief of that day, with four owner decisions
+(`plan/00-task-index.md` §6 item 378(a)–(d)) and the remaining §3.3 decisions taken by the coordinator
+under item 313. It was decomposed before §0's exit conditions (a) and (c) held — Phase 5 is not `DONE` and
+`P4-T24`/`P4-T25` have not run; `plan/09` §0 records which entry conditions are met. It has had no
+independent review yet.
 
-### 3.1 Work areas
+**Effort:** **20.00–28 developer-days — measured**, the sum of `plan/09`'s 19 cards (20.00 × 1.4 =
+28.0 → 28), replacing the 15–21 d **scaled ×1.50, not decomposed** figure this section quoted from
+2026-09-09 to 2026-11-16 (`docs/11` §1, Phase 6, and the effort summary table carry the change).
 
-| # | Work area | One sentence |
-|---|---|---|
-| W6-1 | **TTS provider abstraction and Gemini client** | The `TTSProvider` interface R-8's mitigation requires, plus the Gemini client over whichever of the two API surfaces is chosen, with the model ID resolved from the live model list rather than hardcoded (`docs/04` §2.1, §2.2). |
-| W6-2 | **Spoken-script generation** | The rewrite pass that turns a written report into speech — markdown and citation stripping, number and abbreviation expansion, target-length control — plus `validateScript()` and its single retry on leaks (`docs/04` §8, `docs/12` §13–§14). |
-| W6-3 | **Korean-specific handling** | Embedded English technical terms, the per-collection glossary, numbers and units, and language defaulting (`docs/04` §9) — the part `docs/11` calls unpredictable. |
-| W6-4 | **Chunking and sequencing** | Sentence- and paragraph-aware splitting with language-dependent size targets, voice consistency across chunks, and bounded concurrency (`docs/04` §5). |
-| W6-5 | **Audio assembly** | Raw PCM concatenation with inter-chunk silence, the WAV header writer, and the single-chunk MP3 path (`docs/04` §3, §6). |
-| W6-6 | **Delivery into Zotero** | The standalone item, the report as child note, the audio as child attachment, and the import-versus-link rule with its size threshold and `contentType` (`docs/04` §10). |
-| W6-7 | **Cost estimation, duration derivation and cancellation** | Resolving `tts.targetMinutes` in its auto state via `docs/04` §12's derivation, showing chunk count and estimated duration and cost before proceeding, and making cancel real (FR-42). |
-| W6-8 | **Failure and disclosure paths** | FR-43's save-the-script-as-text fallback, the unentitled-key path, and the second, independent destination disclosure that `docs/09` §3.4 rule 5 requires because audio uses Google even when summarization did not. |
-| W6-9 | **Offline "Read aloud"** | The separate `speechSynthesis` action, with Korean disabled when `getVoices()` returns no `ko-*` voice and the `voiceschanged` race handled (`docs/04` §7.1, §12 item 7). |
-| W6-10 | **Audio dialog** | The UI that carries voice selection, language, the live cost estimate, progress across chunks, and cancellation. |
-
-### 3.2 Entry conditions
-
-- **Phase 4 is `DONE`** — there must be a real report to speak.
-- **V-10 passed in Phase 0** (`docs/11` §4.2): a 200-word Korean script with
-  embedded English terms returned audio that a native speaker judged acceptable.
-  `docs/11` §4's closing note says explicitly that if V-7 or V-10 fails, stop and
-  re-plan. Phase 6 as described does not exist if V-10 failed.
-- **V-11 passed** — binary/arraybuffer handling, writing a file into the storage
-  directory, and registering it as an attachment. W6-5 and W6-6 are unwritable
-  otherwise.
-- **The audio output token rate has been measured.** `docs/04` §4.2 marks the
-  25-tokens-per-second conversion `> **Unverified:**` and states that *the whole
-  TTS cost model inherits this uncertainty*, with the instruction to make one
-  real call, read `usageMetadata.candidatesTokenCount`, divide by the measured
-  duration, and calibrate. Until that number exists, W6-7 cannot be specified
-  and every per-minute figure in `docs/04` §11 is an order of magnitude, not a
-  quote. `docs/04` §4.2 also asks for re-verification by 2026-12-01 regardless.
-- **The per-request audio duration ceiling is understood.** `docs/04` §4.1 marks
-  the absence of a documented maximum audio duration `> **Unverified:**`, and
-  notes that Google's own first-party guidance about quality drift past a few
-  minutes is the argument for chunking independent of any token accounting.
-- **`docs/10` §5 questions 9 and 10 are answered** — the audio register, and
-  Korean-native generation versus translation. `docs/11` §5 lists both as
-  "Before Phase 6".
-- **`docs/12` §19 item 6 is answered** — when only an English report exists,
-  whether the Korean script is generated from it or a Korean report is generated
-  first. This is a distinct question from `docs/10` §5 question 10 and it changes
-  W6-2's call graph and cost.
-- **The voice-set question is closed.** `docs/04` §2.7 marks
-  `> **Unverified:**` whether the Interactions API's voice set matches the legacy
-  `generateContent` set, with an explicit instruction not to hardcode the names.
-- **The attachment API signature is confirmed.** `docs/04` §10.1 marks
-  `Zotero.Attachments.importFromFile`'s exact signature and option set
-  `> **Unverified:**`, quoting Zotero's own documentation that this area "requires
-  a lot of looking around in the source code".
-- **The Gemini tier position is settled and disclosed.** `docs/09` §3.3 states
-  that a free-tier user generating an audio report has sent their trend report to
-  Google for product improvement with human reviewers able to read it, and
-  `docs/09` §3.5 refuses the Gemini free tier in strict mode. `docs/09` §3.4
-  rule 4 marks `> **Unverified:**` whether a programmatic billing signal exists
-  at all. See [`06-human-gates.md`](06-human-gates.md) G-06.
-
-### 3.3 Decisions required before decomposition
-
-| Decision | Recorded in |
-|---|---|
-| Audio register (`docs/10` §5 question 9) | `docs/04` §8.1 and the `docs/12` §13/§14 templates |
-| Korean script source — native generation vs. translation of the English report (`docs/10` §5 question 10; `docs/12` §19 item 6) | `docs/04` §9.4 and `docs/12` §14 |
-| Primary Gemini API surface — legacy `generateContent` or Interactions | `docs/04` §2.1, with the ZDR consequence (`store: false`) recorded in `docs/09` §3.3 |
-| Whether the OpenAI TTS fallback ships in v1 | `docs/04` §7.5. **No longer blocked on a missing price:** `docs/04` §7.2 carries `gpt-4o-mini-tts`'s per-token pricing re-confirmed 2026-09-08. What remains is a product decision, plus §7.2's own warning that mixing a per-character model (`tts-1`/`tts-1-hd`) and a per-token one in a single estimator is the trap (`docs/04` §11) |
-| Shipped `tts.outputFormat` default, and therefore whether the typical report is imported or linked | value in `docs/07` §8.5; the rule stays in `docs/04` §10.2 |
-| Whether audio is offered at all on an unconfirmed-tier Gemini key | `docs/09` §3.4 rule 4 and §3.5 |
-| Whether "Read aloud" ships in v1 given no Korean system voice may exist | `docs/04` §7.1, whose Windows Korean-voice availability is `> **Unverified:**` |
-
-### 3.4 What would change the plan
-
-- **The measured token rate differs materially from 25/s.** Every per-minute and
-  per-report figure in `docs/04` (§11 included) is re-derived, W6-7's estimator
-  changes, and if the real rate is much higher the 32k-context math in `docs/04`
-  §4.1 tightens the chunk targets in W6-4.
-- **Korean quality is marginal rather than good.** Either Korean audio ships
-  behind a flag with the FR-43 text fallback as the honest default, or OpenAI TTS
-  is promoted to primary for Korean (`docs/04` §7.5 rank 2) — which needs a
-  second provider key and therefore a new human gate, plus the estimator work
-  `docs/04` §7.2 warns about (that model is token-priced while `tts-1`/`tts-1-hd`
-  are character-priced), and it inherits §7.2's own caveat that OpenAI's voices
-  are English-optimized.
-- **Interactions rather than legacy is chosen as primary.** `speech_config`'s
-  explicit `language` field removes the mixed-language guessing that W6-3 exists
-  to mitigate (`docs/04` §2.8), and the response shape changes W6-5. It also
-  binds the feature to `store: false` for any ZDR project (`docs/09` §3.3).
-- **`importFromFile` differs from the assumed shape.** W6-6 is re-planned, and
-  the import-versus-link threshold logic may have to move.
-- **A TTS model ID is deprecated mid-phase.** All three IDs in `docs/04` §2.2
-  carry `-preview`. This is why W6-1 resolves the model from the live list; a
-  deprecation should cost a preference change, not a release.
+**Where this section's contents went.** The work areas `W6-1`–`W6-10` (§3.1), the entry conditions
+(§3.2), the decisions required before decomposition (§3.3) and what would change the plan (§3.4) are
+`plan/09` §5.1–§5.4, moved verbatim; `plan/09` §0's table tracks the entry conditions, and every §3.3
+decision is made (`plan/09` §0.4 lines 1–11; "Read aloud" and the OpenAI fallback are out of v1.0). §5.3
+below, Phase 6's gating list, is kept as the record it was.
 
 ---
 
@@ -351,7 +272,7 @@ everything).
 |---|---|
 | Registry-listing timing — list at v1.0 or wait (`docs/10` §5 question 20) | `docs/13` §7.2 |
 | Linux-without-libsecret fallback: session-only or passphrase first, and whether the passphrase tier ships in v1 at all | `docs/09` §1.7 and the open note under D5 in `docs/00` §3; questions are `docs/09` §8 items 1 and 2 |
-| Gemini tier-detection fallback behaviour when no programmatic billing signal exists | `docs/09` §3.4 rule 4; question is `docs/09` §8 item 3 |
+| ~~Gemini tier-detection fallback behaviour when no programmatic billing signal exists~~ **Decided 2026-11-16** (owner, `plan/00` §6 item 378(b)): ask once, unknown counts as free, warn on every audio confirmation, strict makes no audio | `docs/09` §3.4 rule 4; question is `docs/09` §8 item 3, marked 2026-11-16 |
 | Provider-policy re-verification cadence and the date stamp shown next to retention text in the UI | `docs/09` §3.3; question is `docs/09` §8 item 7 |
 | Whether advanced users may override prompts in v1 | `docs/12` §19 item 5, with cache-namespace and bug-report consequences |
 | The supported-OS matrix for v1.0, given `docs/13` §8 requires all three for a minor or major release | `docs/13` §8 and the README compatibility table (`docs/13` §7.3 item 2) |
@@ -457,6 +378,12 @@ later; read it as the reason a week-1 submission is now very likely to be
 answered before Phase 5 opens. See [`06-human-gates.md`](06-human-gates.md) G-03.
 
 ### 5.3 Phase 6 — TTS audio report
+
+> *Kept as the record it was, 2026-11-16: Phase 6 is decomposed (`plan/09`), and `plan/09` §0's entry-condition
+> table says what each row below became. In short: the token rate is measured for one model (`docs/04` §4.2);
+> Q9, Q10 and `docs/12` §19 item 6 are decided; the billing-tier signal is settled as "none, ask once" (item
+> 378(b)); the `importFromFile` row was closed by `P0-T26`; and the two "Read aloud" rows and the voice-set row no
+> longer gate v1.0 (items 378(d), and `docs/04` §2.1's note of 2026-11-16).*
 
 | Gating item | Where | Why it gates Phase 6 |
 |---|---|---|

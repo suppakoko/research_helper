@@ -2456,6 +2456,8 @@ Fluent goes in a XUL `<linkset>`, and each `<groupbox>` should carry `aria-label
 </vbox>
 ```
 
+> **Decided 2026-11-16 (coordinator, under `plan/00` §6 item 313; `plan/09` §0.4): the audio controls in the markup above are not built in Phase 6.** v1.0 writes WAV only (`04-audio-report-tts.md` §10.2's note of that date), so the `rh-audio-format` menulist and its hint have nothing to choose between, and the pane does not show them. The voice is chosen in the report window's audio section (§6.4; `plan/09` `P6-T17`), which writes the choice back to `tts.voice`; the pane's `rh-voice` menulist and its preview button are Phase 7's (`plan/05` §4.1 `W7-4`), when the pane is finished. Until then this markup is the target, not the build.
+
 **Controls in this pane that are not `preference=` bindings.** Three, and each is deliberate:
 
 | Control | Why not a binding | What the script does |

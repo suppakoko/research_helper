@@ -85,6 +85,8 @@ Google's TTS is available through both surfaces, and **the configuration is not 
 
 > **Recommendation for `research_helper`: implement the Interactions API path as primary.** It can return **`audio/mp3` or `audio/wav` directly**, which eliminates the entire manual WAV-header problem (§3) for the common case, and it is the surface Google is developing. Keep the legacy `generateContent` path implemented as a fallback, because it is what every existing example and community snippet uses and it is the better-documented of the two today. Section 3 documents the WAV writer regardless — it is still needed for the legacy path, for `audio/l16`, and for chunk concatenation (§6).
 
+> **Decided 2026-11-16 (coordinator, under `plan/00` §6 item 313; `plan/09` §5.3's "primary Gemini API surface", moved there from `plan/05` §3.3): v1.0 builds the legacy `generateContent` path only, and the recommendation above is not taken for v1.0.** Reasons: (1) it is the only response shape this project has measured — `P0-T25`'s Korean call returned base64 PCM with `mimeType` `audio/L16;codec=pcm;rate=24000` and `usageMetadata.candidatesTokenCount`, through `src/core/http/client.ts`'s JSON path (`plan/01` `P0-T25`, §4.2's measurement); no Interactions TTS call has been made; (2) a chunked report (§5) is concatenated as PCM (§6) in every case, so the Interactions path's `audio/wav` or `audio/mp3` output removes no code from a multi-chunk run; (3) `P0-T25`'s Korean sample was judged good by the owner without §2.8's `language` field (`plan/01` `P0-T25`, verdict 2026-09-30), so the mixed-language reason for Interactions is not a v1.0 need. The Interactions path is a later-release candidate (`plan/09` §4); §2.7's voice-set question is then reopened. The ZDR consequence in `09-security-privacy-and-api-keys.md` §3.3 (`store: false`) applies only to Interactions, so v1.0 does not reach it.
+
 ### 2.2 Model IDs (verified 2026-09-08)
 
 | Model ID | Notes |
@@ -667,11 +669,15 @@ Options, in order of preference:
 4. **Do not plan on transcoding after the fact.** No pure-JS MP3 encoder should be bundled (LAME-in-WASM is ~1 MB and adds a licensing question), so the container must be chosen at request time.
    > **Unverified:** whether a second Interactions call can be used to transcode already-generated audio. Nothing in the API reference describes an audio-in/audio-out transcode path, but this was not tested. Do not design around it either way; assume it is unavailable.
 
+> **Decided 2026-11-16 (coordinator, under `plan/00` §6 item 313):** v1.0 takes option 2 for every report, single-chunk ones included, and option 3's "surface the file size in the UI before writing" (the audio confirmation shows the estimated size and whether the file will be imported or linked; `plan/09` `P6-T10`). Option 1 needs the Interactions path, which v1.0 does not build (§2.1's note and §10.2's note of the same day).
+
 ---
 
 ## 7. Alternatives and fallbacks
 
 ### 7.1 Web Speech API (`speechSynthesis`) — zero cost, no key
+
+> **Decided 2026-11-16 (owner, `plan/00` §6 item 378(d)): the offline "Read aloud" action is not in v1.0.** It is a later-release candidate and has no task cards (`plan/09` §4). Work area `W6-9` is not built. What follows is kept as research for that release; §7.5's rank 3 and §12 item 7 are read with this note.
 
 Zotero runs on Gecko, and `window.speechSynthesis` is available to chrome-privileged code. **This is confirmed in practice**: the community plugin [ZoTTS](https://github.com/ImperialSquid/zotero-zotts) adds text-to-speech to Zotero using the OS's built-in voices, and Zotero itself now ships a **built-in text-to-speech feature (in beta)** — ZoTTS's README notes it "will probably not receive any major updates going forward" as a result.
 
@@ -748,6 +754,8 @@ If SSML-grade pronunciation control for Korean ever becomes a requirement (e.g. 
 > **Unverified:** current per-character pricing for both services.
 
 ### 7.5 Recommendation and fallback ordering
+
+> **Decided 2026-11-16 (owner, `plan/00` §6 item 378(c)): v1.0 ships Gemini TTS only.** On a TTS failure the spoken script is offered as a text file (FR-43), not sent to a second provider. OpenAI TTS (rank 2) is a candidate for a later release and has no task cards; the offline action (rank 3) is out of v1.0 too (§7.1's note of the same day). So the "TTS provider" choice in the last paragraph below is not shown in v1.0, and `tts.provider` is not shipped (`07-architecture-and-data-model.md` §8.5's note of 2026-11-16). `10-requirements-and-user-stories.md` §4 item 11 already said "Gemini TTS only in v1".
 
 | Rank | Option | When |
 | --- | --- | --- |
@@ -997,6 +1005,10 @@ Consequences:
 
 Do not infer the audio language from the papers — a Korean researcher reading English-language papers wants a **Korean** briefing. Make it an explicit user choice with a persistent per-collection preference, defaulting from Zotero's UI locale (`Zotero.locale`) on first run.
 
+> **Decided 2026-11-16 (owner, `plan/00` §6 item 378(a)): the Korean script's source.** When only an English report exists, the Korean script is written from that report in **one call** (`AUDIO_SCRIPT_KO`). It is a spoken script newly written in Korean, not a sentence-by-sentence translation; paper titles and venue names stay untranslated. No Korean report is generated first (`12-prompt-library.md` §19 item 6).
+>
+> **Decided 2026-11-16 (coordinator, under `plan/00` §6 item 313): the language default.** The plan stores no per-collection language. `tts.language` (`07-architecture-and-data-model.md` §8.5) ships `auto`, which means "the report's own `language`"; the report window's audio section shows that choice and the user may change it for the run. A per-collection memory is a later-release candidate (`plan/09` §4). This follows §8.5's `auto` row rather than the paragraph above, because the report's language is already the user's explicit choice for that collection (`reportLanguage`) and `Zotero.locale` is not.
+
 ---
 
 ## 10. Delivery in Zotero
@@ -1022,6 +1034,8 @@ Collection: "CRISPR delivery 2023–2026"
 ```
 
 A **standalone parent item** (rather than attaching to an existing paper) is right because the report is *about* the collection, not about any one paper. Put it in the same collection so it sits alongside its sources.
+
+> **Decided 2026-11-16 (coordinator, under `plan/00` §6 item 313): where v1.0 puts the audio.** Phase 4 shipped the report as a **standalone note** in its collection, with no parent item (FR-25; `writeReportNote` in `src/zotero/notes.ts`), so the structure above does not exist. v1.0 does not create a parent item or move the note. The audio is a **standalone attachment in the same collection** — FR-40's "the trend-report note's parent context" — with the descriptive title FR-40 asks for (language and date), and its key is recorded in the stored report's `audioAttachmentKeys` (`07-architecture-and-data-model.md` §5.2) so the report window can find it. `07-architecture-and-data-model.md` §6.5 says "a child attachment of the report note"; whether Zotero 10 lets a note parent an attachment at all is not recorded anywhere in this corpus, and `plan/09` `P6-T13` checks it in the Zotero source before writing code. Whatever it finds, v1.0 writes a standalone attachment; `P6-T13` records the finding and corrects §6.5.
 
 ### 10.2 Imported vs. linked attachment
 
@@ -1073,6 +1087,8 @@ const attachment = useLink
 ```
 
 For linked attachments the file must live somewhere permanent — prompt the user for a folder once and persist it in prefs; do not link to a temp path.
+
+> **Decided 2026-11-16 (coordinator, under `plan/00` §6 item 313; `plan/09` §5.3's (formerly `plan/05` §3.3) "shipped `tts.outputFormat` default, and therefore whether the typical report is imported or linked"):** v1.0 writes **WAV only** (`tts.outputFormat` `"wav"`; MP3 needs either transcoding, which §6.4 rules out, or Interactions' single-chunk MP3, which v1.0 does not build — §2.1's note of the same day). The rule is the threshold above as `P0-T26` built it: `chooseAttachmentMode` imports a file of at most `IMPORT_MAX_BYTES` (10 MiB) and links a larger one (`src/tts/audioStore.ts`). At 48,000 bytes a second that is about 3.6 minutes of audio, so **the typical report of §11 (about 10 minutes) is linked**, into `tts.linkedFileDir`, chosen on first use. `P0-T26` found that an import leaves the written file in the data directory as well as in Zotero storage; v1.0 deletes the data-directory copy after an import succeeds (`plan/09` `P6-T13`). That a linked report does not reach the phone (§10.4's "Sync to phone") is the cost of this choice, and it is an open line for the owner (`plan/09` §0.4).
 
 ### 10.3 Naming
 
