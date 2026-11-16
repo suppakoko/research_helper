@@ -266,6 +266,10 @@ const SECTION_8_5: readonly Section85Row[] = [
   ),
   // Owner, 2026-10-22 (plan/00 §6 item 269(b)): the sixty-fourth row.
   row("geminiPaidTier", "gemini.paidTier", "boolean", false),
+  // P6-T02 (2026-11-16, plan/09 §0.4 line 18): the once-asked billing answer.
+  row("geminiTierAnswer", "gemini.tierAnswer", "string", "", {
+    values: ["", "paid", "free", "unknown"],
+  }),
   row(
     "llmTokenEstimateCalibration",
     "llm.tokenEstimateCalibration",
@@ -346,6 +350,22 @@ const SECTION_8_5: readonly Section85Row[] = [
   row("relatedLinkToSeed", "related.linkToSeed", "boolean", true),
   row("relatedEnabled", "related.enabled", "boolean", false),
   row("recommendEnabled", "recommend.enabled", "boolean", false),
+  // The rows Phase 6 reads (P6-T02, 2026-11-16, typed out from §8.5). No
+  // tts.provider: §8.5 strikes it (plan/00 §6 item 378(c)).
+  row("ttsVoice", "tts.voice", "string", "Charon"),
+  row("ttsLanguage", "tts.language", "string", "auto", {
+    values: ["auto", "en", "ko"],
+  }),
+  row("ttsModel", "tts.model", "string", ""),
+  row("ttsTargetMinutes", "tts.targetMinutes", "integer", 0, {
+    min: 0,
+    max: 60,
+  }),
+  row("ttsOutputFormat", "tts.outputFormat", "string", "wav", {
+    values: ["wav"],
+  }),
+  row("ttsLinkedFileDir", "tts.linkedFileDir", "string", ""),
+  row("audioEnabled", "audio.enabled", "boolean", false),
   // Runtime & concurrency
   row("concurrency", "concurrency", "integer", 3, { min: 1, max: 8 }),
   row("runMaxSpendCents", "run.maxSpendCents", "integer", 0, { min: 0 }),
@@ -449,6 +469,12 @@ const NO_PREF_LINE: readonly string[] = [
   "related.linkToSeed",
   "related.enabled",
   "recommend.enabled",
+  // P6-T02 (2026-11-16): §7.2 lists tts.voice, tts.model, tts.targetMinutes
+  // and tts.outputFormat, and none of these four.
+  "tts.language",
+  "tts.linkedFileDir",
+  "gemini.tierAnswer",
+  "audio.enabled",
   "openrouter.lastValidatedAt",
   "openai.lastValidatedAt",
   "gemini.lastValidatedAt",
@@ -529,7 +555,7 @@ function parseDefaultCell(cell: string): unknown {
 }
 
 describe("PREFS transcribes docs/07 §8.5", () => {
-  it("declares exactly the seventy-three §8.5 rows that ship — Phase 1's twelve, P2-T05's semanticscholar.keyPresent, P3-T32's fifty, the owner's gemini.paidTier, P4-T02's five, P5-T02's three and P4-T21's one — and no others", () => {
+  it("declares exactly the eighty-one §8.5 rows that ship — Phase 1's twelve, P2-T05's semanticscholar.keyPresent, P3-T32's fifty, the owner's gemini.paidTier, P4-T02's five, P5-T02's three, P4-T21's one and P6-T02's eight — and no others", () => {
     // The card's Do NOT: "do not add a preference that docs/07 §8.5 does not
     // declare". An extra entry fails here, not in review. Phase 1 pinned this
     // at twelve; `P2-T05` grew it by the one row `docs/07` §8.5 and §11.1
@@ -540,9 +566,10 @@ describe("PREFS transcribes docs/07 §8.5", () => {
     // The owner added the hidden `report.enabled` (2026-10-29, item 307(d));
     // `P4-T20` removed it (2026-11-02), as that decision said it would.
     // `P5-T02` added the three rows Phase 5 reads (2026-11-02), and `P4-T21`
-    // the paused-job notice's record the same day (item 332(b)).
-    expect(SECTION_8_5).toHaveLength(73);
-    expect(new Set(SECTION_8_5.map((r) => r.name)).size).toBe(73);
+    // the paused-job notice's record the same day (item 332(b)). `P6-T02`
+    // added the eight rows Phase 6 reads (2026-11-16).
+    expect(SECTION_8_5).toHaveLength(81);
+    expect(new Set(SECTION_8_5.map((r) => r.name)).size).toBe(81);
     expect([...PREF_NAMES].sort()).toEqual(
       SECTION_8_5.map((row) => row.name).sort(),
     );
@@ -1025,6 +1052,82 @@ describe("getPref coerces and falls back", () => {
     }
   });
 
+  // P6-T02 (2026-11-16): the eight rows Phase 6 reads.
+
+  it("reads the eight Phase 6 rows back as their §8.5 defaults on a clean profile: no TTS model ID, audio hidden (P6-T02)", () => {
+    setPrefStore(createMemoryPrefStore({}));
+    expect(getPref("ttsVoice")).toBe("Charon");
+    expect(getPref("ttsLanguage")).toBe("auto");
+    // The card's Do NOT: no TTS model ID ships as a default (docs/04 §2.2).
+    expect(getPref("ttsModel")).toBe("");
+    expect(getPref("ttsTargetMinutes")).toBe(0);
+    expect(getPref("ttsOutputFormat")).toBe("wav");
+    expect(getPref("ttsLinkedFileDir")).toBe("");
+    expect(getPref("geminiTierAnswer")).toBe("");
+    expect(getPref("audioEnabled")).toBe(false);
+  });
+
+  it("reads tts.outputFormat as wav whatever is stored: v1.0 writes WAV only (plan/09 §0.4 line 6)", () => {
+    for (const stored of ["mp3", "ogg", "WAV", 1]) {
+      setPrefStore(createMemoryPrefStore({ "tts.outputFormat": stored }));
+      expect(getPref("ttsOutputFormat"), String(stored)).toBe("wav");
+    }
+  });
+
+  it("keeps tts.targetMinutes to 0 or 1–60 and tts.language to auto, en or ko (P6-T02)", () => {
+    setPrefStore(createMemoryPrefStore({ "tts.targetMinutes": "12" }));
+    expect(getPref("ttsTargetMinutes")).toBe(12);
+    setPrefStore(createMemoryPrefStore({ "tts.targetMinutes": 60 }));
+    expect(getPref("ttsTargetMinutes")).toBe(60);
+    for (const stored of [61, -1, "auto"]) {
+      setPrefStore(createMemoryPrefStore({ "tts.targetMinutes": stored }));
+      expect(getPref("ttsTargetMinutes"), String(stored)).toBe(0);
+    }
+    setPrefStore(createMemoryPrefStore({ "tts.language": "ko" }));
+    expect(getPref("ttsLanguage")).toBe("ko");
+    setPrefStore(createMemoryPrefStore({ "tts.language": "both" }));
+    expect(getPref("ttsLanguage")).toBe("auto");
+  });
+
+  it("reads gemini.tierAnswer as one of its four values, and anything else as not yet asked (plan/09 §0.4 line 18)", () => {
+    for (const answer of ["paid", "free", "unknown"]) {
+      setPrefStore(createMemoryPrefStore({ "gemini.tierAnswer": answer }));
+      expect(getPref("geminiTierAnswer")).toBe(answer);
+    }
+    setPrefStore(createMemoryPrefStore({ "gemini.tierAnswer": "yes" }));
+    expect(getPref("geminiTierAnswer")).toBe("");
+    // The answer and the declaration are separate rows: writing one does not
+    // set the other (P6-T15 writes both when the answer is "paid").
+    setPrefStore(createMemoryPrefStore({ "gemini.tierAnswer": "paid" }));
+    expect(getPref("geminiPaidTier")).toBe(false);
+  });
+
+  it("ships no tts.provider: struck in §8.5, and in none of PREFS, PREF_KEYS or addon/prefs.js (owner, plan/00 §6 item 378(c))", () => {
+    expect(Object.keys(PREFS)).not.toContain("ttsProvider");
+    expect(Object.values(PREF_KEYS)).not.toContain("tts.provider");
+    expect(readPrefsJs().map((line) => line.key)).not.toContain("tts.provider");
+    // §8.5 still carries the row, struck, so readSection85 does not read it.
+    expect(readSection85().has("tts.provider")).toBe(false);
+    const doc = readRepoFile("docs/07-architecture-and-data-model.md");
+    expect(doc).toContain("| ~~⚠ `tts.provider`~~ |");
+  });
+
+  it("binds no Phase 6 row in the preferences pane: the pane's audio controls are Phase 7's (plan/09 §0.4 line 11)", () => {
+    const pane = readRepoFile("addon/content/preferences.xhtml");
+    for (const key of [
+      "tts.voice",
+      "tts.language",
+      "tts.model",
+      "tts.targetMinutes",
+      "tts.outputFormat",
+      "tts.linkedFileDir",
+      "gemini.tierAnswer",
+      "audio.enabled",
+    ]) {
+      expect(pane.includes(key), key).toBe(false);
+    }
+  });
+
   it("binds no Phase 5 row in the preferences pane: two are hidden, and the third is the related window's checkbox (P5-T02)", () => {
     const pane = readRepoFile("addon/content/preferences.xhtml");
     for (const key of [
@@ -1239,6 +1342,34 @@ describe("D5: no credential can reach a preference", () => {
     }
   });
 
+  it("gives Phase 6's eight rows no secret flag, no key-ish name and no credential-shaped default (P6-T02)", () => {
+    // The card's step 2: "including the D5 block (no row's name or default can
+    // hold a credential)". KEYISH_FIELD is applied as `P4-T02`'s test applies
+    // it; `redact` is the one redactor (src/core/errors.ts).
+    const phase6 = [
+      "ttsVoice",
+      "ttsLanguage",
+      "ttsModel",
+      "ttsTargetMinutes",
+      "ttsOutputFormat",
+      "ttsLinkedFileDir",
+      "geminiTierAnswer",
+      "audioEnabled",
+    ] as const;
+    for (const name of phase6) {
+      const def: PrefDef<unknown> = PREFS[name];
+      expect(def.secret, `${def.key} must not be secret`).toBeUndefined();
+      expect(KEYISH_FIELD.test(def.key), `${def.key} is key-ish`).toBe(false);
+      expect(KEYISH_FIELD.test(name), `${name} is key-ish`).toBe(false);
+      const text = String(def.default);
+      expect(redact(text), `${def.key} default`).toBe(text);
+      // Every closed value set is short words, never a credential.
+      for (const value of def.values ?? []) {
+        expect(redact(String(value)), `${def.key} value`).toBe(String(value));
+      }
+    }
+  });
+
   it("ships no default that the logger's redaction would treat as a credential", () => {
     // `redact` applies `docs/09` §2.1's KEY_PATTERNS; a default it changes is
     // a credential shipped in source.
@@ -1397,8 +1528,9 @@ describe("addon/prefs.js agrees with PREFS", () => {
     // since 2026-10-26: P4-T02's four `report.*` rows; 31 on 2026-10-29: the
     // hidden `report.enabled` (item 307(d)); 30 again since 2026-11-02, when
     // `P4-T20` removed it; 33 the same day: P5-T02's three; 34 the same day:
-    // P4-T21's report.pausedNoticeShown.
-    expect(NO_PREF_LINE).toHaveLength(34);
+    // P4-T21's report.pausedNoticeShown; 38 since 2026-11-16: P6-T02's four
+    // (tts.language, tts.linkedFileDir, gemini.tierAnswer, audio.enabled).
+    expect(NO_PREF_LINE).toHaveLength(38);
     for (const key of NO_PREF_LINE) expect(keys.has(key), key).toBe(true);
   });
 

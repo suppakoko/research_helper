@@ -274,7 +274,7 @@ and before **2026-12-01** if it is to serve as `docs/04` §4.2's re-verification
 | Field | Value |
 |---|---|
 | **ID** | `P6-T01` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-16, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T01.md`. |
 | **Depends on** | none |
 | **Blocks** | `P6-T05`, `P6-T07`, `P6-T09`, `P6-T11`, `P6-T12`, `P6-T13`, `P6-T16` |
 | **Retires** | none |
@@ -355,6 +355,18 @@ npm run typecheck && npm run lint:check && npx eslint .
 (`P6-T05`), `src/pipeline/audioReport/*` (`P6-T07`–`P6-T16`), `reportViewModel.ts` (`P6-T17`). Types
 only, so no test file; the cards that use the shapes pin them.
 
+**Findings, 2026-11-16 — done; all three criteria pass; full report at `plan/reports/P6-T01.md`.**
+`src/model/audio.ts` holds `SpokenScript`, `AudioPlan`, `AudioChunk`, `AudioRunInput`, `AudioRunOutcome` and
+their parts, importing only `Usage`; `src/tts/types.ts` gains `TTSProvider` and `AudioArtifact.usage` with every
+spike export kept; `docs/07` §2.2, §4.4, §5.2, §6.5, §7.4, §12.4 and a new §12.6 (the `audioReport` job's own
+state machine) carry dated notes, and `docs/11`'s Phase 6 modules read `chunk.ts`. Seven coordinator decisions
+under item 313, of which three change what later cards build against: `maxInputChars(language)` is a method
+(`P6-T05`, `P6-T09`), `resolveModel` is on the interface (`P6-T05`, `P6-T16`), and `AudioAttachmentMode` is
+`"imported" | "linked"`, the values `chooseAttachmentMode` returns (`P6-T13`). Three findings, none carded: the
+`unknown` alias for `TTSProvider` in `src/pipeline/types.ts`; `docs/13` §2's stale `ssml.ts` row; and
+`index:derive` cannot read an `IN PROGRESS` state. Checks: typecheck, lint, eslint, 7,808 unit and 84 contract
+tests, build; typings unchanged.
+
 ---
 
 ### P6-T02 — Preference rows Phase 6 reads
@@ -362,7 +374,7 @@ only, so no test file; the cards that use the shapes pin them.
 | Field | Value |
 |---|---|
 | **ID** | `P6-T02` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-16, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T02.md`. |
 | **Depends on** | none |
 | **Blocks** | `P6-T07`, `P6-T08`, `P6-T13`, `P6-T15`, `P6-T16`, `P6-T17` |
 | **Retires** | none |
@@ -417,6 +429,17 @@ npm run typecheck && npm run lint:check && npm run test:unit -- prefs
 `gemini.paidTier`), `P6-T16` (`audio.enabled`, `tts.voice`, `tts.model`), `P6-T17`; all read through
 `getPref` in `src/bootstrap/` or a pipeline's injected settings, as Phase 5's rows are.
 
+**Findings, 2026-11-16 — done; all three criteria pass; full report at `plan/reports/P6-T02.md`.**
+`docs/07` §8.5 was edited first: `tts.provider` struck in place, `tts.outputFormat` allows `wav` alone, the ⚠
+cleared on `tts.language` and `tts.linkedFileDir`, and `gemini.tierAnswer` (beside `gemini.paidTier`) and the
+hidden `audio.enabled` added, each with a dated note. `PREFS` and `PREF_KEYS` hold the eight rows
+(`tts.targetMinutes` as `min` 0, `max` 60; `tts.voice` with no closed list), and `addon/prefs.js` has lines for the
+four `docs/01` §7.2 lists. The schema test now counts 81 rows, holds that `tts.provider` is in none of the three,
+and gives the eight rows a D5 check. Five coordinator decisions under item 313; two findings, none carded:
+`docs/01` §7.2's comments on `tts.outputFormat` and `tts.model` are stale, and `typings/prefs.d.ts` gained the
+four keys on build, as expected. Checks: typecheck, lint, eslint, 7,827 unit and 84 contract tests, build, and
+three integration runs of 355 passed.
+
 ---
 
 ### P6-T03 — Recorder's Gemini TTS path and synthetic stand-ins
@@ -424,7 +447,7 @@ npm run typecheck && npm run lint:check && npm run test:unit -- prefs
 | Field | Value |
 |---|---|
 | **ID** | `P6-T03` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-16, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T03.md`. |
 | **Depends on** | none |
 | **Blocks** | `P6-T04`, `P6-T05` |
 | **Retires** | none |
@@ -487,6 +510,18 @@ npm run typecheck && npm run lint:check && npm run test:unit -- recordFixtures
 **Notes.** Needs: `P3-T30`. Caller: the owner's run in `P6-T04`; the stand-ins are read by
 `test/contract/tts/geminiTts.contract.test.ts` (`P6-T05`) and `test/unit/pipeline/audioScript.test.ts`
 (`P6-T07`).
+
+**Findings, 2026-11-16 — done; all three criteria pass; full report at `plan/reports/P6-T03.md`.** The recorder has
+a `gemini-tts` source (`runTtsRecorder`, `TTS_SCENARIOS`, seven scenarios) behind the three locks, with the key read
+through `LLM_KEY_ENV_VARS` alone and sent only as `x-goog-api-key`. Its `--dry-run` exits 0 without a key and states
+five live requests, two billed, at most $0.0154. The two script scenarios (`LLM_AUDIO_SCRIPT_SCENARIOS`) are on the
+LLM path, named only with `--only`, and stay pending until `P6-T06`'s files exist. Every scenario has a generated
+stand-in with a `"synthetic": true` sidecar, and a synthetic run never writes over a recording. The redaction test
+(54 tests in the file) refuses `x-goog-api-key`, `key=`, the key's value and bodies over 300 KB, and two mutants were
+caught. Nine coordinator decisions under item 313, one of them an edit outside `Files` (`_llmContract.ts` ignores
+the script files). Two findings, none carded: `docs/13` §2.1 still lists a `src/tts/ssml.ts`, and §3.1's
+`src/tts/audio.ts` mention is now struck. Checks: typecheck, lint, eslint, 7,845 unit and 84 contract tests, build;
+no integration run, since nothing that runs inside Zotero changed.
 
 ---
 
@@ -631,7 +666,7 @@ decided on 2026-11-16.
 | Field | Value |
 |---|---|
 | **ID** | `P6-T06` |
-| **State** | `TODO` |
+| **State** | `TODO` — partly built 2026-11-16; blocked on an owner decision (`plan/00` §6 item 382): the prompts cannot load as `docs/12` prints them. Only the owner sets `DONE`. Report at `plan/reports/P6-T06.md`. |
 | **Depends on** | none |
 | **Blocks** | `P6-T07`, `P6-T08` |
 | **Retires** | none |
@@ -675,6 +710,18 @@ npm run typecheck && npm run lint:check && npm run test:unit -- prompts
 ```
 
 **Notes.** Needs: Phase 3's registry. The register (§0.4 line 8) is already in both prompts' rules.
+
+**Findings, 2026-11-16 — blocked at an owner decision; the second criterion passes, the first cannot; full report at
+`plan/reports/P6-T06.md`.** Both system prompts hold `{{TARGET_MINUTES}}` (§13 rule 11, §14 rule 12), and the
+registry refuses any placeholder in a system text (`docs/12` §1.1 rule 2, kept by the owner in item 290(b)). The
+card forbids rewording, so the prompts cannot be both verbatim and loadable. The two files are written verbatim and
+held unregistered in `src/prompts/pending/`, as `theme-cluster.v1.0.0.md` was held. They sit one folder down because
+eight pipeline test files load every `.md` directly in `src/prompts/`. `index.ts` and `bundled.ts` are unchanged.
+The test proves the parser refuses each file for exactly two reasons, the unregistered id and the placeholder, so
+nothing else stands in the way. The question, with a draft sentence for each prompt, is `plan/00` §6 item 382 and
+`docs/12` §13's note of this date. `P6-T03`'s recorder now counts a script scenario as ready only when its file
+loads. Six coordinator decisions under item 313. Checks: typecheck, lint, eslint, 7,855 unit and 84 contract tests,
+build with unchanged typings; no integration run, since nothing that runs inside Zotero changed.
 
 ---
 

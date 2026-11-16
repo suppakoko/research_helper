@@ -1,0 +1,15 @@
+{
+  "scenario": "audio-script-en",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-11-16T09:30:09.555Z",
+  "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+  "method": "POST",
+  "toolVersion": "0.0.2",
+  "synthetic": true,
+  "syntheticReason": "Stand-in, not evidence (P6-T03): a hand-written spoken script for the recorder's synthetic report, so P6-T07 and P6-T08 can be tested before the owner records this scenario (P6-T04), whose run replaces it. The token counts are placeholders, not measurements.",
+  "redactions": [
+    "synthetic: nothing was received, nothing to redact"
+  ],
+  "provider": "openrouter",
+  "page": 1
+}

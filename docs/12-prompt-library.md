@@ -1437,6 +1437,14 @@ Plain text. Validated in code before it reaches TTS:
 
 `temperature: 0.4` — this is the one genuinely stylistic task in the plugin, and low temperature produces stilted, list-like narration. `max_tokens: 2500`.
 
+> **Found 2026-11-16 (`plan/09` `P6-T06`) — this prompt cannot load as printed, and neither can §14's.** System rule 11 above holds `{{TARGET_MINUTES}}` twice, and §14's system rule 12 holds it once. The registry refuses any placeholder in a system text (§1.1 rule 2; §17.3's decision note of 2026-10-20, item 1). `THEME_CLUSTER` hit the same rule (§8's note of 2026-10-26), and the owner kept it (`plan/00` §6 item 290(b)). The text cannot be reworded without the owner, and the Korean wording is the owner's (§19 item 4). So `src/prompts/pending/audio-script-en.v1.0.0.md` and `audio-script-ko.v1.0.0.md` hold §13 and §14 **verbatim and unregistered** until the owner decides (`plan/00` §6 item 382). They are not in `PROMPT_IDS` or `bundled.ts`, because one file that does not load makes `createPromptRegistry` throw for every prompt. They sit one folder down because eight pipeline test files build a registry from every `.md` directly in `src/prompts/`. Once decided, they move up a level. A test holds that the registry refuses each file for two reasons only: the id is not registered, and the system text has a placeholder.
+>
+> Both user prompts already state the target length (`Target length: about {{TARGET_MINUTES}} minutes.`, `목표 길이: 약 {{TARGET_MINUTES}}분.`) and use all seven variables. So, as with item 290(b), the change needed is in the system text alone, one sentence in each prompt. **Draft for the owner, not adopted:**
+> - §13 rule 11 would read: "Target the length stated in the request, roughly 150 words for each minute. This is far shorter than the report: it is a briefing, not a reading."
+> - §14 rule 12 would read: "목표 분량은 요청에 적힌 길이만큼의 말입니다. 보고서보다 훨씬 짧습니다. 이것은 낭독이 아니라 브리핑입니다."
+>
+> Neither file has shipped, so the change would stay at version `1.0.0` (§17.5 governs released files).
+
 ---
 
 ## 14. `AUDIO_SCRIPT_KO`
@@ -1508,6 +1516,8 @@ Plain Korean text. Same **marker** validation as `AUDIO_SCRIPT_EN` — reject on
 ### Model / temperature
 
 `temperature: 0.4`, `max_tokens: 3500`.
+
+> **Found 2026-11-16 (`plan/09` `P6-T06`):** system rule 12 above holds `{{TARGET_MINUTES}}`, which the registry refuses (§1.1 rule 2). The file is held verbatim and unregistered, and a draft rewording of rule 12 waits for the owner; see §13's note of this date and `plan/00` §6 item 382.
 
 ---
 

@@ -96,6 +96,8 @@ export const PREF_KEYS = {
   privacyEgressAcknowledged: "privacy.egressAcknowledged",
   // The Gemini key declared paid (owner, 2026-10-22, plan/00 §6 item 269(b)).
   geminiPaidTier: "gemini.paidTier",
+  // The once-asked billing answer (P6-T02; plan/00 §6 item 378(b)).
+  geminiTierAnswer: "gemini.tierAnswer",
   llmTokenEstimateCalibration: "llm.tokenEstimateCalibration",
 
   // Summarization (docs/07 §8.5, "Summarization"; P3-T32).
@@ -125,6 +127,16 @@ export const PREF_KEYS = {
   reportPerPaperNotes: "report.perPaperNotes",
   // P4-T21 (owner, plan/00 §6 item 332(b)): not user-visible.
   reportPausedNoticeShown: "report.pausedNoticeShown",
+  // P6-T02 (2026-11-16): the rows Phase 6 reads. No `tts.provider` (struck in
+  // docs/07 §8.5; plan/00 §6 item 378(c)).
+  ttsVoice: "tts.voice",
+  ttsLanguage: "tts.language",
+  ttsModel: "tts.model",
+  ttsTargetMinutes: "tts.targetMinutes",
+  ttsOutputFormat: "tts.outputFormat",
+  ttsLinkedFileDir: "tts.linkedFileDir",
+  // Hidden until P6-T19 (plan/09 §0.4 line 20).
+  audioEnabled: "audio.enabled",
 
   // Related papers & recommendations (docs/07 §8.5; P5-T02).
   relatedLinkToSeed: "related.linkToSeed",

@@ -817,7 +817,7 @@ Three modes, selectable globally and overridable per collection. The global defa
 | Models with `dataPolicy: "unknown"` | **Refused** | Warned | Allowed |
 | Models that may train on input | **Refused** | **Refused** | Warned, requires confirmation |
 | OpenRouter routing | `data_collection: "deny"` + `zdr: true` | `data_collection: "deny"` | `data_collection: "deny"` (still) |
-| Gemini (any tier) | **Refused**, unless the key is declared paid; then allowed (item 270) | **Refused**, unless the key is declared paid (`gemini.paidTier`, `07-architecture-and-data-model.md` §8.5); then allowed. **Audio (TTS) jobs: corrected 2026-11-16** — a free or unknown key is warned and needs confirmation, as in full mode (note below) | Allowed. A free or unknown key is warned and needs confirmation, as a model that may train on input. Every job shows the free-tier warning, or the declared-paid reminder instead (§3.6 item 3) |
+| Gemini (any tier) | **Refused**, unless the key is declared paid; then allowed (item 270) | **Refused**, unless the key is declared paid (`gemini.paidTier`, `07-architecture-and-data-model.md` §8.5); then allowed. **Audio (TTS) jobs: corrected 2026-11-16** — a free or unknown key is warned and needs confirmation, as in full mode (note below). **Chat, summary and report jobs: decided the same 2026-11-16, later** (item 381, note below; built by `plan/10` `P7-T32`) | Allowed. A free or unknown key is warned and needs confirmation, as a model that may train on input. Every job shows the free-tier warning, or the declared-paid reminder instead (§3.6 item 3) |
 | Cached prompts/responses stored locally | Metadata only | Yes | Yes |
 
 > **Corrected 2026-10-22 (owner, `plan/00` §6 item 269(b)–(c)).** The Gemini row read "Gemini free tier —
@@ -845,6 +845,15 @@ Three modes, selectable globally and overridable per collection. The global defa
 > Gemini model) in balanced mode with a free or unknown key follows the same change; until the owner says so, the
 > balanced cell stands for chat as written, and `assertModelAllowed` is unchanged. This is an open line in
 > `plan/reports/P7-decomposition.md`.
+
+> **Decided 2026-11-16, later (owner, `plan/00` §6 item 381; `plan/10` §0.4 line 20): balanced mode and Gemini
+> chat.** The open line above is answered **yes**: a Gemini **chat, summary or report** call in balanced mode follows
+> the audio rule. A free or unknown key shows the free-tier warning (§3.6 item 3) and the call proceeds **only after
+> the user confirms**; **only strict mode refuses**. A key declared paid is allowed in every mode, with the one-line
+> reminder, as before. So the Gemini row's balanced cell, read with this note, is "warned, requires confirmation,
+> unless the key is declared paid" for every Gemini job, and it differs from the general "may train on input" row
+> above, which still refuses other providers' such models in balanced mode. **Not built yet:** `assertModelAllowed`
+> (`src/pipeline/shared/privacyPolicy.ts`) still refuses until `plan/10` `P7-T32` changes it, in that one place.
 
 **"Abstract-only" is the floor, not an option.** Even strict mode sends abstracts, because a summarization tool that sends no content is not a summarization tool. What strict mode guarantees is: *nothing beyond the published bibliographic record leaves your machine, and it only goes to endpoints that contractually do not train on it and do not retain it.* That is a defensible, explainable line.
 
@@ -1197,6 +1206,7 @@ Verify each before release. Items marked **[BLOCKER]** must not ship unresolved.
 ### Data egress
 
 - [ ] **[BLOCKER]** No content is sent to any provider without an explicit user action. No background, idle-time, or on-import processing.
+  *Decided 2026-11-16 (owner, `plan/00` §6 item 381; `plan/10` §0.4 line 23): this blocker stands as written for v1.0.* The `autoSummarize` preference (`07-architecture-and-data-model.md` §8.5), which summarizes the selected item without a click when on, **ships `false` and is hidden from the preferences pane**: no control in the pane or elsewhere in the UI sets it (`plan/10` `P7-T08` step 2 builds none; `P7-T16` step 2 checks). An opt-in automatic summarizer is a later-release candidate, to be weighed against this line then.
 - [ ] **[BLOCKER]** User notes and PDF annotations are not sent in any default configuration.
 - [ ] Collection and tag names are not sent by default.
 - [ ] The pre-flight dialog states destination, model, item count, content scope, privacy mode, and cost.
@@ -1227,7 +1237,8 @@ Verify each before release. Items marked **[BLOCKER]** must not ship unresolved.
 ### Supply chain and distribution
 
 - [ ] **[BLOCKER]** `update_url` is HTTPS with a validating certificate.
-- [ ] **[BLOCKER]** Every `update.json` entry has a `sha256:` `update_hash`, generated in CI, never transcribed by hand.
+- [ ] **[BLOCKER]** Every `update.json` entry has an `update_hash` that is a CI-generated sha256 or sha512 hash, never transcribed by hand.
+  *Corrected 2026-11-16 (owner, `plan/00` §6 item 381; `plan/10` §0.4 line 19): this line read "has a `sha256:` `update_hash`, generated in CI". A CI-generated `sha512:` hash meets the blocker — the property it protects is a hash generated in CI, never by hand, that Zotero checks — so the scaffold's `sha512:` stands and no `sha256:` step is added (`plan/10` `P7-T21` step 3; `P7-T16` checks the built output against this wording). The note below is kept as the record of the question.*
   *Noted 2026-11-16 (`plan/00` §6 item 380): this line and the measured build disagree. `13-testing-build-and-release.md` §6.3 (corrected 2026-09-16, `P0-T27`) records that the scaffold writes `sha512:` and offers no algorithm option, and Zotero installs it. Whether this blocker is met by a CI-generated `sha512:` hash (the property it protects — a hash generated in CI, never by hand, that Zotero checks) or needs a `sha256:` step of the project's own is an open line for the owner (`plan/reports/P7-decomposition.md`); `plan/10` `P7-T16` records the answer here and `P7-T21` builds it. Until then the line stands as written.*
 - [ ] `update_link` pins an exact version path; no `latest` redirect.
 - [ ] Lockfile committed; releases built with `npm ci`; runtime dependencies pinned to exact versions.

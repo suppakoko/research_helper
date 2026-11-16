@@ -1,0 +1,17 @@
+{
+  "scenario": "error-invalid-key",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-11-16T09:35:23.776Z",
+  "endpoint": "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+  "method": "POST",
+  "toolVersion": "0.0.2",
+  "synthetic": true,
+  "syntheticReason": "Stand-in, not evidence (P6-T03): docs/03 §11.5's auth row, HTTP 400 API_KEY_INVALID as the Gemini chat adapter reads it; the message wording is assumed. The owner's run (P6-T04) replaces it.",
+  "redactions": [
+    "synthetic: nothing was received, nothing to redact"
+  ],
+  "source": "gemini-tts",
+  "provider": "gemini",
+  "voice": "Charon",
+  "page": 1
+}

@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json"
+  },
+  "body": "{\n  \"id\": \"gen-synthetic-audio-script-en\",\n  \"object\": \"chat.completion\",\n  \"model\": \"synthetic-model\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": \"This is a short spoken briefing on the coastal sea-level monitoring collection, a synthetic test set of three papers from twenty twenty-two to twenty twenty-five. The written report holds the full citations. Here is the main point. Tide gauges sit on ground that slowly sinks. So a gauge that is not corrected makes local sea-level rise look faster than it really is. Testa and colleagues, twenty twenty-five, corrected twelve gauges with nearby satellite positioning stations. The middle correction was about one point eight millimetres a year. Satellite measurements of the sea surface agree with the corrected gauges to within half a millimetre a year. Now, where the evidence disagrees. One study treats the sinking as steady. Another, from Exemplo and colleagues, finds that it changed after twenty twenty. Finally, what is missing. Very few studies cover the Southern Hemisphere, and this set holds only three papers. The written report has the details and every citation.\"\n      },\n      \"finish_reason\": \"stop\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 900,\n    \"completion_tokens\": 400,\n    \"total_tokens\": 1300\n  }\n}\n"
+}

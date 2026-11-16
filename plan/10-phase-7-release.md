@@ -5,7 +5,8 @@
 > the release facts already settled, and asked for one coordinator default to be recorded (`docs/09`
 > §8 item 7). Every card is `TODO`. Like `plan/09`, this file has had **no independent review** yet;
 > the author's report is `plan/reports/P7-decomposition.md`, and §0.4 lists the lines the owner still
-> has to answer. The card sum replaced `docs/11`'s scaled 21–29 d on 2026-11-16 at the five places
+> has to answer. *Updated 2026-11-16, later (`plan/00` §6 item 381): the owner answered §0.4's lines 18–23; no
+> line is open now, and line 20 added `P7-T32` (0.75 d), so the file holds 32 cards summing to 29.25 d.* The card sum replaced `docs/11`'s scaled 21–29 d on 2026-11-16 at the five places
 > `plan/README.md` §7 names (`docs/11` §1–§2, `plan/00` §1, `plan/05` §4, now a pointer here).
 >
 > **What this file is.** The task-card decomposition of `docs/11-implementation-roadmap.md` §1
@@ -77,12 +78,14 @@ documents, `plan/reports/` and the tree:
 mitigation by `P7-T31`; R-15 was already retired on 2026-09-16 (`P0-T27`) and `P7-T30` re-confirms it
 on a real release; R-1 moves to ongoing handling with `P7-T22`'s job.
 
-**Effort.** **28.50 developer-days over 31 cards** (§1), so the band these cards imply is
-**28.50–40 d** (28.50 × 1.4 = 39.9 → 40). Against the scaled 21–29 d `docs/11` published before this
-file, the low end is **+36 %** (28.50 ÷ 21 = 1.357) and 2 % below the scaled top (28.50 ÷ 29 = 0.98)
+**Effort.** **29.25 developer-days over 32 cards** (§1), so the band these cards imply is
+**29.25–41 d** (29.25 × 1.4 = 40.95 → 41). Against the scaled 21–29 d `docs/11` published before this
+file, the low end is **+39 %** (29.25 ÷ 21 = 1.393) and 1 % above the scaled top (29.25 ÷ 29 = 1.009)
 — above the ~30 % `plan/README.md` §7 calls a signal to re-estimate the phase in `docs/11`, which was
-done. Against the old 10–14 d band the low end is **+104 %** (28.50 ÷ 14 = 2.04). **Propagated
-2026-11-16** to `docs/11` §1–§2, `plan/00` §1 and `plan/05` §4. §3 says where the days went and where
+done. Against the old 10–14 d band the low end is **+109 %** (29.25 ÷ 14 = 2.09). **Propagated
+2026-11-16** to `docs/11` §1–§2, `plan/00` §1 and `plan/05` §4. *Updated 2026-11-16, later (`plan/00` §6
+item 381): this read 28.50 d over 31 cards, 28.50–40 d, +36 %, 2 % below the scaled top and +104 %, before
+`P7-T32` (0.75 d) was added for §0.4 line 20; propagated the same day to the same five sites.* §3 says where the days went and where
 the sum is still likely low.
 
 ### Phase definition of done
@@ -200,17 +203,19 @@ re-decided. Each card named carries the decision as a `DECIDED` block or a step.
 | 16 | Every Phase 7 string's Korean goes through `G-41`'s review page process, which `G-31` folds into for the prompts and `README.ko.md` | coordinator | `P7-T05`, `P7-T20`; `plan/06` `G-31` marked 2026-11-16 |
 | 17 | The debug output for the redaction audit is captured from an integration run on recorded fixtures with `logLevel` `debug`, not from a keyed run | coordinator | `P7-T14` |
 
-**Open lines for the owner.** Each card that depends on one says so; a step that depends on an open
-line is not executed on the recommendation (`plan/04` §0.2 item 10).
+**Lines 18–23, answered 2026-11-16.** These were open lines for the owner until the owner answered them on
+2026-11-16, recorded as `plan/00` §6 item 381. No line of this table is open any more; the steps that stopped on
+them (`plan/04` §0.2 item 10) may now be executed as the answer says. Every answer below is **DECIDED 2026-11-16
+(owner, `plan/00` §6 item 381)**; the recommendation each line carried is kept in item 380(h).
 
-| Line | Question | Recommendation | Card that stops |
+| Line | Question | Answer, DECIDED 2026-11-16 (owner, `plan/00` §6 item 381) | Where |
 |---|---|---|---|
-| 18 | `docs/13` §8.9 asks that the scheduled `live-contract` job was green within two weeks. It needs a `--verify` mode in `scripts/record-fixtures.ts` that does not exist, and repository secrets holding real keys. Build it for v1.0, or waive the line? | **Defer** the job to a later release and record the §8.9 line as waived, with the reason: no secret-holding job exists, and the fixtures' age line (180 days) still applies | `P7-T24` (that row only) |
-| 19 | `docs/09` §7's `[BLOCKER]` asks for a `sha256:` `update_hash`; the scaffold writes `sha512:` and Zotero installs it (`docs/13` §6.3, corrected 2026-09-16). Is a CI-generated `sha512:` hash the blocker met, or must CI add `sha256:`? | Accept `sha512:` as meeting the blocker's intent (generated in CI, checked by Zotero) and correct the line's wording with a dated note | `P7-T16` step 3, `P7-T21` step 3 |
-| 20 | Item 379 (line 27) changed balanced mode for **audio** with a free or unknown Gemini key: warn and confirm. Does Gemini **chat** in balanced mode follow? | Yes, the same rule, for one consistent table; `assertModelAllowed` changes in one place | none in this file — a later card if the owner says yes (`docs/09` §3.5 note of 2026-11-16) |
-| 21 | `docs/11` R-19 (PDF extraction quality) — whether a later phase validates at scale was carried to Phase 7 (`plan/00` §6 item 326(g)) | Not in v1.0: the held-out IMRaD measurement (`plan/00` items 375–377) is the record; the README's known-limitations section states it | none — `P7-T19` writes the limitation either way |
-| 22 | `P3-T37` is deferred but still **Blocks** `P3-T31` (Phase 3's acceptance run). May `P3-T31` run without it? | Yes: drop the edge with a dated note on both cards, since `P3-T37` cannot run before `G-09` | none in this file — `plan/04` |
-| 23 | `autoSummarize` exists (ships `false`) against `docs/09` §7's `[BLOCKER]` "no background, idle-time, or on-import processing". Is an opt-in on-import summarizer allowed? | Keep it off and hidden in v1.0 unless the owner says the opt-in satisfies "explicit user action"; `P7-T16` checks what the switch does | `P7-T16` step 2 (that line only) |
+| 18 | `docs/13` §8.9 asks that the scheduled `live-contract` job was green within two weeks. It needs a `--verify` mode in `scripts/record-fixtures.ts` that does not exist, and repository secrets holding real keys. Build it for v1.0, or waive the line? | **Deferred.** The scheduled `live-contract` job is a later-release candidate, and `docs/13` §8.9's line is **waived for v1.0**, with the reason: no secret-holding job exists. The fixtures' 180-day age rule (the §8.9 line before it) still applies | `P7-T24` step 3; `docs/13` §8.9 marked 2026-11-16 |
+| 19 | `docs/09` §7's `[BLOCKER]` asks for a `sha256:` `update_hash`; the scaffold writes `sha512:` and Zotero installs it (`docs/13` §6.3, corrected 2026-09-16). Is a CI-generated `sha512:` hash the blocker met, or must CI add `sha256:`? | **A CI-generated `sha512:` hash meets the blocker.** Its wording is corrected to "a CI-generated sha256 or sha512 hash", with a dated note | `P7-T16` step 3, `P7-T21` step 3; `docs/09` §7 corrected 2026-11-16 |
+| 20 | Item 379 (line 27) changed balanced mode for **audio** with a free or unknown Gemini key: warn and confirm. Does Gemini **chat** in balanced mode follow? | **Yes.** A Gemini chat, summary or report call in balanced mode follows the audio rule: a free or unknown key shows the warning and proceeds only after the user confirms; only strict mode refuses. `assertModelAllowed` changes in one place | `P7-T32` (added 2026-11-16, 0.75 d); `docs/09` §3.5 marked 2026-11-16 |
+| 21 | `docs/11` R-19 (PDF extraction quality) — whether a later phase validates at scale was carried to Phase 7 (`plan/00` §6 item 326(g)) | **Not in v1.0.** No PDF-extraction-quality validation at scale; the held-out IMRaD measurement (`plan/00` §6 items 375–377) is the record, and the README's known-limitations section states it | `P7-T19` step 1 |
+| 22 | `P3-T37` is deferred but still **Blocks** `P3-T31` (Phase 3's acceptance run). May `P3-T31` run without it? | **Yes.** The `P3-T37` → `P3-T31` edge is dropped, with a dated note on both cards | `plan/04` `P3-T31`, `P3-T37` |
+| 23 | `autoSummarize` exists (ships `false`) against `docs/09` §7's `[BLOCKER]` "no background, idle-time, or on-import processing". Is an opt-in on-import summarizer allowed? | **Not in v1.0.** `autoSummarize` stays **off and hidden from the preferences pane**; the `[BLOCKER]` stands as written; an opt-in automatic summarizer is a later-release candidate | `P7-T08` step 2, `P7-T16` step 2; `docs/09` §7 and `docs/07` §8.5 marked 2026-11-16 |
 
 ---
 
@@ -249,9 +254,15 @@ line is not executed on the recommendation (`plan/04` §0.2 item 10).
 | `P7-T29` | Release checklist sign-off | 0.25 | **Yes** |
 | `P7-T30` | Publish v1.0.0 and verify the upgrade from v0.9.0 | 0.5 | **Yes** |
 | `P7-T31` | Forum post and community-list submissions | 0.25 | **Yes** |
-| | **Total** | **28.50** | 10 gates |
+| `P7-T32` | Gemini in balanced mode: warn and confirm, not refuse | 0.75 | none |
+| | **Total** | **29.25** | 10 gates |
 
-**Entry points** (no `Depends on`): `P7-T01`, `P7-T04`, `P7-T12`, `P7-T21`, `P7-T22`, `P7-T28`. They
+*Updated 2026-11-16, later (`plan/00` §6 item 381): `P7-T32` added for §0.4 line 20; the total read 28.50. It is
+a new entry point that blocks `P7-T16`, and it does not lie on the critical path below (it ends at 0.75 d, before
+`P7-T16`'s other inputs; recompute with the script after `npm run index:derive`).*
+
+**Entry points** (no `Depends on`): `P7-T01`, `P7-T04`, `P7-T12`, `P7-T21`, `P7-T22`, `P7-T28`, and `P7-T32`
+(added 2026-11-16, `plan/00` §6 item 381). They
 are documents, the spike's removal, the error audit, two workflow files and the owner's NCBI check;
 none touches a file another entry point holds, except that `P7-T04` and `P7-T12` both edit
 `src/i18n/keys.ts` and both bundles (different ids — exact-string edits).
@@ -714,7 +725,10 @@ their preferences, and every shipped default equals `docs/07` §8.5's.
    declares.
 2. Report & audio: the default report language, `tts.language`, `tts.voice` from the documented
    default voice list (no call), `tts.targetMinutes`, `tts.linkedFileDir`; the section is hidden while
-   `audio.enabled` is off. No preview button (§0.4 line 13).
+   `audio.enabled` is off. No preview button (§0.4 line 13). **No `autoSummarize` control**, although
+   `docs/07` §8.5 and `docs/08` §7.3 place one here: *DECIDED 2026-11-16 (owner, `plan/00` §6 item 381;
+   §0.4 line 23)*, it stays off and hidden from the pane in v1.0; the test asserts the pane has no
+   element bound to it.
 3. Privacy: `privacy.mode`, the full-text mode, the egress-log view `docs/08` §7.3 names; a
    placeholder for `P7-T17`'s dated retention line.
 4. A table-driven test asserts every row of `docs/07` §8.5 against `src/prefs/schema.ts`'s default;
@@ -1148,7 +1162,7 @@ Then the owner's run of the written procedure.
 |---|---|
 | **ID** | `P7-T16` |
 | **State** | `TODO` |
-| **Depends on** | `P7-T10`, `P7-T14`, `P7-T21` |
+| **Depends on** | `P7-T10`, `P7-T14`, `P7-T21`, `P7-T32` |
 | **Blocks** | `P7-T24`, `P7-T26` |
 | **Retires** | none |
 | **Implements** | `NFR-16`, `NFR-19`, part of `NFR-20` |
@@ -1168,15 +1182,21 @@ response expectation; `npm audit` shows no high-severity advisory.
   post-compromise plan with "rotate all configured API keys" first)
 - create `docs/spikes/phase-7-security-review.md` (each §7 line → evidence)
 - modify `docs/09-security-privacy-and-api-keys.md` (§7: a dated note per line resolved; the answer
-  to §0.4 line 19)
+  to §0.4 line 19 was written on 2026-11-16, item 381)
 
 **Do.**
 1. Walk §7 line by line; cite the test, grep or report that shows each line; a line without evidence
    is a finding.
 2. The "no background, idle-time, or on-import processing" `[BLOCKER]`: read what `autoSummarize`
-   does; if it can start a paid call without a click, **stop on §0.4 line 23**.
-3. The `update_hash` `[BLOCKER]`: **this step is not executed until the owner answers §0.4 line 19**;
-   then record the answer and check `P7-T21`'s output against it.
+   does and record it. *DECIDED 2026-11-16 (owner, `plan/00` §6 item 381; §0.4 line 23):* the blocker
+   stands; `autoSummarize` ships `false` and is **hidden from the preferences pane** in v1.0 (`P7-T08`
+   step 2 builds no control for it). Record as evidence that no pane control, menu or other UI can set
+   it (grep `addon/content/` and `src/ui/` for the preference key), and that it ships `false`
+   (`test/unit/prefs/schema.test.ts`); a UI path that can set it is a finding that stops the release.
+3. The `update_hash` `[BLOCKER]`: *DECIDED 2026-11-16 (owner, `plan/00` §6 item 381; §0.4 line 19):* a
+   CI-generated `sha512:` hash meets it; `docs/09` §7's wording now reads "a CI-generated sha256 or
+   sha512 hash" (corrected 2026-11-16). Check `P7-T21`'s output against that wording: the hash is
+   written by the workflow, never by hand.
 4. `npm audit --omit=dev` and the full audit; record both; a high-severity runtime advisory stops the
    release.
 5. Grep the built XPI for anything shaped like a key or token (§7's "no secret in the XPI").
@@ -1333,7 +1353,9 @@ npm run test:integration -- offline
    residual risk, the session-only Linux fallback (line 7), how to remove all content (`P7-T11`).
    Cost: NFR-5's reference workload, full text by default (D7), the ceilings as shipped (line 8).
    Known limitations: no paywalled PDFs, English and Korean only, no scheduled jobs, extraction is
-   best-effort (line 21). Troubleshooting: verbose logging and diagnostics (`P7-T13`).
+   best-effort (line 21: *DECIDED 2026-11-16 (owner, `plan/00` §6 item 381)* — v1.0 has no
+   PDF-extraction-quality validation at scale; the held-out IMRaD measurement of `plan/00` §6 items
+   375–377 is the record, and this section says so, citing its figure from `docs/06` §4.3). Troubleshooting: verbose logging and diagnostics (`P7-T13`).
 2. Every figure cites a measured source or is omitted; screenshots are placeholders named for
    `P7-T27`.
 3. `CHANGELOG.md`: an Unreleased section listing the features, and Compatibility.
@@ -1425,8 +1447,9 @@ has the narrowest permissions; runtime dependencies are pinned exactly.
    build; fail if `package.json`'s version, the tag and the built manifest disagree.
 2. Pin every `uses:` to a full commit hash with the tag as a comment; `permissions:` at the job
    level, `contents: write` only where the release is created.
-3. The update hash: build what §0.4 line 19 decides. **Until the owner answers, this step keeps the
-   scaffold's `sha512:` and changes nothing.**
+3. The update hash: *DECIDED 2026-11-16 (owner, `plan/00` §6 item 381; §0.4 line 19):* the scaffold's
+   CI-generated `sha512:` hash meets `docs/09` §7's blocker, so this step keeps it and adds no `sha256:`
+   step; it checks only that the hash is generated in the workflow, never transcribed.
 4. `strict_max_version` stays `10.0.*` unless the tested series changes (§6.2).
 5. The test asserts: no `uses:` without a 40-hex commit, no `FIXTURE_MODE`, an audit step, `npm ci`.
 
@@ -1567,9 +1590,11 @@ reason and decision, or "to be run in `P7-T25`".
 1. One row per NFR-1…NFR-20: result, measured on, by which card or run, or a waiver. NFR-17: Windows
    measured; macOS and Linux waived under §0.4 line 1.
 2. One row per `docs/13` §8 line, in its order; mark those `P7-T25` runs.
-3. The §8.9 lines: version agreement, the update hash (§0.4 line 19), fixtures' age (read the
-   recording dates), `live-contract` (**not executed until the owner answers §0.4 line 18**), the
-   forum draft (`P7-T23`), NCBI (`P7-T28`).
+3. The §8.9 lines: version agreement, the update hash (§0.4 line 19: a CI-generated `sha512:` hash
+   meets it), fixtures' age (read the recording dates; the 180-day rule applies), `live-contract`
+   (*DECIDED 2026-11-16 (owner, `plan/00` §6 item 381; §0.4 line 18)*: **waived for v1.0**, with the
+   reason "no secret-holding job exists; the job is a later-release candidate", as `docs/13` §8.9's note
+   of that day says), the forum draft (`P7-T23`), NCBI (`P7-T28`).
 4. The phase sign-offs as they stand: `P3-T31`, `P4-T25`, `P5-T30`, `P6-T19`; and the waived
    `P3-T37`.
 5. The per-minor-release policy re-verification line (§0.4 line 9).
@@ -1881,6 +1906,83 @@ npm run typecheck && npm run lint:check && npm run test:unit && npm run l10n:che
 
 ---
 
+### P7-T32 — Gemini in balanced mode: warn and confirm, not refuse
+
+| Field | Value |
+|---|---|
+| **ID** | `P7-T32` |
+| **State** | `TODO` |
+| **Depends on** | none |
+| **Blocks** | `P7-T16` |
+| **Retires** | none |
+| **Implements** | part of `NFR-16` (`docs/09` §3.5's Gemini row) |
+| **Estimate** | 0.75 d |
+| **Human gate** | none |
+
+**Goal.** In balanced mode a Gemini chat, summary or report call with a free or unknown key is warned
+and proceeds only after the user confirms, as an audio job already is; strict mode still refuses it;
+the rule lives in `assertModelAllowed` alone.
+
+> **DECIDED 2026-11-16 (owner, `plan/00` §6 item 381; §0.4 line 20):** Gemini chat, summary and report
+> calls in balanced mode follow the audio rule of item 379(d). A free or unknown key → the free-tier
+> warning, and the call proceeds only after the user confirms; only strict mode refuses. Recorded in
+> `docs/09` §3.5 (note "Decided 2026-11-16 … balanced mode and Gemini chat").
+
+**Read first.**
+- `docs/09-security-privacy-and-api-keys.md` §3.5's table, its Gemini row and the notes of 2026-10-22
+  and 2026-11-16; §3.6 item 3 (the warning is never suppressible)
+- `docs/07-architecture-and-data-model.md` §4.5, the note "a Gemini key the user declares paid"
+- `src/pipeline/shared/privacyPolicy.ts` (`assertModelAllowed`, `ModelPolicyCheck`, `modelRouteFor`) and
+  each caller by name: `summarizeItem` (`src/pipeline/summarize/summarizeItem.ts`), the relevance screen
+  (`src/pipeline/shared/relevanceScreen.ts`), `critiqueReport` (`src/pipeline/trendReport/critique.ts`),
+  the report model check in `src/pipeline/trendReport/trendReportPipeline.ts`, and
+  `src/pipeline/recommend/profileCall.ts` — verify the list yourself with
+  `grep -rn "assertModelAllowed(" src`; I believe it is these five
+
+**Files.**
+- modify `docs/07-architecture-and-data-model.md` (§4.5's note: the balanced Gemini case; dated note)
+- modify `src/pipeline/shared/privacyPolicy.ts` (`assertModelAllowed`; callers: the five above, which
+  already handle `requiresConfirmation` for full mode — no caller is expected to change)
+- modify `test/unit/pipeline/privacyPolicy.test.ts` (the table, row by row, with and without a route)
+- modify the callers' unit tests only where a balanced free-Gemini case now reaches the confirmation
+  path instead of `PolicyViolationError` (guess: `summarizeItem.test.ts`, `trendCritique.test.ts`,
+  `relevanceScreen.test.ts`; grep them for `geminiPaidTier` first)
+
+**Do.**
+1. Documents first: `docs/07` §4.5's note gets a dated line saying balanced mode now treats a free or
+   unknown Gemini key as full mode does (warning `may-train-on-input`, `requiresConfirmation: true`).
+2. In `assertModelAllowed`, a model reached through Gemini (`route.providerId === "gemini"`) whose key
+   is not declared paid is refused in **strict** only; in balanced and full it returns the warning and
+   `requiresConfirmation: true`. Every non-Gemini rule of the table is unchanged: a non-Gemini model
+   that may train on input is still refused in balanced mode. Without a `route` nothing loosens.
+3. Check each caller: where a confirmation is asked (the item pane's Generate, the report run's
+   `prepare`), the free-tier warning is shown (`L10N_EGRESS_GEMINI_FREE_TIER`); where none can be asked
+   (relevance screening during a search), the call is still not made, as today.
+
+**Do NOT.**
+- Do **not** add a second rule site; the audio job's `assertAudioAllowed` (`plan/09` `P6-T15`) and this
+  rule must agree, and if `P6-T15` has landed, make it call this one or test both against one table.
+- Do **not** suppress the free-tier warning after a confirmation (`docs/09` §3.6 item 3).
+
+**Done when.**
+- [ ] The unit table covers strict, balanced and full × Gemini free, unknown and declared paid × with
+      and without a route, and a non-Gemini `"yes"` model in balanced mode is still refused.
+- [ ] `npm run typecheck`, `npm run lint:check` and `npm run test` exit 0.
+- [ ] Mutation sweep per `plan/08` §0.2 item 24.
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test:unit -- privacyPolicy summarizeItem trendCritique relevanceScreen
+```
+
+**Notes.** Added 2026-11-16 (`plan/00` §6 item 381) for §0.4 line 20. Priced 0.75 d: one rule, a
+table test, and five callers to check, of which none is expected to change because full mode already
+needed the confirmation path. Callers of what it changes: the five above; constructed in
+`src/bootstrap/container.ts` with the rest of the privacy policy. It blocks `P7-T16` so that the
+security review walks §7's "warned elsewhere" line against the final rule.
+
+---
+
 ## 3. Estimate reconciliation
 
 Where the 28.50 d sit against `plan/05` §4.1's work areas (now §5.1):
@@ -1899,7 +2001,8 @@ Where the 28.50 d sit against `plan/05` §4.1's work areas (now §5.1):
 | W7-10 Manual QA execution | `P7-T18`, `P7-T24`, `P7-T25`, `P7-T27` | 3.5 |
 | W7-11 Distribution | `P7-T23`, `P7-T31` | 0.75 |
 | Not a work area: documents first, NCBI, the sign-off | `P7-T01`, `P7-T28`, `P7-T29` | 1.25 |
-| | **Total** | **28.50** |
+| Not a work area: the owner's answer to §0.4 line 20 (added 2026-11-16, item 381) | `P7-T32` | 0.75 |
+| | **Total** | **29.25** |
 
 **Where the sum is likely low.** (1) `P7-T03` and `P7-T06`: a sweep is priced on the windows that
 exist today; Phases 5 and 6 add windows not yet built, and their findings are counted only as

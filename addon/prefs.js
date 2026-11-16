@@ -21,9 +21,9 @@
 //
 // Phase 1's twelve keys (P1-T03 step 5), P2-T05's semanticscholar.keyPresent,
 // and the docs/01 §7.2 lines for the rows Phase 3 reads (P3-T32, 2026-10-20),
-// and reportLanguage for Phase 4 (P4-T02, 2026-10-26). docs/01 §7.2 lists
-// more (tts.*) because it transcribes the whole of §8.5; those rows arrive
-// with the phases that read them. docs/01
+// and reportLanguage for Phase 4 (P4-T02, 2026-10-26), and the four tts.*
+// lines docs/01 §7.2 lists for Phase 6 (P6-T02, 2026-11-16: tts.voice,
+// tts.model, tts.targetMinutes, tts.outputFormat). docs/01
 // §7.2 also notes that a row with no pane control needs no pref() line at all,
 // since the typed accessor falls back to the schema default — so the Phase 3
 // rows §7.2 gives no line (summaryModel, reportModel, screening.model,
@@ -35,7 +35,10 @@
 // report.critiqueModel, report.saveNote), nor the three Phase 5 rows §7.2 gives
 // no line (related.linkToSeed, related.enabled, recommend.enabled; P5-T02,
 // 2026-11-02), nor report.pausedNoticeShown (P4-T21, 2026-11-02, never shown to
-// the user). The four Phase 1 rows below that
+// the user), nor the four Phase 6 rows §7.2 gives no line (tts.language,
+// tts.linkedFileDir, gemini.tierAnswer, the hidden audio.enabled; P6-T02,
+// 2026-11-16). tts.provider is struck in docs/07 §8.5 and has no line
+// (plan/00 §6 item 378(c): Gemini TTS only). The four Phase 1 rows below that
 // §7.2 does not list (logRequestBodies, prefsSchemaVersion, secretBackend,
 // ncbi.keyPresent) are listed anyway because a setting the user cannot find in
 // about:config is a setting they cannot audit.
@@ -115,12 +118,23 @@ pref("autoSummarize", false);
 pref("cache.maxSizeMB", 500);
 
 // ---------------------------------------------------------------------------
-// Report & audio — docs/07 §8.5, "Report & audio" (P4-T02)
+// Report & audio — docs/07 §8.5, "Report & audio" (P4-T02; P6-T02)
 // ---------------------------------------------------------------------------
 
 // "auto" follows the Zotero UI locale; also accepts "en", "ko", "both".
 // The prefs pane (docs/08 §7.3) shows "Follow Zotero language" for "auto".
 pref("reportLanguage", "auto");
+
+// `Charon` ("Informative") is the default narrator docs/04 §2.7 recommends.
+// In v1.0 the report window's audio section chooses it (plan/09 §0.4 line 11).
+pref("tts.voice", "Charon");
+// Ships EMPTY on purpose: "" means the TTS model docs/04 recommends, resolved at
+// call time from the live model list. Never hardcode a TTS model ID here.
+pref("tts.model", "");
+// 0 = derive the spoken length from the report's length (docs/06 §9.2); else 1–60.
+pref("tts.targetMinutes", 0);
+// v1.0 writes WAV only (plan/09 §0.4 line 6); "wav" is the only allowed value.
+pref("tts.outputFormat", "wav");
 
 // ---------------------------------------------------------------------------
 // Runtime & concurrency — docs/07 §8.5, "Runtime & concurrency"

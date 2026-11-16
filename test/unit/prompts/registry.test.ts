@@ -1084,3 +1084,131 @@ describe("createPromptRegistry", () => {
     expect(() => createPromptRegistry([...shippedFiles(), ok])).not.toThrow();
   });
 });
+
+// ---------------------------------------------------------------------------
+// AUDIO_SCRIPT_EN / AUDIO_SCRIPT_KO — `P6-T06`, held verbatim and unregistered
+// ---------------------------------------------------------------------------
+
+/*
+ * Found 2026-11-16 (`P6-T06`; `docs/12` §13's note of that day): both system
+ * prompts, as `docs/12` §13 and §14 print them, hold `{{TARGET_MINUTES}}`
+ * (§13 rule 11, §14 rule 12), and the registry refuses any placeholder in a
+ * system text (§1.1 rule 2). The prompt text may not be reworded without the
+ * owner (Korean wording is the owner's, §19 item 4), so the files are held
+ * verbatim and unregistered in `src/prompts/pending/`, as
+ * `theme-cluster.v1.0.0.md` was held before item 290(b). Registering them now
+ * would make `createPromptRegistry` throw when `bundled.ts` loads, taking every
+ * prompt down with it. They sit one folder down because eight pipeline test
+ * files build a registry from every `.md` directly in `src/prompts/`.
+ */
+describe("audio-script-en.v1.0.0.md and audio-script-ko.v1.0.0.md (P6-T06, awaiting the owner)", () => {
+  const files = [
+    ["AUDIO_SCRIPT_EN", "audio-script-en.v1.0.0.md", 2500],
+    ["AUDIO_SCRIPT_KO", "audio-script-ko.v1.0.0.md", 3500],
+  ] as const;
+
+  /** `docs/12` §13's input variables, in its table's order (§14: "Identical"). */
+  const VARIABLES = [
+    "REPORT_MARKDOWN",
+    "CITATION_MAP",
+    "COLLECTION_NAME",
+    "TARGET_MINUTES",
+    "N_ANALYSED",
+    "YEAR_MIN",
+    "YEAR_MAX",
+  ];
+
+  function fileText(fileName: string): string {
+    return readFileSync(resolve(promptsDir, "pending", fileName), "utf8");
+  }
+
+  /** The fenced block after `heading` in the raw file. */
+  function fileFence(text: string, heading: string): string {
+    const lines = text.split("\n");
+    const at = lines.indexOf(heading);
+    const open = lines.findIndex((l, i) => i > at && l === "```text");
+    const close = lines.findIndex((l, i) => i > open && l === "```");
+    expect(at >= 0 && open > at && close > open).toBe(true);
+    return lines.slice(open + 1, close).join("\n");
+  }
+
+  it.each(files)(
+    "%s: the system and user text are docs/12's, verbatim",
+    (id, fileName) => {
+      const text = fileText(fileName);
+      expect(fileFence(text, "## system")).toBe(
+        docs12Fence(id, "### System prompt"),
+      );
+      expect(fileFence(text, "## user")).toBe(
+        docs12Fence(id, "### User prompt"),
+      );
+    },
+  );
+
+  it.each(files)(
+    "%s: front matter carries docs/12's version, temperature 0.4, its ceiling, no schema and plain text",
+    (id, fileName, maxTokens) => {
+      const text = fileText(fileName);
+      const front = text.slice(0, text.indexOf("\n---\n", 4) + 5);
+      expect(front).toBe(
+        [
+          "---",
+          `id: ${id}`,
+          "version: 1.0.0",
+          "cacheEpoch: 1",
+          "schema: none",
+          "defaultTemperature: 0.4",
+          `defaultMaxTokens: ${String(maxTokens)}`,
+          "outputFormat: text",
+          "lastReviewed: 2026-11-16",
+          "variables:",
+          ...VARIABLES.map((v) => `  - ${v}`),
+          "---",
+          "",
+        ].join("\n"),
+      );
+      expect(docs12Section(id).join("\n")).toContain("**Version:** `v1.0.0`");
+    },
+  );
+
+  it.each(files)(
+    "%s: the registry refuses it for two reasons only — an unregistered id and the system placeholder",
+    (id, fileName) => {
+      let caught: unknown;
+      try {
+        parsePromptFile({ fileName, text: fileText(fileName) });
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(PromptRegistryError);
+      expect((caught as PromptRegistryError).problems).toEqual([
+        `${fileName}: unknown prompt id \`${id}\``,
+        `${fileName}: the system text must contain no placeholder (docs/12 §1.1 rule 2)`,
+      ]);
+    },
+  );
+
+  it.each(files)(
+    "%s: the system text's one placeholder is TARGET_MINUTES, and the user text already holds every variable",
+    (_id, fileName) => {
+      const text = fileText(fileName);
+      const system = fileFence(text, "## system");
+      const user = fileFence(text, "## user");
+      const inSystem = new Set(
+        Array.from(system.matchAll(/\{\{([A-Z_]+)\}\}/g), (m) => m[1]),
+      );
+      expect([...inSystem]).toEqual(["TARGET_MINUTES"]);
+      for (const name of VARIABLES) expect(user, name).toContain(`{{${name}}}`);
+    },
+  );
+
+  it("neither is registered, bundled or directly in src/prompts yet", () => {
+    for (const [, fileName] of files) {
+      expect(() => readFileSync(resolve(promptsDir, fileName))).toThrow();
+    }
+    expect(PROMPT_IDS as readonly string[]).not.toContain("AUDIO_SCRIPT_EN");
+    expect(PROMPT_IDS as readonly string[]).not.toContain("AUDIO_SCRIPT_KO");
+    expect(readRepo("src/prompts/bundled.ts")).not.toContain("audio-script");
+    expect(() => createPromptRegistry(shippedFiles())).not.toThrow();
+  });
+});

@@ -25,10 +25,14 @@
  * 2026-11-02 by `P4-T20`, once a report could be generated.)* `P5-T02` added
  * the three rows Phase 5 reads (`related.linkToSeed`, `related.enabled`,
  * `recommend.enabled`; 2026-11-02), and is the only Phase 5 card that adds a
- * row.
+ * row. `P6-T02` added the eight rows Phase 6 reads (`tts.voice`,
+ * `tts.language`, `tts.model`, `tts.targetMinutes`, `tts.outputFormat`,
+ * `tts.linkedFileDir`, `gemini.tierAnswer`, `audio.enabled`; 2026-11-16), and
+ * is the only Phase 6 card that adds a row; `tts.provider` is struck in §8.5
+ * and never shipped (owner, `plan/00` §6 item 378(c)).
  * `report.addRelatedLinks` is deliberately absent: the owner kept backlinks out
- * of Phase 4 (`plan/00` §6 items 286, 287(a)). Rows for later phases (`tts.*`,
- * `background.enabled`, …) are not here. Every card
+ * of Phase 4 (`plan/00` §6 items 286, 287(a)). Rows for later phases
+ * (`background.enabled`, …) are not here. Every card
  * that adds rows is bound by the same rule: "do not add a preference that
  * `docs/07` §8.5 does not declare, and do not change a default". The ordering
  * rule §8.5 states is *§8.5 first, then `prefs.js`, then the pane*.
@@ -340,6 +344,21 @@ export const PREFS = {
   },
 
   /**
+   * The user's once-given answer to the billing question (`docs/09` §3.4 rule
+   * 4's note of 2026-11-16; owner, `plan/00` §6 item 378(b)), asked inside the
+   * first audio confirmation (`plan/09` §0.4 line 18). `""` means not yet
+   * asked; `free`, `unknown` and `""` all count as the free tier, and `paid`
+   * also sets {@link PREFS.geminiPaidTier}. A declaration, never a credential.
+   * Reader and writer: `P6-T15`. No `pref()` line. Added by `P6-T02`.
+   */
+  geminiTierAnswer: {
+    key: PREF_KEYS.geminiTierAnswer,
+    type: "string",
+    default: "",
+    values: ["", "paid", "free", "unknown"],
+  },
+
+  /**
    * Per-model token-estimate correction factors, as a JSON object (model ID →
    * positive number). §8.5's type is "string (JSON)", so the schema holds the
    * string and the reader parses it; an absent or unparseable value means "no
@@ -487,9 +506,10 @@ export const PREFS = {
 
   // -------------------------------------------------------------------------
   // Report & audio — docs/07 §8.5, "Report & audio" (P3-T32: perPaperNotes;
-  // P4-T02: the five rows the trend report reads). No `tts.*` row and no
-  // `report.addRelatedLinks` (backlinks stay out of Phase 4, plan/00 §6 item
-  // 287(a)).
+  // P4-T02: the five rows the trend report reads; P6-T02: the six `tts.*`
+  // rows and the hidden `audio.enabled`). No `tts.provider` (struck in §8.5,
+  // plan/00 §6 item 378(c)) and no `report.addRelatedLinks` (backlinks stay
+  // out of Phase 4, plan/00 §6 item 287(a)).
   // -------------------------------------------------------------------------
 
   /**
@@ -576,6 +596,93 @@ export const PREFS = {
     key: PREF_KEYS.reportPausedNoticeShown,
     type: "string",
     default: "[]",
+  },
+
+  /**
+   * The narrator's voice (`docs/04` §2.7). One of Gemini's prebuilt voice
+   * names, so no `values`: §8.5 says not to hard-code the thirty as a fixed
+   * list, and the stored name is checked against the live voice list. Chosen
+   * in the report window's audio section and written back here (`plan/09`
+   * §0.4 line 11; `P6-T17`); read by `P6-T16`. Has a `pref()` line.
+   */
+  ttsVoice: {
+    key: PREF_KEYS.ttsVoice,
+    type: "string",
+    default: "Charon",
+  },
+
+  /**
+   * The audio's language. `auto` follows the stored report's `language`, not
+   * `Zotero.locale` (`plan/09` §0.4 line 10); `P6-T08`'s
+   * `resolveAudioLanguage` resolves it. No `pref()` line.
+   */
+  ttsLanguage: {
+    key: PREF_KEYS.ttsLanguage,
+    type: "string",
+    default: "auto",
+    values: ["auto", "en", "ko"],
+  },
+
+  /**
+   * The TTS model ID. **Ships empty, and must**: `""` means the model
+   * `docs/04` recommends, resolved at call time from the live model list by
+   * `TTSProvider.resolveModel` (`docs/04` §2.2: the IDs carry `-preview` and
+   * churn). Read by `P6-T16`. Has a `pref()` line.
+   */
+  ttsModel: {
+    key: PREF_KEYS.ttsModel,
+    type: "string",
+    default: "",
+  },
+
+  /**
+   * The spoken length in minutes, the TTS bill's one real lever (`docs/04`
+   * §11). §8.5: `0` (derive it from the report's length, `docs/06` §9.2) or
+   * 1–60, which `min`/`max` express exactly. Read by `P6-T07`. Has a `pref()`
+   * line.
+   */
+  ttsTargetMinutes: {
+    key: PREF_KEYS.ttsTargetMinutes,
+    type: "integer",
+    default: 0,
+    min: 0,
+    max: 60,
+  },
+
+  /**
+   * The audio file's format. v1.0 writes WAV only (`plan/09` §0.4 line 6), so
+   * `wav` is the only allowed value and a stored `mp3` reads as `wav`. Has a
+   * `pref()` line, because `docs/08` §7.3 binds it.
+   */
+  ttsOutputFormat: {
+    key: PREF_KEYS.ttsOutputFormat,
+    type: "string",
+    default: "wav",
+    values: ["wav"],
+  },
+
+  /**
+   * The folder a WAV above 10 MiB is linked into, chosen on first use; `""`
+   * means "ask" (`docs/04` §10.2; `plan/09` §0.4 line 6). Read and written by
+   * `P6-T13`. **A local path: never logged** (`docs/09` §2.2). No `pref()`
+   * line.
+   */
+  ttsLinkedFileDir: {
+    key: PREF_KEYS.ttsLinkedFileDir,
+    type: "string",
+    default: "",
+  },
+
+  /**
+   * Hidden. Holds back the report window's audio section and the
+   * `audioReport` job's opener until the feature works (`plan/09` §0.4 line
+   * 20, the `plan/00` §6 item 307(d) pattern). Reader: `P6-T16`; `P6-T19`
+   * turns the default on, `docs/07` §8.5 first. No `pref()` line.
+   */
+  audioEnabled: {
+    key: PREF_KEYS.audioEnabled,
+    type: "boolean",
+    default: false,
   },
 
   // -------------------------------------------------------------------------

@@ -681,7 +681,35 @@ See §8. Manual QA is where UI, accessibility, real network behaviour, real cost
 > because the Interactions API's blocked shape is not documented (`plan/reports/P3-T05.md`). The list
 > is `LLM_SCENARIOS` in `scripts/record-fixtures.ts`.
 
-**Gemini TTS** — a short English response and a short Korean response, captured as base64/binary plus headers, sufficient to test the audio-assembly path (`src/tts/audio.ts`) without network access; plus a quota-exceeded error and a model-not-found error to exercise FR-43.
+**Gemini TTS** — ~~a short English response and a short Korean response, captured as base64/binary plus headers, sufficient to test the audio-assembly path (`src/tts/audio.ts`) without network access; plus a quota-exceeded error and a model-not-found error to exercise FR-43.~~ *Superseded 2026-11-16 by the table below (`plan/09` `P6-T03`): the same intent, with an invalid-key error, a model list and a no-audio answer added; there is no `src/tts/audio.ts` (the client is `src/tts/geminiTts.ts`, `P6-T05`; assembly is `P6-T12`'s).* In `test/fixtures/tts/gemini/`, one `<scenario>.json` and one `<scenario>_meta.json` each, named by scenario as the LLM fixtures are (`llmFixtureKey`). The list is `TTS_SCENARIOS` in `scripts/record-fixtures.ts` (`--source gemini-tts`).
+
+| Fixture | Purpose | Recorded |
+| --- | --- | --- |
+| `models-list` | `GET /v1beta/models`, kept to its TTS entries (`docs/04` §2.2) | **stand-in, not evidence** (`"synthetic": true`): `docs/04` §2.2's three ids in `docs/03` §9.3's entry shape; the owner's run (`P6-T04`) replaces it. Free |
+| `tts-en-short` | one English sentence, about 3 s, voice `Charon` (`docs/04` §2.3–§2.4) | **stand-in, not evidence**: §2.4's shape around a 0.4 s generated tone (24 kHz, 16-bit, mono), `candidatesTokenCount` 10; `P6-T04` replaces it. Billed |
+| `tts-ko-short` | one Korean sentence with one embedded English term (`docs/04` §9.1) | **stand-in, not evidence**, as `tts-en-short`; `P6-T04` replaces it. Billed |
+| `error-unknown-model` | a model id that does not exist | **stand-in, not evidence**: `docs/03` §11.5's `not_found` row, 404 `NOT_FOUND`; `P6-T04` replaces it. Not billed |
+| `error-invalid-key` | the real key with one character appended | **stand-in, not evidence**: §11.5's `auth` row, 400 `API_KEY_INVALID`; `P6-T04` replaces it. Not billed |
+| `error-429` | rate limit, with `Retry-After: 2` | **hand-written** (`"synthetic": true`), and stays so: it cannot be provoked on purpose without spending money and risking the account |
+| `no-audio-part` | HTTP 200 whose only part is text, no `inlineData` | **hand-written**, and stays so: it cannot be provoked on purpose |
+
+**Script scenarios on the LLM path** — `audio-script-en` and `audio-script-ko`: the bundled `AUDIO_SCRIPT_EN` / `AUDIO_SCRIPT_KO` prompts (`docs/12` §13–§14, `plan/09` `P6-T06`) over a small synthetic report, on the owner's `reportModel` provider and model, in `test/fixtures/llm/<provider>/`. They are `LLM_AUDIO_SCRIPT_SCENARIOS`, recorded only when `--only` names them, so a provider's default recording and the eleven rows above do not change. **Stand-ins, not evidence**, in `test/fixtures/llm/openrouter/` only (the default `llmProvider`): hand-written one-minute scripts; the owner's run replaces them.
+
+> **Added 2026-11-16 (`plan/09` `P6-T03`; coordinator decisions under `plan/00` §6 item 313).** (a) The recording is
+> the owner's (`P6-T04`), behind the LLM path's three locks: `FIXTURE_MODE=record`, `--live` and
+> `--confirm-spend-usd`. The key is read from `GEMINI_API_KEY` through `LLM_KEY_ENV_VARS` and from nowhere else, and
+> is sent only as the `x-goog-api-key` header. `--dry-run` prints the scenarios, the request count and an estimate
+> from `docs/04` §4.2's prices with no key: on 2026-11-16 that was five live requests, two billed, at most $0.0154 on
+> `gemini-2.5-flash-preview-tts`, each billed call priced at 30 s of audio. (b) The redaction pass shields one thing
+> only, the audio's base64 (`inlineData.data`), which `redact()`'s 40-character net would otherwise take. A fixture
+> or sidecar that names `x-goog-api-key`, holds `key=` or holds the key's value is refused, as is a body over 300 KB;
+> nothing is written unless every exchange passes. (c) `FIXTURE_MODE=synthetic` writes a stand-in only where no file
+> is, or where the file there is itself a stand-in, so a rerun cannot replace a recording. A stand-in is told from a
+> recording by its sidecar's `"synthetic": true`. (d) The two script scenarios are **pending** until their prompt
+> files load (`audioScriptPrompt`): they can be stood in for, but not priced or recorded. *(Noted 2026-11-16, later
+> (`P6-T06`): the files are written, verbatim, but wait in `src/prompts/pending/`, because the parser refuses them
+> while their system text holds `{{TARGET_MINUTES}}`. The scenarios stay pending until the owner decides `plan/00`
+> §6 item 382.)*
 
 **Relatedness (Phase 5)** — what the related-papers and recommendation adapters send, in `test/fixtures/<source>/related/`, one directory below each source's search fixtures. *As built 2026-11-02 (`P5-T04`).* The scenario lists are `relatedPlanFor` in `scripts/record-fixtures.ts`; the requests are `test/support/*RecordedRequests.ts`'s, built by the shipped builders in `src/sources/semanticscholar/graph.ts`, `recommendations.ts`, `src/sources/europepmc/citations.ts`, `src/sources/pubmed/elink.ts` and `src/sources/crossref/references.ts`.
 
@@ -1630,6 +1658,7 @@ Run on **Windows, macOS, and Linux** for a minor or major release; Windows plus 
 - [ ] README compatibility table, screenshots, and cost figures updated.
 - [ ] Fixtures re-recorded within the last 180 days, with the diff reviewed (§3.3).
 - [ ] The `live-contract` scheduled job was green (or its drift issue was triaged) within the last 2 weeks.
+  *Waived for v1.0 — DECIDED 2026-11-16 (owner, `plan/00-task-index.md` §6 item 381; `plan/10` §0.4 line 18).* The scheduled `live-contract` job (§5.3) is deferred to a later release, because **no job holding real provider keys as repository secrets exists**, and v1.0 does not add one. The release checklist records this line as waived with that reason (`plan/10` `P7-T24`). The fixtures' 180-day age rule on the line above **still applies** to v1.0. The line stands, unwaived, for later releases once the job exists.
 - [ ] Forum announcement drafted; community-list submission prepared (§7.2).
 - [ ] **NCBI registration is on file** for `tool=research_helper` and `email=suppakoko@gmail.com`. NCBI's policy is that *"merely providing values for tool and email in requests is not sufficient… these values must be registered with NCBI"*, which makes this a release obligation rather than a code one — see `09-security-privacy-and-api-keys.md` §5.1 and decision D10 (`00-overview.md` §3). The address is the maintainer's on every NCBI request, never a user's.
 

@@ -193,6 +193,7 @@ research_helper/
 │   │   ├── profile.ts                # CollectionProfile, ProfileSeed, ProfileUserEdits (§5.2)
 │   │   ├── recommendation.ts         # Recommendation, RecommendationSignals (§5.2)
 │   │   ├── related.ts                # RelationKind, RelationEdge (§4.2; added 2026-11-02, P5-T01)
+│   │   ├── audio.ts                  # SpokenScript, AudioPlan, AudioRunInput, AudioRunOutcome (§5.2; added 2026-11-16, P6-T01)
 │   │   ├── job.ts                    # JobRecord (re-export from core for convenience)
 │   │   ├── ids.ts                    # DOI/PMID/arXiv normalization + branded ID types,
 │   │   │                             #   plus ExternalIds and the SourceId / ProviderId unions
@@ -236,11 +237,13 @@ research_helper/
 │   │   │   └── chunking.ts           # map/reduce chunking for long inputs
 │   │   └── router.ts                 # LLMRouter (§4.3): active provider + per-purpose model chain; never another provider (Corrected 2026-10-21: was "model selection, fallback chain, cost guard")
 │   │
-│   ├── tts/
+│   ├── tts/                          # (reconciled 2026-11-16, plan/09 P6-T01: the note below)
 │   │   ├── types.ts                  # TTSProvider, SynthesisRequest, AudioArtifact
-│   │   ├── geminiTts.ts
-│   │   ├── ssml.ts                   # report → speakable script (en / ko)
-│   │   └── audioStore.ts             # writes audio into Zotero attachments
+│   │   ├── geminiTts.ts              # TTSProvider on Gemini's legacy generateContent (P6-T05)
+│   │   ├── chunk.ts                  # script → sentence-aware chunks, plain text (P6-T09);
+│   │   │                             #   was ssml.ts, see the note below
+│   │   ├── pricing.ts                # dated TTS price table, ttsCostOf (P6-T10)
+│   │   └── audioStore.ts             # PCM → WAV, naming, import-or-link behind ports
 │   │
 │   ├── pipeline/                     # orchestration — the plugin's actual behaviour
 │   │   ├── types.ts                  # Pipeline<TInput, TOutput>, PipelineContext
@@ -253,7 +256,16 @@ research_helper/
 │   │   ├── summarize/                # Feature 3a
 │   │   ├── trendReport/              # Feature 3b
 │   │   ├── recommend/                # Feature 6
-│   │   ├── audioReport/              # Feature 5
+│   │   ├── audioReport/              # Feature 5 (plan/09 P6-T07–P6-T16):
+│   │   │   ├── audioReportPipeline.ts #   the audioReport job, §12.6
+│   │   │   ├── script.ts             #   script pass: inputs, validation, one retry
+│   │   │   ├── citationMap.ts        #   [[itemKey]] → "Surname and colleagues, Year"
+│   │   │   ├── korean.ts             #   Hangul syllable and numeral counts
+│   │   │   ├── estimate.ts           #   the two-step audio estimate
+│   │   │   ├── disclosure.ts         #   the audio confirmation's two-host disclosure
+│   │   │   ├── synthesize.ts         #   sequential chunks, budget, cancel
+│   │   │   ├── deliver.ts            #   assemble the WAV, import or link, name
+│   │   │   └── failures.ts           #   classifyAudioFailure, the FR-43 fallback
 │   │   └── shared/
 │   │       ├── checkpoint.ts         # per-stage checkpointing for resume
 │   │       ├── budget.ts             # token/cost budget enforcement
@@ -264,7 +276,8 @@ research_helper/
 │   │   ├── itemMapper.ts             # CanonicalWork ↔ Zotero item JSON (§6)
 │   │   ├── collectionOps.ts          # create/find collections, add/remove items
 │   │   ├── notes.ts                  # child-note creation for summaries/reports
-│   │   ├── attachments.ts            # PDF/audio attachments, link attachments
+│   │   ├── attachments.ts            # PDF/audio attachments, link attachments (audio:
+│   │   │                             #   createZoteroAudioAttachments, plan/09 P6-T13)
 │   │   ├── extraField.ts             # structured read/write of the `extra` field
 │   │   ├── fulltext.ts               # read attachment text via Zotero's full-text index
 │   │   ├── notifier.ts               # Zotero.Notifier observer registration/teardown
@@ -336,6 +349,17 @@ research_helper/
 ├── tsconfig.json
 └── zotero-plugin.config.ts           # scaffold config
 ```
+
+> **Reconciled 2026-11-16 (`plan/09` `P6-T01`; coordinator decision of that day, `plan/09` §0.4 line 22): the
+> Phase 6 files.** `src/tts/ssml.ts` ("report → speakable script") is **renamed `src/tts/chunk.ts`**: v1.0 sends
+> plain text, never SSML — Gemini reads SSML tags aloud (`04-audio-report-tts.md` §2.9) — and the speakable
+> script is written by the script call (`04-…` §8), not by code, so what is left for this file is the
+> sentence- and paragraph-aware splitting of `04-…` §5.2. `src/tts/pricing.ts` (the dated TTS price table,
+> `P6-T10`), `src/model/audio.ts` (§5.2) and the nine `src/pipeline/audioReport/` files named by `plan/09`
+> `P6-T07`–`P6-T16` are added. `src/tts/audioStore.ts` built its ports (`P0-T26`) rather than writing Zotero
+> attachments itself, so its comment now says so; the Zotero write is `src/zotero/attachments.ts`'s
+> (`createZoteroAudioAttachments`, `P6-T13`), the only directory allowed to name `Zotero` (§2.3). None of
+> the new files exists yet except `src/model/audio.ts`; each is created by the card named beside it.
 
 #### 2.2.1 `docs/`, `docs/spikes/` and `plan/`
 
@@ -1656,6 +1680,10 @@ export interface LLMRouter {
  * rejects with `TTSError` when a file is required, and the report pipeline never selects it
  * for an audio attachment. Do not narrow this union to "gemini" — a one-member union makes
  * the fallback ordering in `04-…` §7.5 unrepresentable.
+ *
+ * v1.0 implements `gemini` alone (owner, 2026-11-16, `plan/00` §6 item 378(c)); `openai` and
+ * `system` have no implementation, and the `tts.provider` preference is not shipped. The note
+ * after this block says why the union keeps three members.
  */
 export type TtsProviderId = "gemini" | "openai" | "system";
 
@@ -1696,17 +1724,48 @@ export interface TTSProvider {
   readonly displayNameKey: string;
   readonly rateLimitKey: string;
   /**
-   * Max characters accepted per request. Longer scripts are split by
-   * `src/tts/ssml.ts` at sentence boundaries and concatenated.
+   * Max characters accepted per request in `language`. Longer scripts are split by
+   * `src/tts/chunk.ts` at sentence boundaries and concatenated.
    */
-  readonly maxInputChars: number;
+  maxInputChars(language: string): number;
 
   isConfigured(): boolean;
+  /** Makes no billed call: on Gemini it reads the model list. */
   validateCredentials(ctx: LLMCallContext): Promise<CredentialCheckResult>;
+  /** `preferredModelId` (`tts.model`) when set, otherwise one chosen from the live model list. */
+  resolveModel(preferredModelId: string, ctx: LLMCallContext): Promise<string>;
   listVoices(language: string, ctx: LLMCallContext): Promise<readonly VoiceInfo[]>;
+  /** One request; never retries (the caller does, with identical inputs). */
   synthesize(request: SynthesisRequest, ctx: LLMCallContext): Promise<AudioArtifact>;
 }
+
+// re-exported from src/model/audio.ts (§5.2), so the provider layer has one import
+export type { AudioChunk } from "../model/audio";
 ```
+
+> **Reconciled 2026-11-16 (`plan/09` `P6-T01`): the block above is what `src/tts/types.ts` holds.** The spike
+> (`P0-T25`) left `TTSProvider` and `AudioArtifact.usage` out of the source because `src/llm/types.ts` and
+> `src/model/usage.ts` did not exist yet; both are declared there now, and every spike export stays (it is imported by
+> `scripts/spike-tts-korean.ts`, `src/tts/audioStore.ts` and `src/pipeline/types.ts`). Three changes, each
+> *DECIDED 2026-11-16 (coordinator, under `plan/00` §6 item 313)*:
+>
+> 1. **`maxInputChars` takes the language.** It was one number, but `04-audio-report-tts.md` §5.2 sets different
+>    targets per language (600–900 characters in English, 300–450 in Korean), so one number cannot hold both; the
+>    method returns the upper target for the language, and `P6-T05` exports the two figures as constants that the
+>    chunker reads (`src/tts/chunk.ts`, renamed from `ssml.ts` by `plan/09` §0.4 line 22; see the note under §2.2).
+> 2. **`resolveModel` is added.** No TTS model ID is compiled in except one marked last-resort fallback (`04-…` §2.2;
+>    `plan/README.md` §5 rule 4), so the model comes from `tts.model` or the live list, and the audio job needs it
+>    before it can price the plan (`plan/09` `P6-T16` step 1). `P6-T05` builds the rule.
+> 3. **`synthesize` never retries**: the synthesis loop does, with byte-identical inputs (`04-…` §5.3; `P6-T11`).
+>
+> **`TtsProviderId` keeps its three members**, though v1.0 implements `gemini` alone (owner, `plan/00` §6 item
+> 378(c): OpenAI TTS is a later-release candidate; item 378(d): no "Read aloud"), because `04-…` §7.5's fallback
+> ordering is what a later release builds, and a one-member union would have to be widened then.
+>
+> **Not reconciled here:** `src/pipeline/types.ts` still declares `PipelineContext.tts`'s `TTSProvider` as a forward
+> alias to `unknown` (its header table). No Phase 6 card's `Files` list names that file, and the audio job takes its
+> TTS client through its construction deps (`plan/09` `P6-T16`), so the alias is harmless; replacing it with the real
+> type is recorded in `plan/reports/P6-T01.md`.
 
 ### 4.5 `Pipeline`, `JobHandle`
 
@@ -3281,6 +3340,208 @@ export interface TrendReport {
 > member names appear in no note, export or window. The windows' strings and Fluent ids, the notes and the exports, with
 > digits and identifiers folded, held nothing that the same run on a build from before the capture did not hold.
 
+> **Added 2026-11-16 (`plan/09` `P6-T01`; coordinator decisions of that day, `plan/09` §0.4 lines 7, 12, 13, 14 and
+> 22, under `plan/00` §6 item 313): what the audio job passes between its stages.** The audio job (§12.6) reads a
+> stored `TrendReport` and writes back two of its members, so its own shapes are declared here beside it, in the new
+> file `src/model/audio.ts`; `src/tts/types.ts` re-exports `AudioChunk` (§4.4). `SpokenScript` is what the script pass
+> (`04-audio-report-tts.md` §8; `plan/09` `P6-T07`, `P6-T08`) returns; `AudioPlan` is what the second confirmation
+> shows before any request reaches Google (FR-42; §0.4 line 13); `AudioRunInput` names a stored report by id (§0.4
+> line 12); `AudioRunOutcome` is the finished job. **Two `TrendReport` members are written by the audio job, both
+> through `ReportStore.put`:** `audioScripts[language]` holds the validated script's text, written as soon as it has
+> passed validation, so a cancel or a TTS failure after that point keeps it and the next run for that language skips
+> the script call; `audioAttachmentKeys[language]` holds the **newest** attachment's key, so a re-run replaces the
+> key and the earlier attachment stays in the library. Readings, each *DECIDED 2026-11-16 (coordinator, under item
+> 313)*: (1) a script's length is counted in words for English and Hangul syllables for Korean, and a length outside
+> ±30 % of the target is a `SpokenScriptWarning`, never a reject (§0.4 line 17); (2) a chunk carries the separator
+> that followed it, so joining the chunks reproduces the script exactly (`P6-T09`'s criterion); (3)
+> `AudioAttachmentMode` is `"imported" | "linked"`, the values `chooseAttachmentMode` in `src/tts/audioStore.ts`
+> already returns (`plan/09` wrote `"import" | "link"`), so a mode passes through unconverted; (4) a cost estimate
+> with no `usd` is **unknown cost** and forces the confirmation (§0.4 line 21); (5) `AudioRunOutcome` keeps the TTS
+> calls' usage and the script call's apart (`scriptUsage`), since a stored script makes no script call.
+
+```ts
+// src/model/audio.ts
+
+import type { Usage } from "./usage";
+
+// ---------------------------------------------------------------------------
+// The spoken script — `docs/04` §8, `docs/12` §13–§14
+// ---------------------------------------------------------------------------
+
+/**
+ * The languages a spoken script is written in: the keys of
+ * `TrendReport.audioScripts` and `TrendReport.audioAttachmentKeys`
+ * (`src/model/trend.ts`).
+ */
+export type AudioLanguage = "en" | "ko";
+
+/**
+ * What a spoken script's length is counted in: English words, Korean Hangul
+ * syllables (U+AC00–U+D7A3). `docs/12` §13 and §14 state the targets as
+ * `TARGET_MINUTES × 150` words and `TARGET_MINUTES × ~330` syllables; the
+ * English word band is never applied to Korean (`plan/09` `P6-T08`).
+ */
+export type SpokenScriptLengthUnit = "words" | "hangul-syllables";
+
+/** A script's measured length against its target. */
+export interface SpokenScriptLength {
+  readonly unit: SpokenScriptLengthUnit;
+  /** Counted in `unit` over the validated text. */
+  readonly count: number;
+  /** `TARGET_MINUTES` × the language's rate, in `unit`. */
+  readonly target: number;
+}
+
+/**
+ * A warning the script pass attaches to a script it accepts. Never a reject:
+ * only marker leaks reject a script (`plan/09` §0.4 line 17); a warning is
+ * shown in the second confirmation.
+ */
+export interface SpokenScriptWarning {
+  /** Outside ±30 % of the target length. */
+  readonly kind: "length-out-of-band";
+  readonly length: SpokenScriptLength;
+}
+
+/**
+ * A validated spoken script (`docs/04` §8.1, §8.5): plain speakable text with
+ * no Markdown, citation marker, URL or DOI left in it.
+ *
+ * `TrendReport.audioScripts[language]` stores its `text` once it has passed
+ * validation, through `ReportStore.put`; a stored script for that language is
+ * read back into this shape (with `usage` absent) and skips the script call.
+ */
+export interface SpokenScript {
+  /** The stored `TrendReport.id` it was written from. */
+  readonly reportId: string;
+  /** The language the script is spoken in. */
+  readonly language: AudioLanguage;
+  /**
+   * The language of the report it was written from. `"en"` with `language`
+   * `"ko"` is a Korean script newly written from an English report, in one
+   * call (owner, `plan/00` §6 item 378(a)).
+   */
+  readonly sourceLanguage: AudioLanguage;
+  readonly text: string;
+  /** The `TARGET_MINUTES` the prompt was given: 1–60, never 0. */
+  readonly targetMinutes: number;
+  readonly length: SpokenScriptLength;
+  readonly warnings: readonly SpokenScriptWarning[];
+  /** The script call's usage, the retry included; absent for a stored script. */
+  readonly usage: Usage | undefined;
+}
+
+// ---------------------------------------------------------------------------
+// The audio plan — `docs/04` §5, §6.4, §10.2, §11
+// ---------------------------------------------------------------------------
+
+/**
+ * Imported into Zotero's storage (at most `IMPORT_MAX_BYTES`, 10 MiB) or
+ * linked from `tts.linkedFileDir` above it (`chooseAttachmentMode` in
+ * `src/tts/audioStore.ts`; `plan/09` §0.4 line 6). The same two values as
+ * `src/tts/audioStore.ts`'s `AttachmentMode`, so a chosen mode passes through
+ * unconverted (`docs/07` §5.2's note of 2026-11-16, reading 3).
+ */
+export type AudioAttachmentMode = "imported" | "linked";
+
+/**
+ * One piece of the script, sent as one TTS request (`docs/04` §5.2). Joining
+ * every chunk's `text` with its `separator` reproduces the script exactly.
+ */
+export interface AudioChunk {
+  /** 0-based position in the script. */
+  readonly index: number;
+  readonly text: string;
+  /** `text.length`, in UTF-16 code units, as `docs/04` §5.2 measures. */
+  readonly chars: number;
+  /** What followed this chunk in the script (`""` after the last). */
+  readonly separator: string;
+}
+
+/**
+ * A cost estimate in US dollars. `usd` absent means **unknown cost**: no
+ * documented or user price for the model, which forces the confirmation
+ * (`plan/09` §0.4 line 21).
+ */
+export interface AudioCostEstimate {
+  readonly usd: number | undefined;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  /**
+   * `false` when the audio token rate used was measured on another model
+   * (`docs/04` §4.2 measured it on `gemini-2.5-flash-preview-tts` only); the
+   * dialog then says so and shows no per-minute quote.
+   */
+  readonly rateMeasuredOnModel: boolean;
+}
+
+/**
+ * Everything the second confirmation shows before any request reaches
+ * Google (FR-42; `plan/09` §0.4 line 13), built from the real script.
+ * Voice, model and style prefix are captured once here and sent unchanged with
+ * every chunk, a retried one included (`docs/04` §5.3).
+ */
+export interface AudioPlan {
+  readonly reportId: string;
+  readonly language: AudioLanguage;
+  readonly model: string;
+  readonly voice: string;
+  /** `docs/04` §5.3's `STYLE_PREFIX`, prepended to every chunk. */
+  readonly stylePrefix: string;
+  readonly chunks: readonly AudioChunk[];
+  /** The sum of the chunks' `chars`. */
+  readonly totalChars: number;
+  readonly estimatedSeconds: number;
+  /** The WAV file's size: PCM bytes plus the 44-byte header. */
+  readonly estimatedBytes: number;
+  readonly mode: AudioAttachmentMode;
+  readonly cost: AudioCostEstimate;
+}
+
+// ---------------------------------------------------------------------------
+// The job — `docs/07` §12.6
+// ---------------------------------------------------------------------------
+
+/**
+ * What an `audioReport` job is started with: a stored report, by id
+ * (`plan/09` §0.4 line 12), and the choices made in the report window's audio
+ * section.
+ */
+export interface AudioRunInput {
+  /** `TrendReport.id`, read through `ReportStore.get`. */
+  readonly reportId: string;
+  /**
+   * The window's language choice; `"auto"` resolves from `tts.language` and
+   * then the report's `language` (`plan/09` §0.4 line 10).
+   */
+  readonly language: AudioLanguage | "auto";
+  /** The window's voice choice; absent reads `tts.voice`. */
+  readonly voice?: string;
+}
+
+/**
+ * A finished audio job. `TrendReport.audioAttachmentKeys[language]` is set to
+ * `attachmentKey` through `ReportStore.put`, so it names the newest one.
+ */
+export interface AudioRunOutcome {
+  readonly reportId: string;
+  readonly language: AudioLanguage;
+  /** The standalone attachment in the report's collection (`docs/07` §6.5). */
+  readonly attachmentKey: string;
+  readonly mode: AudioAttachmentMode;
+  /** `audioFileName`'s result: a name, never a path. */
+  readonly fileName: string;
+  /** Measured from the assembled PCM. */
+  readonly seconds: number;
+  /** The written file's size. */
+  readonly bytes: number;
+  /** The TTS calls' usage, summed over every chunk. */
+  readonly usage: Usage | undefined;
+  /** The script call's usage; absent when a stored script was used. */
+  readonly scriptUsage: Usage | undefined;
+}
+```
+
 > **Reconciled 2026-11-02 (`plan/08` `P5-T01`; decisions `plan/08` §0.4 lines 21, 23 and 27, owner items 320(c) and
 > 323(b)): the two blocks below are what Phase 5's cards build, and nothing constructs them yet.** The first constructor
 > of `CollectionProfile` is `buildProfileStats` (`P5-T18`), filled in by `P5-T21` (`centroids`, `seeds`), `P5-T22`
@@ -3870,7 +4131,7 @@ A summary is stored as a **child note** on the item, not in `extra`:
 - Written as a **standalone note** inside the target collection, with marker `<!-- rh:report v=1 ... -->` and tag `research_helper/trend-report`. *(Corrected 2026-10-26, `P4-T01`: the tag read `research_helper/report`; `10-requirements-and-user-stories.md` FR-25 and `11-implementation-roadmap.md` §1 Phase 4 both name `research_helper/trend-report`, and two requirement documents settle it against this one bullet.)* *Decided 2026-10-27 (owner, `plan/00` §6 item 296(b)): the report note is found by its stored note item key (`TrendReport.zoteroNoteKey`) and its tag, never by the marker, which Zotero's note editor drops on its first save (`01-zotero-plugin-platform.md` §5.7); the marker stays as information only. The same holds for the overflow note of §6.3 (`overflowNoteHtml` in `src/zotero/itemMapper.ts`, marker `<!-- rh:extra v=1 … -->`). No lookup by any marker is built.*
   *As built 2026-10-30 (`P4-T14`): `writeReportNote` in `src/zotero/notes.ts` writes it, `findReportNote` finds it by the stored key and the tag, and the marker reads `<!-- rh:report v=1 id=<report id> lang=<en|ko> generatedAt=<ISO-8601 UTC> -->`; every run writes a new note, a read-only library gets the export only, and a group library is written only with the user's answer to a confirmation naming the group (`06-summarization-and-trend-report.md` §14.2's note of that date, §16 items 6 and 7).*
 - Cited works are linked via `zotero://select/library/items/<key>` anchors so the narrative is clickable.
-- Audio is attached as a **child attachment of the report note** — an imported file attachment (`linkMode: "imported_file"`) with the audio MIME type, so it syncs and is deletable through normal Zotero UI. Filenames: `<collection-slug>-trends-<yyyymmdd>-<lang>.<ext>`.
+- ~~Audio is attached as a **child attachment of the report note** — an imported file attachment (`linkMode: "imported_file"`) with the audio MIME type, so it syncs and is deletable through normal Zotero UI.~~ *Decided 2026-11-16 (coordinator, under `plan/00` §6 item 313; `plan/09` §0.4 line 7; `04-audio-report-tts.md` §10.1's note of that day): the audio is a **standalone attachment in the report's collection**, with no parent item, and its key is kept in the stored report's `TrendReport.audioAttachmentKeys[language]` (§5.2), which is how the report window finds it. The report note is a standalone note (above), v1.0 creates no parent item and does not move or edit the note. A WAV of at most 10 MiB is imported (`linkMode` `imported_file`, `audio/wav`); a larger one is linked from `tts.linkedFileDir` (§8.5; `plan/09` §0.4 lines 6 and 25). Whether Zotero 10 lets a note be an attachment's parent at all is **not recorded** in this corpus: `plan/09` `P6-T13` reads Zotero's item and attachment source, records the answer here with the file and function, and writes a standalone attachment either way.* Filenames: `<collection-slug>-trends-<yyyymmdd>-<lang>.<ext>` (v1.0 writes `.wav` only).
 
 ### 6.6 Reading from Zotero
 
@@ -4285,7 +4546,7 @@ Cancellation semantics per pipeline are declared, not implicit:
 - **searchImport**: items already written to Zotero are **kept**; the collection is kept with a note in its description that the import was partial. No rollback — deleting user-visible items on cancel is surprising and destructive.
 - **summarize**: summaries already written are kept. Nothing is rolled back.
 - **trendReport**: the report is *not* written unless it completed; a partial report is discarded (it would be misleading). *Decided 2026-11-01 (owner, `plan/00` §6 item 324(b)): a cancel keeps this run's paid-for synthesis cache entries (`tc`, `cr`, `rp`), as a stop does; the report, note, row and file are not saved. A shutdown is not a cancel: the record is left for `recover()` (§12.4's note of 2026-11-02).*
-- **audioReport**: partial audio segments are discarded.
+- **audioReport**: partial audio segments are discarded. *Noted 2026-11-16 (`plan/09` `P6-T01`; §0.4 line 14, coordinator, under `plan/00` §6 item 313): the segments are the finished chunks, held in memory only, and a cancel drops them and aborts the request in flight; the validated script is kept, because it was written to `TrendReport.audioScripts` before any TTS request (§5.2's note of that date). No attachment exists before Attaching, and a cancel is not taken once Attaching has begun, so a cancel never leaves a half-made attachment; a file Assembling has already written is removed by the cancel (`P6-T12`, `P6-T13` build it). §12.6 draws it.*
 
 ### 7.5 Pause / resume
 
@@ -5057,6 +5318,7 @@ Rows marked **⚠** are settings the design uses but no document had declared as
 | `screening.model` | string | `""` (empty = use `summaryModel`, and `<provider>.model` when that is also empty) | a model ID | `12-prompt-library.md` §3 | **Not in the pane.** **This is not a third model tier.** Doc 03 §16 sanctions exactly two tiers (`summaryModel` / `reportModel`); this key exists only so a user can point the cheap relevance-screening pass (doc 12 §3, `RELEVANCE_SCREEN` — the highest-volume call in the plugin) at an even cheaper model. Left empty, screening runs on `summaryModel` and no third model is in play. |
 | `privacy.mode` | string | `"balanced"` | `strict` \| `balanced` \| `full` | `09-security-privacy-and-api-keys.md` §3.5 | Prefs pane → Privacy (doc 08 §7.3). This row is the **global** default only; per-collection overrides live in the `collection_settings` table (§8.3), are surfaced in the collection context menu, and can only ever be *stricter* than this value (doc 09 §3.5). |
 | `privacy.egressAcknowledged` | boolean | `false` | — | `09-security-privacy-and-api-keys.md` §3.6 | **Not in the pane.** The one-time data-egress acknowledgement `10-requirements-and-user-stories.md` FR-36 requires be "recorded in prefs". Written **once**, by the first-job confirmation dialog, when the user acknowledges the notice; read to decide whether to show that notice again. It is *not* a suppression switch for the per-job disclosure, which doc 09 §3.6 item 1 requires on every job that sends content, and it does not suppress any of the four non-suppressible warnings in doc 09 §3.6 items 2–3. No document named the key; the shape is pinned here. |
+| `gemini.tierAnswer` | string | `""` (= not yet asked) | `""` \| `paid` \| `free` \| `unknown` | `09-security-privacy-and-api-keys.md` §3.4 rule 4's note of 2026-11-16 (owner, `plan/00` §6 item 378(b)) | **Added 2026-11-16 (`plan/09` `P6-T02`; coordinator, under `plan/00` §6 item 313, `plan/09` §0.4 line 18).** Not in the pane. The user's once-given answer to the billing question the plugin cannot answer itself, asked inside the first audio confirmation (`plan/09` `P6-T15`): `paid`, `free`, or `unknown` ("don't know"). `""` means the question has not been asked yet. No answer, `unknown` and `free` are all treated as the free tier; `paid` also sets `gemini.paidTier` below, which the policy check reads. Like `gemini.paidTier`, a declaration, not evidence, and never a credential. It has no `pref()` line (`01-zotero-plugin-platform.md` §7.2 does not list it), so an absent value reads as `""`. |
 | `gemini.paidTier` | boolean | `false` | — | `09-security-privacy-and-api-keys.md` §3.4 rule 4, §3.5, §3.6 item 3 | Prefs pane → LLM providers, Gemini block: a checkbox and its label, which are `P3-T04`'s. **Decided 2026-10-22 (owner, `plan/00` §6 item 269(b)).** This is the user's statement that the Gemini key's Cloud project is billing-linked (Google's paid tier). The plugin cannot read that itself (doc 09 §3.4 rule 4). The value is read **on demand**, each time a policy check or a disclosure needs it, and is never cached. **`false`** (the default) means free or unknown, which the plugin treats as the free tier. **`true`** means three things. A Gemini model counts as not training on input, so `strict` and `balanced` modes allow it. *(Corrected 2026-10-23 (owner, `plan/00` §6 item 270): this read "`strict` mode still refuses Gemini, because the paid tier keeps content for abuse monitoring"; strict judges training, not abuse-monitoring retention, as it does for OpenAI and Anthropic.)* The free-tier warning is replaced, on every job, by a one-line reminder that the key is declared paid, and that reminder can never be turned off (doc 09 §3.6 item 3). The setting is a declaration, not evidence: only the user sets it, and no detected signal does. It has no `pref()` line (`01-zotero-plugin-platform.md` §7.2), like `privacy.egressAcknowledged`, so an absent value reads as the default. |
 | `llm.tokenEstimateCalibration` | string (JSON) | `"{}"` | JSON object, model ID → correction factor (a positive number) | `03-llm-provider-integration.md` §10.2 | **Not user-visible.** The rolling per-model correction factor that `06-summarization-and-trend-report.md` §5.1 and `12-prompt-library.md` §11 ask be measured from the returned `usage` blocks and stored "in prefs" so the heuristic estimator becomes self-calibrating. This row is that store, and it is a **preference rather than a database table** because it is bounded (one entry per model the user actually runs), tiny, and read at estimate time by `src/llm/shared/tokenEstimate.ts` — the same reasoning that makes `cache.lastSeenPromptVersions` a pref. Write it at most **once per job**, on completion, never per call: §8.2's rule that prefs rewrite the whole file on every change still applies. An absent or unparseable value means "no calibration yet" and the raw heuristic is used. |
 
@@ -5072,7 +5334,7 @@ Model IDs churn on a scale of weeks. These are **seed defaults only** — the pi
 | `summary.minAbstractChars` | integer | `250` | ≥ 0 | `06-summarization-and-trend-report.md` §5.4 | Not user-visible |
 | `fullText.preferJATS` | boolean | `true` | — | `06-summarization-and-trend-report.md` §3.1 (D-06-1) | Not user-visible |
 | `fullText.hardPageCap` | integer | `60` | ≥ 1 | `06-summarization-and-trend-report.md` §3.3 (D-06-3) | Not user-visible |
-| `autoSummarize` | boolean | `false` | — | `08-ui-ux-spec.md` §3.3 | Prefs pane → Report & audio. **Must ship off**: `onAsyncRender` fires on every selection change, so an unconditional LLM call here burns credits. Debounce 300–500 ms even when on. |
+| `autoSummarize` | boolean | `false` | — | `08-ui-ux-spec.md` §3.3 | ~~Prefs pane → Report & audio.~~ **Hidden in v1.0: no prefs-pane control** (*decided 2026-11-16, owner, `plan/00` §6 item 381; `plan/10` §0.4 line 23*: it stays off and hidden, because `09-security-privacy-and-api-keys.md` §7's `[BLOCKER]` "no background, idle-time, or on-import processing" stands; an opt-in control is a later-release candidate; `plan/10` `P7-T08` builds none). **Must ship off**: `onAsyncRender` fires on every selection change, so an unconditional LLM call here burns credits. Debounce 300–500 ms even when on. |
 | `screening.threshold` | integer | `60` | 0–100 | `12-prompt-library.md` §3 | Search & Import window, per run: the relevance-screening control doc 12 §3 requires, with the live count preview ("importing 47 of 210 results") beside it. **Not in the prefs pane.** This row is the seeded default for that control; doc 12 §3 owns the behaviour, including its two non-negotiable rules — never hard-filter without showing the number, and always offer "show excluded" so a false negative can be rescued. `0` disables screening's filtering effect while still recording the scores. |
 | `screening.retractionPolicy` | string | `"exclude_from_synthesis"` | `include` \| `exclude_from_synthesis` \| `exclude_entirely` | `06-summarization-and-trend-report.md` §13.3 | Not user-visible |
 | `screening.nonEnglishPolicy` | string | `"translate_summary"` | `skip` \| `translate_summary` \| `summarize_in_source_language` | `06-summarization-and-trend-report.md` §13.2 | Not user-visible |
@@ -5096,13 +5358,14 @@ The allowed-value enumerations for `screening.retractionPolicy` and `screening.n
 | `report.perPaperNotes` | boolean | `false` | — | `06-summarization-and-trend-report.md` §14.2 | Report dialog (opt-in) |
 | `report.pausedNoticeShown` | string (JSON) | `"[]"` | JSON array of strings, one per pause already announced (`pausedReportIdentity`) | `07-architecture-and-data-model.md` §12.4 reading 23; `plan/00` §6 item 332(b) | Not user-visible. Added 2026-11-02 (`P4-T21`). What stops the paused-report start notice from being shown twice for one pause. It holds job ids, pause reasons, checkpoint times and attempt counts, never a collection name or any other library data; `announcePausedReports` rewrites it to the jobs paused now, so it cannot grow beyond them. |
 | `report.addRelatedLinks` | boolean | `false` | — | `06-summarization-and-trend-report.md` §10.4 | Report dialog (opt-in — it writes to N items) |
-| `tts.voice` | string | `"Charon"` | one of the 30 Gemini prebuilt voice names | `04-audio-report-tts.md` §2.7 | Prefs pane → Report & audio (menulist populated from the live voice list). `Charon` ("Informative") is `04-audio-report-tts.md` §2.7's recommended default narrator; an earlier draft shipped `Kore`, which appears in doc 04 only inside Google's own API examples. |
-| ⚠ `tts.language` | string | `"auto"` | `auto` (follow `reportLanguage`) \| `en` \| `ko` | `04-audio-report-tts.md` §9.4 | **Not in the pane.** Declared in this document's own §8.3 placement table and required by doc 04 §7.5 ("Present the choice in prefs as … **Language**"); the default is inferred from doc 04 §9.4's "defaulting from Zotero's UI locale (`Zotero.locale`) on first run". |
-| ⚠ `tts.provider` | string | `"gemini"` | `gemini` \| `openai` \| `system` | `04-audio-report-tts.md` §7.5 | **Not in the pane.** Doc 04 §7.5 says the TTS provider must be a prefs choice and ranks the three options, but no document names a key. |
-| `tts.model` | string | `""` (empty = use the TTS model `04-audio-report-tts.md` recommends for the selected `tts.provider`, resolved at call time) | a TTS model ID from the provider's model list | `04-audio-report-tts.md` §12 (the ranking behind it is doc 04 §2.2 and doc 04 §11 lever 2) | **Not in the pane** in v1; when a control is added the picker is populated from the live list (doc 04 §2.2). **Never hardcode a TTS model ID** — not here, and not in `prefs.js`. Doc 04 §2.2's IDs all carry `-preview` and churn on a scale of weeks, so the empty default defers the choice to doc 04 at call time instead of freezing one ID into the schema. |
+| `tts.voice` | string | `"Charon"` | one of the 30 Gemini prebuilt voice names | `04-audio-report-tts.md` §2.7 | ~~Prefs pane → Report & audio (menulist populated from the live voice list).~~ *Decided 2026-11-16 (coordinator, under `plan/00` §6 item 313; `plan/09` §0.4 line 11; written by `P6-T02`): in v1.0 the voice is chosen in the report window's audio section (`plan/09` `P6-T17`), populated from the live voice list and written back here; the pane's audio controls are Phase 7's (`W7-4`).* `Charon` ("Informative") is `04-audio-report-tts.md` §2.7's recommended default narrator; an earlier draft shipped `Kore`, which appears in doc 04 only inside Google's own API examples. |
+| `tts.language` | string | `"auto"` | `auto` (follow the report's `language`) \| `en` \| `ko` | `04-audio-report-tts.md` §9.4 | **Not in the pane.** Declared in this document's own §8.3 placement table and required by doc 04 §7.5 ("Present the choice in prefs as … **Language**"); ~~the default is inferred from doc 04 §9.4's "defaulting from Zotero's UI locale (`Zotero.locale`) on first run".~~ *Decided 2026-11-16 (coordinator, under `plan/00` §6 item 313; `plan/09` §0.4 line 10; written and the ⚠ cleared by `P6-T02`): `auto` means the stored report's `language` (`TrendReport.language`, §5.2), not `Zotero.locale`, resolved by `plan/09` `P6-T08`; no per-collection value is stored.* |
+| ~~⚠ `tts.provider`~~ | ~~string~~ | ~~`"gemini"`~~ | ~~`gemini` \| `openai` \| `system`~~ | `04-audio-report-tts.md` §7.5 | ~~**Not in the pane.** Doc 04 §7.5 says the TTS provider must be a prefs choice and ranks the three options, but no document names a key.~~ *Struck 2026-11-16 (`plan/09` `P6-T02`; owner, `plan/00` §6 item 378(c); `plan/09` §0.4 line 11): v1.0 has Gemini TTS only, so there is no provider to choose and no row. Not in `PREFS`, `PREF_KEYS` or `addon/prefs.js`. A later release that adds a second TTS provider adds the row here first.* |
+| `tts.model` | string | `""` (empty = use the TTS model `04-audio-report-tts.md` recommends ~~for the selected `tts.provider`~~ for Gemini, resolved at call time) | a TTS model ID from the provider's model list | `04-audio-report-tts.md` §12 (the ranking behind it is doc 04 §2.2 and doc 04 §11 lever 2) | **Not in the pane** in v1; when a control is added the picker is populated from the live list (doc 04 §2.2). **Never hardcode a TTS model ID** — not here, and not in `prefs.js`. Doc 04 §2.2's IDs all carry `-preview` and churn on a scale of weeks, so the empty default defers the choice to doc 04 at call time instead of freezing one ID into the schema. *(Corrected 2026-11-16, `P6-T02`: "for the selected `tts.provider`" read as "for Gemini", since that row is struck; the resolver is `TTSProvider.resolveModel`, §4.4.)* |
 | `tts.targetMinutes` | integer | `0` (= auto) | `0`, or 1–60 | `04-audio-report-tts.md` §11 (cost lever 1); the auto derivation is `06-summarization-and-trend-report.md` §9.2 | Report dialog (audio length control). `0` means "derive the target duration from the report length using the §9.2 table" — the same auto convention as `report.targetWords`. Duration is ~99% of the TTS bill (doc 04 §11), so this is the one lever that matters. |
-| `tts.outputFormat` | string | `"wav"` | `wav` \| `mp3` | `04-audio-report-tts.md` §10.2 (delivery), with the size trade-off in doc 04 §6.4 | Prefs pane → Report & audio (doc 08 §7.3). Doc 04 owns the trade-off, and this pref does not decide import-vs-link directly: §10.2's 10 MB size threshold does. Format is what puts a file on one side of it — ~28.8 MB per 10 minutes of WAV lands above (linked, never syncs), ~3.6–9.6 MB of MP3 below (imported, counts against the Zotero storage quota). |
-| ⚠ `tts.linkedFileDir` | string | `""` (empty = ask on first use) | an absolute directory path, or empty | `04-audio-report-tts.md` §10.2 | **Not in the pane.** Doc 04 §10.2 requires that the folder for linked WAVs be chosen once and "persist[ed] … in prefs", and doc 04 §12 item 1 lists it, but no document names a key. Confirm the name and the first-use flow before it is written into `prefs.js`. |
+| `tts.outputFormat` | string | `"wav"` | `wav` ~~\| `mp3`~~ (*v1.0's only value, 2026-11-16; `mp3` is a later-release candidate*) | `04-audio-report-tts.md` §10.2 (delivery), with the size trade-off in doc 04 §6.4 | *Decided 2026-11-16 (coordinator, under `plan/00` §6 item 313; `plan/09` §0.4 lines 6 and 11; written by `P6-T02`): v1.0 writes WAV only, because the `generateContent` path returns raw PCM and doc 04 §6.4 allows no transcoding, so `wav` is the only allowed value and a stored `mp3` falls back to `wav`; with one value there is no choice to show, and the pane's audio controls are Phase 7's (`W7-4`).* ~~Prefs pane → Report & audio (doc 08 §7.3).~~ Doc 04 owns the trade-off, and this pref does not decide import-vs-link directly: §10.2's 10 MB size threshold does. Format is what puts a file on one side of it — ~28.8 MB per 10 minutes of WAV lands above (linked, never syncs), ~3.6–9.6 MB of MP3 below (imported, counts against the Zotero storage quota). |
+| `tts.linkedFileDir` | string | `""` (empty = ask on first use) | an absolute directory path, or empty | `04-audio-report-tts.md` §10.2 | **Not in the pane.** Doc 04 §10.2 requires that the folder for linked WAVs be chosen once and "persist[ed] … in prefs", and doc 04 §12 item 1 lists it, but no document names a key. ~~Confirm the name and the first-use flow before it is written into `prefs.js`.~~ *Decided 2026-11-16 (coordinator, under `plan/00` §6 item 313; `plan/09` §0.4 line 6; written and the ⚠ cleared by `P6-T02`): the name is confirmed as written. The first WAV above 10 MiB asks for the folder with a folder picker and stores the answer here (`plan/09` `P6-T13`); an empty value means "ask". The value is a local path, so it is **never logged** (`09-security-privacy-and-api-keys.md` §2.2's rule for paths). `01-zotero-plugin-platform.md` §7.2 gives it no `pref()` line, so none is written.* |
+| `audio.enabled` | boolean | `false` | — | `plan/09` §0.4 line 20; `plan/00` §6 item 307(d)'s pattern | **Hidden; not in the pane.** **Added 2026-11-16 (`plan/09` `P6-T02`; coordinator, under `plan/00` §6 item 313).** Holds back the report window's audio section and the `audioReport` job's opener until the feature works; `plan/09` `P6-T19` turns the default on, here first, the way `P4-T20` removed `report.enabled`. No `pref()` line. |
 
 > *Removed 2026-11-02 (`P4-T20`; owner, `plan/00` §6 item 307(d)): the hidden preference `report.enabled` (default `false`), which held back the collection menu's "Generate Research Trends Report…" entry and the report window's opener until a report could be generated. The window now generates one, so the row, its `PREFS` entry and its key are gone. A value left in a profile is ignored; nothing reads it.*
 
@@ -5110,6 +5373,8 @@ The allowed-value enumerations for `screening.retractionPolicy` and `screening.n
 
 `tts.model`, `tts.targetMinutes` and `tts.outputFormat` are the three settings `04-audio-report-tts.md` §12 item 1 requires beyond provider / voice / language. Doc 04 §12 names them and defers to this table for key, type, default and allowed values.
 
+> **As built 2026-11-16 (`plan/09` `P6-T02`).** The table above now carries the decisions below: `tts.provider` is struck; `tts.outputFormat` allows `wav` alone; `tts.language` and `tts.linkedFileDir` lose their ⚠, with dated notes; and `gemini.tierAnswer` (under "LLM providers & models", beside `gemini.paidTier`) and the hidden `audio.enabled` are added. `PREFS` (`src/prefs/schema.ts`) and `PREF_KEYS` (`src/prefs/keys.ts`) hold the eight rows Phase 6 reads — `tts.voice`, `tts.language`, `tts.model`, `tts.targetMinutes`, `tts.outputFormat`, `tts.linkedFileDir`, `gemini.tierAnswer`, `audio.enabled` — and `addon/prefs.js` has a line for the four `01-zotero-plugin-platform.md` §7.2 lists (`tts.voice`, `tts.model`, `tts.targetMinutes`, `tts.outputFormat`); the others read their defaults through the typed accessor (§8.5.1).
+>
 > **Decided 2026-11-16 — what Phase 6 does with the rows above.** The rows themselves change on `plan/09` `P6-T02`, which edits this table first under its own dated note; until then the rows read as they did. Recorded here so that no row is built on its old reading:
 >
 > - **`tts.provider` is not shipped in v1.0** (owner, `plan/00` §6 item 378(c): Gemini TTS only). Its row is struck by `P6-T02`; the value set in `TTSProvider`'s comment (§4.4) is read as `gemini` alone.
@@ -6300,6 +6565,15 @@ Notes: this is the pipeline where resume matters most — 200 summaries is poten
 > Kept: a cancel discards partial synthesis output while the summaries stay (§7.4); an interrupted
 > run resumes from the last completed stage, every spend guard re-passed with the visible resume
 > notice (`plan/00` §6 item 250); the audio states after `Succeeded` are Phase 6's and unchanged.
+>
+> **Changed 2026-11-16 (`plan/09` `P6-T01`; coordinator, under `plan/00` §6 item 313, `plan/09` §0.4 line 12): the
+> audio states left this diagram for a job of their own, §12.6.** They were drawn after `Succeeded` as
+> `Succeeded → AudioQueued → ScriptBuilding → Synthesizing → Concatenating → AttachingAudio → AudioSucceeded`, with
+> `Synthesizing → Cancelling` and a cancel label reading "partial report / audio DISCARDED". The report job is built
+> and ends when its note is written (`P4-T18`), the report window opens before any report exists, and `PipelineId`
+> already has `"audioReport"`, so audio is **its own `audioReport` job, always run against a stored `TrendReport` by
+> id and language**. The Notes paragraph below keeps its reason as the record; the reason it gave — the report's
+> identity, language and citations flowing through without re-derivation — is met by the stored record.
 
 ```mermaid
 stateDiagram-v2
@@ -6335,14 +6609,6 @@ stateDiagram-v2
     Rendering --> WritingNote : title block, tables, appendices, sanitized HTML
     WritingNote --> Succeeded : note (none in a read-only library), report row, Markdown file
 
-    Succeeded --> AudioQueued : user requests audio
-    AudioQueued --> ScriptBuilding : language chosen (en / ko)
-    ScriptBuilding --> Synthesizing : speakable script prepared
-    Synthesizing --> Synthesizing : next chunk (maxInputChars)
-    Synthesizing --> Concatenating : all chunks synthesized
-    Concatenating --> AttachingAudio
-    AttachingAudio --> AudioSucceeded
-
     EnsuringSummaries --> Paused : budget refusal, wall-clock budget, user, offline
     Synthesis --> Paused : budget refusal, wall-clock budget, user, offline
     Paused --> EnsuringSummaries : continue, the pending stage re-runs
@@ -6351,19 +6617,17 @@ stateDiagram-v2
 
     EnsuringSummaries --> Cancelling
     Synthesis --> Cancelling
-    Synthesizing --> Cancelling
-    Cancelling --> Cancelled : partial report / audio DISCARDED, summaries KEPT
+    Cancelling --> Cancelled : partial report DISCARDED, summaries KEPT
 
     EnsuringSummaries --> Interrupted : app quit
     Synthesis --> Interrupted : app quit
     Interrupted --> EnsuringSummaries : restart from the last completed stage, spend guards re-passed
-    AudioSucceeded --> [*]
     Succeeded --> [*]
     Failed --> [*]
     Cancelled --> [*]
 ```
 
-Notes: the trend report is the one pipeline that **discards** partial output on cancellation — half a trends narrative is actively misleading. Audio is modelled as a continuation of the report job rather than an independent job so that the report's identity, language choice, and citations flow through without re-derivation; it can still be triggered later against a stored `TrendReport`.
+Notes: the trend report is the one pipeline that **discards** partial output on cancellation — half a trends narrative is actively misleading. ~~Audio is modelled as a continuation of the report job rather than an independent job so that the report's identity, language choice, and citations flow through without re-derivation; it can still be triggered later against a stored `TrendReport`.~~ *Superseded 2026-11-16 (`plan/09` `P6-T01`, the note above): audio is its own `audioReport` job against a stored `TrendReport`, §12.6.*
 
 > **As built 2026-11-01 (`P4-T18`; `createTrendReportPipeline`, `remainingFromCheckpoint`, `stageSpendOf`, `withDatedTitle` in `src/pipeline/trendReport/trendReportPipeline.ts`) — readings the diagram and `plan/07` `P4-T18` leave open. Each DECIDED 2026-11-01 (coordinator, under `plan/00` §6 item 313), in the direction the documents point.**
 > 1. **Two halves around the job record**, as the summarize run (§12.3's note of 2026-10-29): `prepare` (Screening, Estimating, AwaitingConfirm) runs with no record and sends nothing; `execute` (EnsuringSummaries to Saving) runs in the record's context. `Pipeline.run` does both, and with a checkpoint in `ctx.resumeState` it asks no second question.
@@ -6495,6 +6759,67 @@ Notes:
   12. **Rows are `put` after `Diversifying`,** so that `reject` has a row to mark; `put` keeps an earlier rejection. A store that cannot be written warns, and `reject` then answers `false`.
   13. **Fewer than 5 items ends `Failed`** with `rh-error-recommend-too-few-items` and `tooFewItems`, whose `itemCount` fills `$count`. It is a plain `SerializedError`, because the class §10.1 would need has one thrower and no catcher elsewhere.
   14. **`"recommend: scored"` is the log line for `P5-T30`:** the drop counts, `couplingRows`, the space and `scoreMs`, which holds `lexicalSpace`'s build on the word space (`plan/00` §6 item 346(d)). It cannot be separated from scoring without changing `score.ts`'s calls.
+
+### 12.6 Audio report (Feature 5)
+
+> **Added 2026-11-16 (`plan/09` `P6-T01`; coordinator decisions of that day under `plan/00` §6 item 313: `plan/09`
+> §0.4 lines 12, 13 and 14).** The audio states moved here from §12.4 (that section's note of this date), as the
+> `audioReport` job's own diagram. The job is **always run against a stored `TrendReport`**, named by
+> `AudioRunInput.reportId` with the window's language and voice (§5.2), and it is started from the report window's
+> audio section (`plan/09` `P6-T17`). Its stages are `plan/09`'s cards: the script pass (`P6-T07`, `P6-T08`), the
+> confirmation (`P6-T10`, `P6-T15`), the synthesis loop (`P6-T11`), assembly (`P6-T12`), delivery (`P6-T13`), the
+> failure paths (`P6-T14`) and the job itself (`P6-T16`). Nothing in it is built yet.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Queued
+    Queued --> Scripting : stored report loaded, library writable, tier allowed, no stored script for the language
+    Queued --> AwaitingConfirm : a validated script is stored for the language (the first confirmation is skipped)
+    Scripting --> Scripting : one retry, the leaks listed
+    Scripting --> AwaitingConfirm : script validated and written to audioScripts[language]
+    Scripting --> Failed : leaks after the retry, or the script call failed (nothing sent to Google)
+    AwaitingConfirm --> Synthesizing : confirmed (real characters, chunks, seconds, bytes, import or link, cost)
+    AwaitingConfirm --> Cancelled : declined, script KEPT
+    Synthesizing --> Synthesizing : next chunk, sequential, identical inputs
+    Synthesizing --> Paused : budget refusal, user, offline
+    Paused --> Synthesizing : continue, the pending chunk re-sent
+    Paused --> Cancelling : stop
+    Synthesizing --> Assembling : every chunk synthesized
+    Synthesizing --> Failed : a non-retryable error (key, entitlement, model, no audio part)
+    Assembling --> Attaching : one WAV, one sample rate
+    Assembling --> Failed : sample rates differ
+    Attaching --> Succeeded : attachment in the collection, key in audioAttachmentKeys[language]
+    Attaching --> Failed : the attachment could not be written
+
+    Queued --> Cancelling
+    Scripting --> Cancelling
+    Synthesizing --> Cancelling
+    Assembling --> Cancelling
+    Cancelling --> Cancelled : chunks in memory DISCARDED, script KEPT
+
+    Succeeded --> [*]
+    Failed --> [*]
+    Cancelled --> [*]
+```
+
+Notes:
+
+- **One job per audio run, against a stored report.** The report job is not continued; the report's identity,
+  language and citations come from the stored record, so nothing is re-derived (§12.4's note of 2026-11-16).
+- **Two confirmations** (`plan/09` §0.4 line 13). The first, before the script call, prices the call from the target
+  length and the TTS step from the target minutes, shown as an estimate; it is asked in `Queued`, before `Scripting`,
+  and skipped when a validated script for the language is stored. The second, `AwaitingConfirm`, prices the TTS step
+  from the real script (`AudioPlan`, §5.2). **No request reaches Google before it is answered** (FR-42).
+- **`Cancelling → Cancelled` is reachable from every state before `Attaching`.** A cancel drops the chunks held in
+  memory and aborts the request in flight (§7.4); once `Attaching` has begun it runs to the end, so no half-made
+  attachment is left (the same rule as the report's Saving, §12.4's reading 7).
+- **`Failed` keeps the script.** A failure after `Scripting` leaves `audioScripts[language]` written, so the FR-43
+  fallback (save the script as text) has something to save and a later run skips the script call (`P6-T14`).
+- **No `Interrupted → resume` edge** (`plan/09` §0.4 line 14). Chunks are held in memory only; a retry in the same
+  session reuses the finished ones, and a restart starts the TTS step again from the stored script. A content-hashed
+  chunk cache that would allow a resume is backlog (`plan/09` §4). A job the app quit during ends `Interrupted` under
+  the shared convention above (§12's preamble) and is not resumed.
+- **Progress is one line, "chunk n of N"**, during `Synthesizing` (§7.7's choice for `audioReport`).
 
 ---
 

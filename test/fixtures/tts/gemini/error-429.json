@@ -1,0 +1,8 @@
+{
+  "status": 429,
+  "headers": {
+    "content-type": "application/json; charset=UTF-8",
+    "retry-after": "2"
+  },
+  "body": "{\n  \"error\": {\n    \"code\": 429,\n    \"message\": \"Resource has been exhausted (e.g. check quota). [synthetic fixture, P6-T03; not a recorded answer]\",\n    \"status\": \"RESOURCE_EXHAUSTED\"\n  }\n}\n"
+}

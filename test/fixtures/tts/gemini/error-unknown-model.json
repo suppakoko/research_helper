@@ -1,0 +1,7 @@
+{
+  "status": 404,
+  "headers": {
+    "content-type": "application/json; charset=UTF-8"
+  },
+  "body": "{\n  \"error\": {\n    \"code\": 404,\n    \"message\": \"models/gemini-recorder-no-such-model-tts is not found for API version v1beta. [synthetic fixture, P6-T03; not a recorded answer]\",\n    \"status\": \"NOT_FOUND\"\n  }\n}\n"
+}

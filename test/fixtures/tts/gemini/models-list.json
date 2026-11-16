@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "headers": {
+    "content-type": "application/json; charset=UTF-8"
+  },
+  "body": "{\n  \"models\": [\n    {\n      \"name\": \"models/gemini-2.5-flash-preview-tts\",\n      \"displayName\": \"gemini-2.5-flash-preview-tts\",\n      \"description\": \"[synthetic fixture, P6-T03; not a recorded answer] docs/04 §2.2\",\n      \"inputTokenLimit\": 32000,\n      \"supportedGenerationMethods\": [\n        \"generateContent\"\n      ]\n    },\n    {\n      \"name\": \"models/gemini-2.5-pro-preview-tts\",\n      \"displayName\": \"gemini-2.5-pro-preview-tts\",\n      \"description\": \"[synthetic fixture, P6-T03; not a recorded answer] docs/04 §2.2\",\n      \"inputTokenLimit\": 32000,\n      \"supportedGenerationMethods\": [\n        \"generateContent\"\n      ]\n    },\n    {\n      \"name\": \"models/gemini-3.1-flash-tts-preview\",\n      \"displayName\": \"gemini-3.1-flash-tts-preview\",\n      \"description\": \"[synthetic fixture, P6-T03; not a recorded answer] docs/04 §2.2\",\n      \"inputTokenLimit\": 32000,\n      \"supportedGenerationMethods\": [\n        \"generateContent\"\n      ]\n    }\n  ]\n}\n"
+}

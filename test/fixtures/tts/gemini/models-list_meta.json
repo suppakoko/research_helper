@@ -1,0 +1,16 @@
+{
+  "scenario": "models-list",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-11-16T09:35:23.772Z",
+  "endpoint": "https://generativelanguage.googleapis.com/v1beta/models",
+  "method": "GET",
+  "toolVersion": "0.0.2",
+  "synthetic": true,
+  "syntheticReason": "Stand-in, not evidence (P6-T03): docs/04 §2.2's three TTS model ids in docs/03 §9.3's entry shape. inputTokenLimit is docs/04 §4.1's 32,000-token context window; no other limit is documented, so none is written. The owner's run (P6-T04) replaces it.",
+  "redactions": [
+    "synthetic: nothing was received, nothing to redact"
+  ],
+  "source": "gemini-tts",
+  "provider": "gemini",
+  "page": 1
+}

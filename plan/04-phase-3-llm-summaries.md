@@ -3041,7 +3041,7 @@ test/contract`) already runs the new files. Report: `plan/reports/P3-T30.md` onc
 |---|---|
 | **ID** | `P3-T31` |
 | **State** | `TODO` |
-| **Depends on** | `P3-T14`, `P3-T22`, `P3-T28`, `P3-T29`, `P3-T30`, `P3-T37`, `P3-T41` |
+| **Depends on** | `P3-T14`, `P3-T22`, `P3-T28`, `P3-T29`, `P3-T30`, `P3-T41` |
 | **Blocks** | none |
 | **Retires** | closes `R-4`, `R-5`, `R-9`, `R-19`, `R-19b`; part of `R-6` |
 | **Implements** | `NFR-4`, `NFR-5`, `NFR-16`, `FR-23`, `FR-24` |
@@ -3050,6 +3050,12 @@ test/contract`) already runs the new files. Report: `plan/reports/P3-T30.md` onc
 
 **Goal.** Every line of the phase definition of done is demonstrated on a real Zotero profile, and
 the result is recorded.
+
+> **Changed 2026-11-16 (owner, `plan/00` §6 item 381; `plan/10` §0.4 line 22): this card may run without
+> `P3-T37`.** `P3-T37` (the Linux keyring-less check) is deferred until `G-09` provides Linux machines (item
+> 380, decision 1), so `P3-T37` was dropped from **Depends on**, which read "`P3-T14`, `P3-T22`, `P3-T28`,
+> `P3-T29`, `P3-T30`, `P3-T37`, `P3-T41`". The part of `R-9` that `P3-T37` retires stays open and is recorded
+> as waived in the release checklist (`plan/10` `P7-T24` step 4), not closed by this run.
 
 **Read first.**
 - `docs/11-implementation-roadmap.md` §1 Phase 3 "Definition of done"
@@ -3503,7 +3509,7 @@ stored new records without naming a gate.
 | **ID** | `P3-T37` |
 | **State** | `TODO` |
 | **Depends on** | `P3-T02`, `P3-T03` |
-| **Blocks** | `P3-T31` |
+| **Blocks** | none |
 | **Retires** | remainder of `R-9` |
 | **Implements** | part of `FR-30`, part of `NFR-16` |
 | **Estimate** | 0.25 d |
@@ -3520,6 +3526,11 @@ decided on 2026-09-30.
 > by this note. Its **Blocks** row still names `P3-T31`; whether `P3-T31` may start without it is an open
 > line for the owner (`plan/reports/P7-decomposition.md`), and until it is answered the dependency stands
 > as written. The release checklist records this check as waived, with the reason (`plan/10` `P7-T24`).
+>
+> **Changed 2026-11-16, later (owner, `plan/00` §6 item 381; `plan/10` §0.4 line 22): the edge to `P3-T31` is
+> dropped.** `P3-T31` may run without this card, so **Blocks** now reads `none` (it read `P3-T31`), and
+> `P3-T31`'s **Depends on** no longer names this card. Nothing else on the card changes; it still runs when
+> `G-09` provides the Linux machines.
 
 **Read first.**
 - `docs/09-security-privacy-and-api-keys.md` §1.7, the 2026-09-30 block — a missing libsecret does

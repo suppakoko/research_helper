@@ -3,7 +3,7 @@
 > **Generated from the task cards in `01`–`04` and `07`–`10`** (Phase 4's file, read since 2026-10-26,
 > Phase 5's, read since 2026-11-01, and Phase 6's and Phase 7's, read since 2026-11-16). If a row here disagrees with a card, the card wins — then regenerate
 > this file.
-> **Last updated:** 2026-11-16 · **269 tasks: 112 `DONE`, 157 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 40**, Phase 3 **0 of 41**, Phase 4 **0 of 25**, Phase 5 **0 of 32**, Phase 6 **0 of 19**, Phase 7 **0 of 31**. **The plan has grown from the 203 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25, plus the 30 Phase 5 was drafted and reviewed with on 2026-11-01; its 31st card, `P5-T31`, added when the owner's decisions were applied, counts as growth; plus the 19 Phase 6 was decomposed into on 2026-11-16; plus the 31 Phase 7 was decomposed into on 2026-11-16) to 269, so 66 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-11-16 · **270 tasks: 112 `DONE`, 158 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 40**, Phase 3 **0 of 41**, Phase 4 **0 of 25**, Phase 5 **0 of 32**, Phase 6 **0 of 19**, Phase 7 **0 of 32**. **The plan has grown from the 203 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25, plus the 30 Phase 5 was drafted and reviewed with on 2026-11-01; its 31st card, `P5-T31`, added when the owner's decisions were applied, counts as growth; plus the 19 Phase 6 was decomposed into on 2026-11-16; plus the 31 Phase 7 was decomposed into on 2026-11-16) to 270, so 67 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -29,8 +29,16 @@ Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0
 | 4 — Trend report | 25 | 25.75 d | 25.75–36 d | 8–11 d (+134%) |
 | 5 — Related + recommendations | 32 | 36.25 d | 36.25–51 d | 10–14 d (+159%) |
 | 6 — TTS audio report | 19 | 20.00 d | 20.00–28 d | 7–10 d (+100%) |
-| 7 — Polish, i18n, release | 31 | 28.50 d | 28.50–40 d | 10–14 d (+104%) |
-| **All phases** | **269** | **224.50 d** | **224.50–315 d** | 74–101 d |
+| 7 — Polish, i18n, release | 32 | 29.25 d | 29.25–41 d | 10–14 d (+109%) |
+| **All phases** | **270** | **225.25 d** | **225.25–316 d** | 74–101 d |
+
+**2026-11-16, later still: `P7-T32` added, Phase 7 32 cards, 29.25 d** (§6 item 381). The owner's answer to `plan/10`
+§0.4 line 20 (Gemini chat in balanced mode follows the audio rule) is carded as `P7-T32` at 0.75 d; 29.25 × 1.4 = 40.95 →
+41, so the band is 29.25–41 d (was 28.50–40). The last column is 29.25 ÷ 14 = 2.089 → +109% (was +104%). The project
+total is 114.00 + 25.75 + 36.25 + 20.00 + 29.25 = **225.25 d** low and 160 + 36 + 51 + 28 + 41 = **316 d** high (was
+224.50–315), still ≈ 11–15 months at 21 working days (225.25 ÷ 21 ≈ 10.7; 316 ÷ 21 ≈ 15.05). The critical path becomes
+**157.00–220** (was 156.25–219) and the Phase 3 route 154.00–216, so the 3 d / 4 d margin is unchanged; Phase 5's float
+stays **9.5–13 d**, because Phase 7 lies on both routes.
 
 **2026-11-16, later: Phase 7 decomposed, 31 cards, 28.50 d** (§6 item 380). The coordinator's brief of that day carried
 four owner decisions for Phase 7 (item 380(a)) and the owner's answers to `plan/09` §0.4's open lines (item 379); the cards
@@ -250,7 +258,8 @@ queue is what gates Phase 5 months later (`docs/11` R-3).
 `P0-T01`, `P0-T22`, `P1-T01`, `P2-T15`, `P3-T01`, ~~`P3-T18`~~, `P3-T24`.
 **Corrected 2026-10-20 for Phase 3** (re-read from the cards): Phase 3's entry points are now
 `P3-T01`, `P3-T05`, `P3-T24`, `P3-T32` and `P3-T36`; `P3-T18` depends on `P3-T32` since the
-re-carding. Phase 3's terminal is still `P3-T31`, which now also waits on `P3-T37`.
+re-carding. Phase 3's terminal is still `P3-T31`, which now also waits on `P3-T37`. *Changed 2026-11-16 (§6 item 381(e)): it no
+longer does; the deferred `P3-T37` is now a second Phase 3 card with nothing after it, and does not gate the phase.*
 
 **Phase terminals** (a phase is done when its terminal is `DONE`):
 `P0-T28`, `P1-T23`, `P2-T15`/`P2-T16`, `P3-T31`, `P4-T25`, `P5-T30`, `P6-T19`, `P7-T31`.
@@ -268,7 +277,7 @@ earlier phases is in its `Notes` and in `plan/08` §0.3.
 phases is in its `Notes` and in `plan/09` §0.3.
 
 **Phase 7, added 2026-11-16** (read from `plan/10`'s cards): entry points `P7-T01`, `P7-T04`, `P7-T12`,
-`P7-T21`, `P7-T22` and `P7-T28`; terminal `P7-T31`. Phase 7's cards list only Phase 7 IDs in `Depends on`; what each
+`P7-T21`, `P7-T22`, `P7-T28` and, since 2026-11-16 (§6 item 381(c)), `P7-T32`; terminal `P7-T31`. Phase 7's cards list only Phase 7 IDs in `Depends on`; what each
 needs from earlier phases is in its `Notes` and in `plan/10` §0.3.
 
 `P2-T15` is both, and deliberately so: it records a decision that was settled
@@ -465,7 +474,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | `P3-T28` | Item-pane AI summary section | `P3-T25`, `P3-T32`, `P3-T35` | 0.75 d |  |
 | `P3-T29` | Summarize-collection pipeline, notes, remove-notes command | `P3-T16`, `P3-T17`, `P3-T25`, `P3-T27`, `P3-T32`, `P3-T35` | 1.25 d |  |
 | `P3-T30` | LLM fixtures and contract tests | `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10`, `P3-T11`, `P3-T12` | 0.75 d | 🔒 |
-| `P3-T31` | Phase-3 acceptance run against the definition of done | `P3-T14`, `P3-T22`, `P3-T28`, `P3-T29`, `P3-T30`, `P3-T37`, `P3-T41` | 0.75 d | 🔒 |
+| `P3-T31` | Phase-3 acceptance run against the definition of done | `P3-T14`, `P3-T22`, `P3-T28`, `P3-T29`, `P3-T30`, `P3-T41` | 0.75 d | 🔒 |
 | `P3-T32` | Preference rows Phase 3 reads (`docs/07` §8.5) | — | 0.75 d |  |
 | `P3-T33` | Cache layer: interface, SQLite store, keys, migration | `P3-T32` | 1.0 d |  |
 | `P3-T34` | Job record, `job` table, queue and checkpoint | `P3-T36` | 1.0 d |  |
@@ -587,7 +596,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | `P7-T13` | Log ring buffer and diagnostics: save and copy | `P7-T01`, `P7-T09` | 1.5 d |  |
 | `P7-T14` | Log-redaction audit of a full job at debug level | `P7-T13` | 0.75 d |  |
 | `P7-T15` | Startup, memory and main-thread profiling | `P7-T06`, `P7-T13` | 1.5 d | 🔒 |
-| `P7-T16` | `docs/09` §7 security review, `SECURITY.md`, dependency audit | `P7-T10`, `P7-T14`, `P7-T21` | 1.5 d |  |
+| `P7-T16` | `docs/09` §7 security review, `SECURITY.md`, dependency audit | `P7-T10`, `P7-T14`, `P7-T21`, `P7-T32` | 1.5 d |  |
 | `P7-T17` | Provider-policy re-verification and dated retention text | `P7-T08` | 0.75 d |  |
 | `P7-T18` | Offline verification | `P7-T12` | 1.0 d |  |
 | `P7-T19` | README and CHANGELOG | `P7-T11`, `P7-T13`, `P7-T17` | 1.5 d |  |
@@ -603,6 +612,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | `P7-T29` | Release checklist sign-off | `P7-T07`, `P7-T25`, `P7-T27`, `P7-T28` | 0.25 d | 🔒 |
 | `P7-T30` | Publish v1.0.0 and verify the upgrade from v0.9.0 | `P7-T29` | 0.5 d | 🔒 |
 | `P7-T31` | Forum post and community-list submissions | `P7-T23`, `P7-T30` | 0.25 d | 🔒 |
+| `P7-T32` | Gemini in balanced mode: warn and confirm, not refuse | — | 0.75 d |  |
 
 ---
 
@@ -3439,6 +3449,20 @@ the caller of what the card builds; if it does not, the caller is added with a d
     - (f) **Gates** (`plan/06`): `G-44` (item 379(e)) and `G-45` added; `G-04`, `G-09`, `G-31`, `G-33`, `G-34`, `G-35`, `G-36`, `G-37` given notes of this date; §1's start-order rows updated.
     - (g) **Index.** `scripts/derive-task-index.ts` reads `plan/10` as an eighth table (`PHASES` gains Phase 7; `DECOMPOSED` becomes 98 + 25 + 30 + 19 + 31; the header's "Phase 7 **n of m**" is kept current); `npm run index:derive` regenerated §4. `plan/README` §2 lists `10`, and §2 and §7 carry notes of this date.
     - (h) **Open lines for the owner** (`plan/10` §0.4 lines 18–23): the `live-contract` job (defer and waive recommended); `docs/09` §7's `sha256:` blocker against the scaffold's `sha512:`; whether Gemini chat in balanced mode follows item 379(d); R-19's at-scale validation; whether `P3-T31` may run without the deferred `P3-T37`; `autoSummarize` against the "no background processing" blocker. Phase 7 was decomposed before `plan/05` §0's exit conditions (a) and (c) held; `plan/10` §0's entry-condition table records which are met. Whether the owner accepts 28.50–40 d is not recorded. No card set to DONE.
+381. **`plan/10` §0.4's open lines 18–23 answered by the owner, 2026-11-16** (coordinator's brief of that day; `plan/reports/P6-batch1.md` Part 0). Every line is closed in `plan/10` §0.4, which now reads "Lines 18–23, answered 2026-11-16"; each answer is recorded as "DECIDED 2026-11-16 (owner, `plan/00` §6 item 381)".
+    - (a) **Line 18 — the `live-contract` job: deferred.** The scheduled job is a later-release candidate; `docs/13` §8.9's line is **waived for v1.0** with the reason "no secret-holding job exists"; the fixtures' 180-day age rule still applies. Recorded in `docs/13` §8.9 (note of this date); carried by `P7-T24` step 3.
+    - (b) **Line 19 — the update hash.** A CI-generated `sha512:` `update_hash` meets `docs/09` §7's `[BLOCKER]`; its wording now reads "a CI-generated sha256 or sha512 hash", with a dated note (the earlier note kept as the record). Carried by `P7-T16` step 3 and `P7-T21` step 3, which no longer stop.
+    - (c) **Line 20 — Gemini chat in balanced mode: yes.** A Gemini chat, summary or report call in balanced mode follows the audio rule of item 379(d): a free or unknown key shows the warning and proceeds only after the user confirms; only strict mode refuses. Recorded in `docs/09` §3.5 (the Gemini row's balanced cell and a note of this date, which says the rule is not built yet). **Carded as `P7-T32` — "Gemini in balanced mode: warn and confirm, not refuse", 0.75 d**, ungated, an entry point that blocks `P7-T16`; it changes `assertModelAllowed` (`src/pipeline/shared/privacyPolicy.ts`) in one place, and its five callers (`summarizeItem`, the relevance screen, `critiqueReport`, the report pipeline's model check, `profileCall`) already handle `requiresConfirmation` for full mode.
+    - (d) **Line 21 — R-19 at scale: not in v1.0.** No PDF-extraction-quality validation at scale; the held-out IMRaD measurement (items 375–377) is the record; the README's known-limitations section states it (`P7-T19` step 1, note of this date).
+    - (e) **Line 22 — `P3-T31` without `P3-T37`: yes.** The `P3-T37` → `P3-T31` edge is dropped, with dated notes on both cards in `plan/04`; the part of R-9 `P3-T37` retires stays open and waived in the release checklist.
+    - (f) **Line 23 — `autoSummarize`: off and hidden.** It stays `false` and hidden from the preferences pane in v1.0; `docs/09` §7's no-background-processing `[BLOCKER]` stands; an opt-in automatic summarizer is a later-release candidate. Recorded in `docs/09` §7 and `docs/07` §8.5 (the row's surface struck, notes of this date); carried by `P7-T08` step 2 (no control; its test asserts none) and `P7-T16` step 2 (evidence that no UI sets it).
+    - (g) **Estimate.** Phase 7 is now **32 cards, 29.25 d**; 29.25 × 1.4 = 40.95 → 41, so **29.25–41 d** (was 28.50–40), +39 % against the scaled low end and 1 % above its top. Propagated to `plan/README` §7's five sites: `plan/10` (§1 total, §3 roll-up, the Effort prose, the header), `docs/11` §1 (Phase 7 row 29.25–41 over 32 cards, Phases 4–7 subtotal **111.25–156** over 108, total **225.25–316 d** over 270 cards, months still ≈ 11–15, reserve still ≈ 34–47 d, the Gantt node, Phase 7's Effort paragraph), §2 (critical path **157.00–220**, was 156.25–219; Phase 3 route 154.00–216, margin unchanged; Phase 5's float unchanged at 9.5–13 d; the single-developer sentence), the R-23 row and §5's Phase 7 row; `plan/00` §1 (the Phase 7 row, +109 %, and the "All phases" row); `plan/05` §4's pointer. `npm run index:derive` regenerated §4.
+    - (h) No card set to DONE. Whether the owner accepts 29.25–41 d is not recorded.
+382. **Open, for the owner, 2026-11-16: the two audio prompts cannot load as `docs/12` prints them** (`plan/09` `P6-T06`; `plan/reports/P6-T06.md`). Tag: Phase 6. This blocks `P6-T06`'s first `Done when` line, and through it `P6-T07` and `P6-T08`.
+    - (a) **The problem.** `docs/12` §13's system rule 11 and §14's system rule 12 hold `{{TARGET_MINUTES}}`. The registry refuses any placeholder in a system text (`docs/12` §1.1 rule 2). The owner kept that rule for `THEME_CLUSTER` in item 290(b).
+    - (b) **Where the files stand.** `src/prompts/pending/audio-script-en.v1.0.0.md` and `audio-script-ko.v1.0.0.md` hold the text verbatim and are unregistered, as `theme-cluster.v1.0.0.md` was before item 290(b). Registering either now would make the whole bundled registry throw at load. They sit in `pending/` because eight pipeline test files load every `.md` directly in `src/prompts/`.
+    - (c) **The question.** Should one sentence in each system prompt move the number out? Both user prompts already state the target length and use all seven variables, so nothing else changes and the version stays `1.0.0`. The draft wording is in `docs/12` §13's note of this date, and the Korean sentence is the owner's to approve (§19 item 4). The alternative, letting a system text carry a code-computed number, would change §1.1 rule 2. It is not recommended: the system message would then differ from run to run.
+    - (d) **Once decided.** The agent edits the two files and the `docs/12` text, moves the files up into `src/prompts/`, adds both ids to `PROMPT_IDS`, `PROMPT_FILE_NAMES` and `bundled.ts`, and turns the test's "refused" case into "registered". The recorder's script scenarios then turn from pending to ready with no further edit.
 
 
 ## 7. Regenerating this file

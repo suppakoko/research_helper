@@ -14,10 +14,20 @@
  * `rate=` parser — live in `scripts/spike-tts-korean.ts`, and `P0-T26` is the
  * card that creates `src/tts/audioStore.ts` for the shipped versions.
  *
- * ## Three §4.4 declarations that are deliberately absent
+ * **Extended 2026-11-16 (`plan/09` `P6-T01`).** {@link TTSProvider} and
+ * `AudioArtifact.usage` are now declared below, as `docs/07` §4.4 holds them
+ * since that day: `src/llm/types.ts` and `src/model/usage.ts` exist, so the
+ * two absences the spike recorded (items 1 and 2 below) are closed. Every
+ * spike export stays, because `scripts/spike-tts-korean.ts`,
+ * `src/tts/audioStore.ts` and `src/pipeline/types.ts` import from this file.
+ * The file stays types only; `src/tts/geminiTts.ts` (`P6-T05`) implements the
+ * interface.
  *
- * Each depends on a module no card has created yet, and `P0-T25`'s `Files`
- * list does not include those modules. Re-declaring them here would build the
+ * ## Three §4.4 declarations that were deliberately absent (spike, `P0-T25`)
+ *
+ * Items 1 and 2 are closed by the note above; the text is kept as the record.
+ * Each depended on a module no card had created yet, and `P0-T25`'s `Files`
+ * list did not include those modules. Re-declaring them here would build the
  * parallel type system `plan/README.md` §5 rule 3 forbids, so they are named
  * rather than guessed:
  *
@@ -42,6 +52,12 @@
  * the *request*): it is not declared here at all.
  */
 
+import type { CredentialCheckResult, LLMCallContext } from "../llm/types";
+import type { Usage } from "../model/usage";
+
+/** `docs/07` §5.2's chunk shape, re-exported so the provider layer has one import. */
+export type { AudioChunk } from "../model/audio";
+
 // ---------------------------------------------------------------------------
 // 1. Domain shapes — docs/07 §4.4, verbatim except where noted above
 // ---------------------------------------------------------------------------
@@ -55,6 +71,11 @@
  *
  * Do not narrow this union to `"gemini"` — a one-member union makes the
  * fallback ordering in `04-…` §7.5 unrepresentable.
+ *
+ * *Noted 2026-11-16 (owner, `plan/00` §6 item 378(c)):* v1.0 implements
+ * `gemini` alone; `openai` and `system` have no implementation, and the
+ * `tts.provider` preference is not shipped (`plan/09` §0.4 line 11). The union
+ * keeps three members for the reason above.
  */
 export type TtsProviderId = "gemini" | "openai" | "system";
 
@@ -80,7 +101,8 @@ export interface SynthesisRequest {
 }
 
 /**
- * docs/07 §4.4, minus its `usage` field — see the file header, absence 2.
+ * docs/07 §4.4. *(Until 2026-11-16 this was §4.4's interface minus `usage`,
+ * the spike's absence 2; `P6-T01` added it.)*
  *
  * For the Gemini legacy path the field values are fixed by doc 04 §3.1:
  * `mimeType` arrives as `audio/L16;codec=pcm;rate=24000`, the samples are
@@ -97,6 +119,11 @@ export interface AudioArtifact {
   readonly sampleRateHz: number | undefined;
   readonly model: string;
   readonly voice: string;
+  /**
+   * The call's token counts, read from the response (`usageMetadata` on
+   * Gemini's legacy path); absent when the response carried none.
+   */
+  readonly usage: Usage | undefined;
 }
 
 /** docs/07 §4.4. */
@@ -106,6 +133,50 @@ export interface VoiceInfo {
   /** Languages the voice is documented to handle; may be "multilingual". */
   readonly languages: readonly string[] | "multilingual";
   readonly description?: string;
+}
+
+/**
+ * `docs/07` §4.4 as reconciled on 2026-11-16 (`plan/09` `P6-T01`). Implemented
+ * by `createGeminiTts` in `src/tts/geminiTts.ts` (`P6-T05`), constructed in
+ * `src/bootstrap/registerProviders.ts` and called by
+ * `src/pipeline/audioReport/synthesize.ts` (`P6-T11`) and the audio job
+ * (`P6-T16`).
+ *
+ * Two members differ from the earlier §4.4 block, each recorded in §4.4's note
+ * of that date: `maxInputChars` takes the language, because `docs/04` §5.2's
+ * targets differ by language (900 English, 450 Korean characters at most);
+ * `resolveModel` is added, because no TTS model ID is compiled in except one
+ * last-resort fallback (`docs/04` §2.2) and the job needs the model before it
+ * can price the plan.
+ */
+export interface TTSProvider {
+  readonly id: TtsProviderId;
+  readonly displayNameKey: string;
+  readonly rateLimitKey: string;
+  /**
+   * Max characters accepted per request in `language` (a BCP-47 tag or
+   * `"en"` / `"ko"`). Longer scripts are split by `src/tts/chunk.ts` at
+   * sentence boundaries and concatenated (`docs/04` §5.2, §6).
+   */
+  maxInputChars(language: string): number;
+
+  isConfigured(): boolean;
+  /** Makes no billed call: on Gemini it reads the model list. */
+  validateCredentials(ctx: LLMCallContext): Promise<CredentialCheckResult>;
+  /**
+   * The model to synthesize with: `preferredModelId` (`tts.model`) when set,
+   * otherwise one chosen from the provider's live model list.
+   */
+  resolveModel(preferredModelId: string, ctx: LLMCallContext): Promise<string>;
+  listVoices(
+    language: string,
+    ctx: LLMCallContext,
+  ): Promise<readonly VoiceInfo[]>;
+  /** One request; never retries (the caller does, with identical inputs). */
+  synthesize(
+    request: SynthesisRequest,
+    ctx: LLMCallContext,
+  ): Promise<AudioArtifact>;
 }
 
 /**

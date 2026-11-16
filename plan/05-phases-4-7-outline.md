@@ -25,6 +25,7 @@
 > too and its band is measured (20.00–28 d); only §4's Phase 7 is still scaled.*
 > *Updated 2026-11-16, later (`plan/00` §6 item 380): Phase 7 is decomposed (`plan/10`), so §4 is a pointer
 > too and its band is measured (28.50–40 d); no phase in this file is scaled any more.*
+> *Re-priced 2026-11-16, later still (`plan/00` §6 item 381): Phase 7 is 29.25–41 d over 32 cards after `P7-T32`; it read 28.50–40 d.*
 > *Re-priced 2026-11-05 (`plan/00` §6 item 344(b)): Phase 5's measured band is 36.25–51 d; it read 35.75–50 d.*
 > *Re-priced 2026-11-02 (`plan/00` §6 item 335(g)): Phase 4's measured band is 25.25–35 d; it read 23.75–33 d.*
 > *Re-priced again 2026-11-02 (`plan/00` §6 item 336(d)): it is 25.75–36 d; it read 25.25–35 d.*
@@ -199,8 +200,8 @@ below, Phase 6's gating list, is kept as the record it was.
 before §0's exit conditions (a) and (c) held — Phases 3–6 are not `DONE`, and Phase 6 is not built;
 `plan/10` §0 records which entry conditions are met. It has had no independent review yet.
 
-**Effort:** **28.50–40 developer-days — measured**, the sum of `plan/10`'s 31 cards (28.50 × 1.4 =
-39.9 → 40), replacing the 21–29 d **scaled ×1.50, not decomposed** figure this section quoted from
+**Effort:** **29.25–41 developer-days — measured**, the sum of `plan/10`'s 32 cards (29.25 × 1.4 =
+40.95 → 41; *re-priced 2026-11-16, later still, `plan/00` §6 item 381: it read 28.50–40 over 31 cards before `P7-T32`*), replacing the 21–29 d **scaled ×1.50, not decomposed** figure this section quoted from
 2026-09-09 to 2026-11-16 (`docs/11` §1, Phase 7, and the effort summary table carry the change). With
 it, no phase of the plan carries a scaled figure.
 

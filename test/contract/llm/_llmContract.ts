@@ -68,6 +68,7 @@ import {
   createLlmAdapter,
   geminiLegacyChat,
   invalidLlmKey,
+  isAudioScriptScenario,
   LLM_KEY_ENV_VARS,
   LLM_SCENARIOS,
   llmFixtureDirFor,
@@ -265,7 +266,12 @@ export function defineLlmContractSuite(provider: LlmRecordableProvider): void {
   ).model;
   const synthetic = LLM_SCENARIOS.filter((s) => s.recording === "synthetic");
   const live = LLM_SCENARIOS.filter((s) => s.recording === "live");
-  const recorded = sidecarsSync(dir).filter((m) => !m.synthetic);
+  // `P6-T03` (2026-11-16): the script scenarios' files sit beside these but are
+  // not this suite's scenarios; a recorded script does not make the provider
+  // "recorded", and their stand-ins are `P6-T07`'s to read.
+  const recorded = sidecarsSync(dir).filter(
+    (m) => !m.synthetic && !isAudioScriptScenario(m.scenario),
+  );
   const absentNote =
     `${provider}: no recording yet, so the ${String(live.length)} recorded ` +
     `scenarios are skipped. The owner records them with docs/13 §3.4 ` +
@@ -288,13 +294,15 @@ export function defineLlmContractSuite(provider: LlmRecordableProvider): void {
         const meta = JSON.parse(
           await readFile(join(dir, name), "utf8"),
         ) as LlmFixtureMeta;
-        const listed = scenarioNamed(meta.scenario);
         expect(llmFixtureKey(meta.scenario, meta.page), name).toBe(
           name.slice(0, -META_SUFFIX.length),
         );
         expect(meta.provider, name).toBe(provider);
-        expect(meta.synthetic, name).toBe(listed.recording === "synthetic");
         if (meta.synthetic) expect(meta.syntheticReason, name).toBeTruthy();
+        // A script scenario (`P6-T03`) is recorded live but may be a stand-in.
+        if (isAudioScriptScenario(meta.scenario)) continue;
+        const listed = scenarioNamed(meta.scenario);
+        expect(meta.synthetic, name).toBe(listed.recording === "synthetic");
       }
     });
 

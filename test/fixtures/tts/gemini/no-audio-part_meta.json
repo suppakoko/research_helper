@@ -1,0 +1,17 @@
+{
+  "scenario": "no-audio-part",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-11-16T09:35:23.776Z",
+  "endpoint": "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+  "method": "POST",
+  "toolVersion": "0.0.2",
+  "synthetic": true,
+  "syntheticReason": "Hand-written (P6-T03): a 200 whose only part is text cannot be provoked on purpose, so it stays synthetic after P6-T04. docs/04 §2.4's shape with the inlineData part replaced by a text part.",
+  "redactions": [
+    "synthetic: nothing was received, nothing to redact"
+  ],
+  "source": "gemini-tts",
+  "provider": "gemini",
+  "voice": "Charon",
+  "page": 1
+}

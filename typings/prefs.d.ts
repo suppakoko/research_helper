@@ -26,6 +26,10 @@ declare namespace _ZoteroTypes {
       "autoSummarize": boolean;
       "cache.maxSizeMB": number;
       "reportLanguage": string;
+      "tts.voice": string;
+      "tts.model": string;
+      "tts.targetMinutes": number;
+      "tts.outputFormat": string;
       "concurrency": number;
       "timeoutSeconds": number;
       "run.maxSpendCents": number;

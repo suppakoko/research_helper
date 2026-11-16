@@ -33,6 +33,10 @@
  *                                                  # fixtures, no network, no key
  * npm run fixtures:record -- --source crossref --related --dry-run   # relatedness (P5-T04)
  * FIXTURE_MODE=record npm run fixtures:record -- --source crossref --related   # live
+ * npm run fixtures:record -- --source gemini-tts --dry-run   # Gemini TTS (P6-T03):
+ *                                                  # the scenarios and the estimate
+ * FIXTURE_MODE=synthetic npm run fixtures:record -- --source gemini-tts   # its
+ *                                                  # stand-ins, never over a recording
  * ```
  *
  * **Semantic Scholar's recording is the owner's, never an agent's, and it is
@@ -45,6 +49,8 @@
  * **An LLM provider's live recording is the owner's, never an agent's**
  * (`docs/13` §3.4): it needs `FIXTURE_MODE=record`, `--live`, the key in the
  * environment and `--confirm-spend-usd`; see section 8b, {@link runLlmRecorder}.
+ * So is Gemini TTS's (`P6-T03`, `P6-T04`), behind the same three locks; see
+ * section 8b2, {@link runTtsRecorder}.
  *
  * `FIXTURE_MODE` is `docs/13` §2.2's own spelling, and the default being a dry
  * run is deliberate: `npm run fixtures:record` typed by accident must not put
@@ -157,7 +163,7 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 import { type Clock, createSystemClock } from "../src/core/clock";
 import { BudgetExceededError, KEYISH_FIELD, redact } from "../src/core/errors";
@@ -188,8 +194,11 @@ import {
 import {
   chatViaGenerateContent,
   createGeminiProvider,
+  GEMINI_API_KEY_HEADER,
   GEMINI_SECRET_ID,
+  MODELS_PATH as GEMINI_MODELS_PATH,
 } from "../src/llm/gemini/geminiProvider";
+import { GEMINI_MODEL_PREFIX, TTS_MODEL_ID } from "../src/llm/gemini/mapper";
 import {
   createOpenAiProvider,
   OPENAI_SECRET_ID,
@@ -225,6 +234,8 @@ import { withHeadroom } from "../src/pipeline/shared/estimate";
 import {
   parsePromptFile,
   PROMPT_FILE_NAMES,
+  PromptRegistryError,
+  type PromptSourceFile,
   type PromptTemplate,
   renderPrompt,
   resolveMaxTokens,
@@ -243,6 +254,7 @@ import {
   PUBMED_ESEARCH_BASE_URL,
 } from "../src/sources/pubmed/query";
 import type { SourceQuery } from "../src/sources/types";
+import type { GeminiTtsRequest } from "../src/tts/types";
 import {
   fixtureKey,
   llmFixtureKey,
@@ -405,8 +417,12 @@ function isRecordableSource(value: string): value is RecordableSourceId {
 
 /** What `--source` and `--dry-run` resolved to. */
 export interface CliOptions {
-  /** A literature source, or an LLM provider ({@link LLM_RECORDABLE_PROVIDERS}, `P3-T30`). */
-  readonly source: RecordableSourceId | LlmRecordableProvider;
+  /**
+   * A literature source, an LLM provider ({@link LLM_RECORDABLE_PROVIDERS},
+   * `P3-T30`) or a TTS source ({@link TTS_RECORDABLE_SOURCES}, `P6-T03`).
+   */
+  readonly source:
+    RecordableSourceId | LlmRecordableProvider | TtsRecordableSource;
   /** `--dry-run` was given. Wins over `FIXTURE_MODE`. */
   readonly dryRun: boolean;
   /**
@@ -462,7 +478,10 @@ const USAGE =
   "[--dry-run]   (the owner's recording; docs/13 §3.5)\n" +
   "       npm run fixtures:record -- --source <llm provider> [--only <scenario,…>] " +
   "[--dry-run] [--model <id>] [--live] [--confirm-spend-usd <amount>]   " +
-  "(LLM providers: openrouter, openai, anthropic, gemini; docs/13 §3.4)";
+  "(LLM providers: openrouter, openai, anthropic, gemini; docs/13 §3.4)\n" +
+  "       npm run fixtures:record -- --source gemini-tts [--only <scenario,…>] " +
+  "[--dry-run] [--model <id>] [--live] [--confirm-spend-usd <amount>]   " +
+  "(Gemini TTS, P6-T03; the owner's recording)";
 
 /**
  * Parse the arguments after the script path.
@@ -476,7 +495,8 @@ const USAGE =
  * @throws UsageError on an unknown argument, a missing value or an unknown source
  */
 export function parseCliArgs(argv: readonly string[]): CliOptions {
-  let source: RecordableSourceId | LlmRecordableProvider = "pubmed";
+  let source: RecordableSourceId | LlmRecordableProvider | TtsRecordableSource =
+    "pubmed";
   let dryRun = false;
   let only: string[] | undefined;
   let rescrub = false;
@@ -569,7 +589,11 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
     if (value === undefined || value === "") {
       throw new UsageError(`--source needs a value.\n${USAGE}`);
     }
-    if (!isRecordableSource(value) && !isLlmRecordableProvider(value)) {
+    if (
+      !isRecordableSource(value) &&
+      !isLlmRecordableProvider(value) &&
+      !isTtsRecordableSource(value)
+    ) {
       throw new UsageError(
         `No recording plan for source "${value}".\n${USAGE}`,
       );
@@ -577,9 +601,14 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
     source = value;
   }
   const llmFlags = live || confirmSpendUsd !== undefined || model !== undefined;
-  if (llmFlags && !isLlmRecordableProvider(source)) {
+  if (
+    llmFlags &&
+    !isLlmRecordableProvider(source) &&
+    !isTtsRecordableSource(source)
+  ) {
     throw new UsageError(
-      `--live, --confirm-spend-usd and --model are for an LLM provider only.\n${USAGE}`,
+      `--live, --confirm-spend-usd and --model are for an LLM provider or ` +
+        `gemini-tts only.\n${USAGE}`,
     );
   }
   if (keyed && source !== "semanticscholar") {
@@ -4129,7 +4158,9 @@ export function selectLlmScenarios(
   only: readonly string[] | undefined,
 ): readonly LlmScenario[] {
   if (only === undefined) return LLM_SCENARIOS;
-  const known = LLM_SCENARIOS.map((s) => s.scenario);
+  // `P6-T03`: the two script scenarios are named, never implied.
+  const all = [...LLM_SCENARIOS, ...LLM_AUDIO_SCRIPT_SCENARIOS];
+  const known = all.map((s) => s.scenario);
   const unknown = only.filter((name) => !known.includes(name));
   if (unknown.length > 0) {
     throw new UsageError(
@@ -4137,7 +4168,183 @@ export function selectLlmScenarios(
         `Known: ${known.join(", ")}`,
     );
   }
-  return LLM_SCENARIOS.filter((s) => only.includes(s.scenario));
+  return all.filter((s) => only.includes(s.scenario));
+}
+
+/**
+ * `P6-T03` step 2: the two script scenarios, sent on the LLM path with the
+ * bundled audio prompts (`P6-T06`) over {@link AUDIO_SCRIPT_REPORT}, on the
+ * provider and model the owner's `reportModel` names (`--source`, `--model`).
+ *
+ * Kept out of {@link LLM_SCENARIOS} on purpose: they are recorded only when
+ * `--only` names them, so a provider's default recording does not spend on
+ * them, and the contract suite's per-provider list (`docs/13` §3.1's eleven)
+ * does not change.
+ */
+export const LLM_AUDIO_SCRIPT_SCENARIOS: readonly LlmScenario[] = Object.freeze(
+  [
+    {
+      scenario: "audio-script-en",
+      kind: "chat",
+      recording: "live",
+      billed: true,
+      key: "environment",
+      purpose:
+        "P6-T03: AUDIO_SCRIPT_EN (docs/12 §13) over a small synthetic report, " +
+        "on the owner's reportModel",
+    },
+    {
+      scenario: "audio-script-ko",
+      kind: "chat",
+      recording: "live",
+      billed: true,
+      key: "environment",
+      purpose:
+        "P6-T03: AUDIO_SCRIPT_KO (docs/12 §14) over the same synthetic report, " +
+        "on the owner's reportModel",
+    },
+  ] satisfies readonly LlmScenario[],
+);
+
+/** The bundled prompt file each script scenario sends: `P6-T06`'s file names. */
+export const AUDIO_SCRIPT_PROMPT_FILES: Readonly<Record<string, string>> =
+  Object.freeze({
+    "audio-script-en": "audio-script-en.v1.0.0.md",
+    "audio-script-ko": "audio-script-ko.v1.0.0.md",
+  });
+
+/** Whether `scenario` is one of {@link LLM_AUDIO_SCRIPT_SCENARIOS}. */
+export function isAudioScriptScenario(scenario: string): boolean {
+  return LLM_AUDIO_SCRIPT_SCENARIOS.some((s) => s.scenario === scenario);
+}
+
+/** A script scenario's prompt: loaded, or pending with the reason. */
+export type AudioScriptPrompt =
+  | { readonly ready: true; readonly template: PromptTemplate }
+  | { readonly ready: false; readonly reason: string };
+
+/**
+ * The script scenario's prompt, or why it is **pending**. A pending scenario
+ * can be named and stood in for, but not priced or recorded. It is pending
+ * while its bundled prompt (`P6-T06`) is not in `promptDir`, and also while the
+ * file is there but the registry's parser refuses it. On 2026-11-16 both files
+ * hold `docs/12` §13–§14's text verbatim, whose system text carries
+ * `{{TARGET_MINUTES}}`, and wait for the owner in `src/prompts/pending/`
+ * (`docs/12` §13's note of that day, `plan/00` §6 item 382).
+ *
+ * @param scenario - a name from {@link LLM_AUDIO_SCRIPT_SCENARIOS}
+ * @param promptDir - `src/prompts/`; a test passes its own
+ * @param parse - the registry's parser; a test passes its own
+ */
+export function audioScriptPrompt(
+  scenario: string,
+  promptDir: string = resolve(REPO_ROOT, "src/prompts"),
+  parse: (file: PromptSourceFile) => PromptTemplate = parsePromptFile,
+): AudioScriptPrompt {
+  const fileName = AUDIO_SCRIPT_PROMPT_FILES[scenario];
+  if (fileName === undefined) {
+    return { ready: false, reason: `${scenario} is not a script scenario` };
+  }
+  const path = resolve(promptDir, fileName);
+  if (!existsSync(path)) {
+    return {
+      ready: false,
+      reason: `its bundled prompt src/prompts/${fileName} (plan/09 P6-T06) has not landed`,
+    };
+  }
+  try {
+    return {
+      ready: true,
+      template: parse({ fileName, text: readFileSync(path, "utf8") }),
+    };
+  } catch (error) {
+    if (!(error instanceof PromptRegistryError)) throw error;
+    const problems = error.problems.map((p) =>
+      p.startsWith(`${fileName}: `) ? p.slice(fileName.length + 2) : p,
+    );
+    return {
+      ready: false,
+      reason:
+        `src/prompts/${fileName} does not load yet (plan/09 P6-T06 waits for the owner): ` +
+        problems.join("; "),
+    };
+  }
+}
+
+/**
+ * The synthetic report the script scenarios rewrite: written for this fixture,
+ * not taken from any paper, citing three made-up keys, with one table, so the
+ * recorded answer quotes nothing anyone owns and has markers to drop.
+ */
+export const AUDIO_SCRIPT_REPORT = [
+  "# Research trends: coastal sea-level monitoring (synthetic test collection)",
+  "",
+  "## Key findings",
+  "",
+  "- Tide-gauge benchmarks subside, so an uncorrected gauge overstates local " +
+    "sea-level rise [[RHFIXT01]].",
+  "- Co-located GNSS stations give a median correction of 1.8 mm/yr " +
+    "(range 0.4-3.1 mm/yr) across 12 gauges [[RHFIXT01]].",
+  "- Satellite altimetry agrees with corrected gauges within 0.5 mm/yr " +
+    "(95% CI 0.2-0.8) [[RHFIXT02]].",
+  "",
+  "## Where the evidence disagrees",
+  "",
+  "| Question | One view | The other |",
+  "| --- | --- | --- |",
+  "| Is the drift linear? | Yes [[RHFIXT01]] | Not after 2020 [[RHFIXT03]] |",
+  "",
+  "## Gaps",
+  "",
+  "Few studies cover the Southern Hemisphere; this synthetic set has n = 3 papers.",
+].join("\n");
+
+/** {@link AUDIO_SCRIPT_REPORT}'s citation map, as `docs/12` §13 shapes it. */
+export const AUDIO_SCRIPT_CITATION_MAP = [
+  'RHFIXT01 → "Testa and colleagues, 2025"',
+  'RHFIXT02 → "Sample and colleagues, 2023"',
+  'RHFIXT03 → "Exemplo and colleagues, 2022"',
+].join("\n");
+
+/**
+ * A script scenario's request: the bundled prompt, its temperature and output
+ * ceiling, no schema (`docs/12` §13–§14), one minute of target length.
+ *
+ * @throws UsageError while the scenario is pending ({@link audioScriptPrompt})
+ */
+export function audioScriptRequest(
+  scenario: string,
+  model: string,
+  promptDir?: string,
+  parse?: (file: PromptSourceFile) => PromptTemplate,
+): ChatRequest {
+  const prompt = audioScriptPrompt(scenario, promptDir, parse);
+  if (!prompt.ready) {
+    throw new UsageError(
+      `${scenario} is pending: ${prompt.reason}; so its request cannot be ` +
+        `built, priced or recorded yet.`,
+    );
+  }
+  const template = prompt.template;
+  const rendered = renderPrompt(template, {
+    COLLECTION_NAME: "Coastal sea-level monitoring (synthetic test collection)",
+    N_ANALYSED: "3",
+    YEAR_MIN: "2022",
+    YEAR_MAX: "2025",
+    TARGET_MINUTES: "1",
+    CITATION_MAP: AUDIO_SCRIPT_CITATION_MAP,
+    REPORT_MARKDOWN: AUDIO_SCRIPT_REPORT,
+  });
+  return {
+    model,
+    messages: [
+      { role: "system", content: rendered.system },
+      { role: "user", content: rendered.user },
+    ],
+    temperature: template.defaultTemperature,
+    maxOutputTokens: resolveMaxTokens(template),
+    traceId: LLM_TRACE_ID,
+  };
 }
 
 /** The correlation id of every recorded request; never sent upstream (`docs/07` §4.3). */
@@ -4263,6 +4470,9 @@ export function llmScenarioRequest(
         "Write a 300-word paragraph about ocean tides.",
         16,
       );
+    case "audio-script-en":
+    case "audio-script-ko":
+      return audioScriptRequest(scenario, model);
     default:
       throw new Error(`No LLM request for scenario "${scenario}"`);
   }
@@ -5077,7 +5287,11 @@ export async function runLlmRecorder(
       provider,
       chosen.model,
       chosen.prices,
-      scenarios,
+      // Synthetic mode prices nothing it sends, and a pending script
+      // scenario (`P6-T03`) can still be stood in for.
+      mode === "synthetic"
+        ? scenarios.filter((s) => !isAudioScriptScenario(s.scenario))
+        : scenarios,
       run.clock.now(),
     );
   } catch (error) {
@@ -5123,9 +5337,42 @@ export async function runLlmRecorder(
         };
         return stageLlmFixture(s.scenario, fixture.exchange, meta, base);
       });
+    // `P6-T03`: the script scenarios' stand-ins, never over a recording.
+    const notes: string[] = [];
+    for (const s of scenarios.filter((x) =>
+      isAudioScriptScenario(x.scenario),
+    )) {
+      if (provider !== AUDIO_SCRIPT_STAND_IN_PROVIDER) {
+        notes.push(
+          `  ${s.scenario}  not written: its stand-in is ` +
+            `${AUDIO_SCRIPT_STAND_IN_PROVIDER}'s only\n`,
+        );
+        continue;
+      }
+      if (!(await standInMayBeWritten(run.fixtureDir, s.scenario))) {
+        notes.push(`  ${s.scenario}  kept: a recording is there\n`);
+        continue;
+      }
+      const fixture = audioScriptStandIn(s.scenario);
+      const meta: LlmFixtureMeta = {
+        scenario: s.scenario,
+        scenarioVersion: LLM_SCENARIO_VERSION,
+        recordedAt: new Date(run.clock.now()).toISOString(),
+        endpoint: llmEndpointFor(provider, "chat"),
+        method: "POST",
+        toolVersion: run.toolVersion,
+        synthetic: true,
+        syntheticReason: fixture.reason,
+        redactions: ["synthetic: nothing was received, nothing to redact"],
+        provider,
+        page: 1,
+      };
+      staged.push(stageLlmFixture(s.scenario, fixture.exchange, meta, base));
+    }
     for (const file of staged) await writeStaged(run.fixtureDir, file);
     run.stdout(
       staged.map((f) => `  ${f.key}  (synthetic)\n`).join("") +
+        notes.join("") +
         `Wrote ${String(staged.length)} synthetic fixtures to ` +
         `test/fixtures/llm/${provider}/. Zero requests, no key read.\n`,
     );
@@ -5411,6 +5658,1302 @@ function stageLlmFixture(
 async function writeStaged(dir: string, file: StagedLlmFixture): Promise<void> {
   await writeFile(`${dir}/${file.key}.json`, file.fixtureText, "utf8");
   await writeFile(`${dir}/${file.key}${META_SUFFIX}`, file.metaText, "utf8");
+}
+
+// --- Stand-ins for recorded scenarios (`P6-T03`) -----------------------------
+
+/**
+ * Whether a stand-in may be written at `<dir>/<key>.json`: only where nothing
+ * is there yet or what is there is itself a stand-in (its sidecar says
+ * `"synthetic": true`). So `FIXTURE_MODE=synthetic` never replaces the owner's
+ * recording with a hand-written body (`plan/09` `P6-T04`'s **Do NOT**).
+ *
+ * @param dir - the fixture directory
+ * @param key - the fixture key
+ * @returns whether the stand-in may be written
+ */
+export async function standInMayBeWritten(
+  dir: string,
+  key: string,
+): Promise<boolean> {
+  let text: string;
+  try {
+    text = await readFile(`${dir}/${key}${META_SUFFIX}`, "utf8");
+  } catch {
+    return !existsSync(`${dir}/${key}.json`);
+  }
+  try {
+    const meta = JSON.parse(text) as { readonly synthetic?: unknown };
+    return meta.synthetic === true;
+  } catch {
+    return false;
+  }
+}
+
+/** The one provider the script scenarios' stand-ins are written for: `llmProvider`'s default (`docs/07` §8.5). */
+export const AUDIO_SCRIPT_STAND_IN_PROVIDER: LlmRecordableProvider =
+  "openrouter";
+
+/**
+ * The stand-in scripts: plain spoken text rewritten from
+ * {@link AUDIO_SCRIPT_REPORT} by hand, with no marker `docs/12` §13 rejects,
+ * about one minute long (150 English words; about 330 Hangul syllables).
+ */
+export const AUDIO_SCRIPT_STAND_IN_TEXT: Readonly<Record<string, string>> =
+  Object.freeze({
+    "audio-script-en": [
+      "This is a short spoken briefing on the coastal sea-level monitoring " +
+        "collection, a synthetic test set of three papers from twenty " +
+        "twenty-two to twenty twenty-five.",
+      "The written report holds the full citations.",
+      "Here is the main point.",
+      "Tide gauges sit on ground that slowly sinks.",
+      "So a gauge that is not corrected makes local sea-level rise look " +
+        "faster than it really is.",
+      "Testa and colleagues, twenty twenty-five, corrected twelve gauges " +
+        "with nearby satellite positioning stations.",
+      "The middle correction was about one point eight millimetres a year.",
+      "Satellite measurements of the sea surface agree with the corrected " +
+        "gauges to within half a millimetre a year.",
+      "Now, where the evidence disagrees.",
+      "One study treats the sinking as steady.",
+      "Another, from Exemplo and colleagues, finds that it changed after " +
+        "twenty twenty.",
+      "Finally, what is missing.",
+      "Very few studies cover the Southern Hemisphere, and this set holds " +
+        "only three papers.",
+      "The written report has the details and every citation.",
+    ].join(" "),
+    "audio-script-ko": [
+      "이 음성 브리핑은 해안 해수면 관측 컬렉션을 다룹니다.",
+      "이 컬렉션은 이천이십이년부터 이천이십오년까지의 논문 세 편으로 이루어진 시험용 자료입니다.",
+      "전체 인용 정보는 문서 보고서에 있습니다.",
+      "먼저 가장 중요한 내용입니다.",
+      "조위계는 천천히 가라앉는 땅 위에 놓여 있습니다.",
+      "그래서 보정하지 않은 조위계는 지역 해수면 상승을 실제보다 빠르게 보이게 합니다.",
+      "Testa 연구팀은 이천이십오년에 열두 개의 조위계를 가까운 위성 측위 관측소로 보정했습니다.",
+      "보정값의 중앙값은 일 년에 약 일점팔 밀리미터였습니다.",
+      "위성 고도계 측정은 보정된 조위계와 일 년에 영점오 밀리미터 이내로 일치했습니다.",
+      "이제 근거가 엇갈리는 지점입니다.",
+      "한 연구는 침하가 일정하다고 봅니다.",
+      "Exemplo 연구팀은 이천이십년 이후 침하 속도가 달라졌다고 보고합니다.",
+      "마지막으로 빠져 있는 것입니다.",
+      "남반구를 다룬 연구는 아주 적고, 이 자료에는 논문이 세 편뿐입니다.",
+      "자세한 내용과 모든 인용은 문서 보고서에서 확인하십시오.",
+    ].join(" "),
+  });
+
+/**
+ * A script scenario's stand-in: an OpenRouter chat completion
+ * (`docs/03` §2) whose content is {@link AUDIO_SCRIPT_STAND_IN_TEXT}.
+ *
+ * @param scenario - `audio-script-en` or `audio-script-ko`
+ * @returns the exchange and the reason
+ */
+export function audioScriptStandIn(scenario: string): {
+  readonly exchange: RecordedExchange;
+  readonly reason: string;
+} {
+  const content = AUDIO_SCRIPT_STAND_IN_TEXT[scenario];
+  if (content === undefined) {
+    throw new Error(`"${scenario}" is not a script scenario`);
+  }
+  const body = {
+    id: `gen-synthetic-${scenario}`,
+    object: "chat.completion",
+    model: "synthetic-model",
+    choices: [
+      {
+        index: 0,
+        message: { role: "assistant", content },
+        finish_reason: "stop",
+      },
+    ],
+    usage: { prompt_tokens: 900, completion_tokens: 400, total_tokens: 1300 },
+  };
+  return {
+    exchange: {
+      status: 200,
+      headers: { "content-type": "application/json" },
+      body: `${JSON.stringify(body, null, 2)}\n`,
+    },
+    reason:
+      "Stand-in, not evidence (P6-T03): a hand-written spoken script for the " +
+      "recorder's synthetic report, so P6-T07 and P6-T08 can be tested before " +
+      "the owner records this scenario (P6-T04), whose run replaces it. The " +
+      "token counts are placeholders, not measurements.",
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 8b2. Gemini TTS — `P6-T03`
+// ---------------------------------------------------------------------------
+
+/*
+ * `--source gemini-tts`: Gemini's legacy `generateContent` speech surface
+ * (`docs/04` §2.3–§2.4), the one v1.0 builds (`plan/09` §0.4 line 5). The
+ * shipped TTS client is `P6-T05`'s and is built against what this writes, so
+ * the recorder builds the request itself, typed by `GeminiTtsRequest`
+ * (`src/tts/types.ts`), and sends it through the shipped `createHttpClient`.
+ * **The recording is the owner's, never an agent's** (`plan/09` `P6-T04`).
+ *
+ * The rules, each held by a test in
+ * `test/unit/scripts/recordFixturesRedaction.test.ts` with a fake key:
+ *
+ * - **Three locks, as the LLM path's** (`docs/13` §3.4): `FIXTURE_MODE=record`,
+ *   `--live`, and `--confirm-spend-usd` at least the stated estimate. A dry run
+ *   and synthetic mode read no key and send nothing.
+ * - **The key** is `GEMINI_API_KEY`, read through {@link LLM_KEY_ENV_VARS} by
+ *   {@link llmKeyFromEnvironment} and from nowhere else, and sent only as the
+ *   `x-goog-api-key` request header, never as a query parameter.
+ *   `error-invalid-key` sends the same value with one character appended; both
+ *   values join the deny-list, and every printed line is scrubbed.
+ * - **What is stored.** Response headers outside {@link LLM_HEADER_ALLOW} are
+ *   dropped; the shared pass ({@link redactExchange}) scrubs the rest and
+ *   shields one thing only, the audio's base64 (`inlineData.data`), which is
+ *   long and opaque but not secret. A fixture or sidecar that names
+ *   `x-goog-api-key`, holds `key=` or holds the key's value is refused, as is a
+ *   body over {@link TTS_MAX_BODY_BYTES}; nothing is written unless every
+ *   exchange passes. `models-list` keeps only the TTS entries.
+ * - **Never overwritten by a stand-in** ({@link standInMayBeWritten}).
+ */
+
+/** The TTS sources this recorder has a plan for. */
+export const TTS_RECORDABLE_SOURCES = ["gemini-tts"] as const;
+export type TtsRecordableSource = (typeof TTS_RECORDABLE_SOURCES)[number];
+
+/** Whether `value` names a TTS source. */
+export function isTtsRecordableSource(
+  value: string,
+): value is TtsRecordableSource {
+  return (TTS_RECORDABLE_SOURCES as readonly string[]).includes(value);
+}
+
+/** Bump when a TTS scenario's request changes, as {@link LLM_SCENARIO_VERSION}. */
+export const TTS_SCENARIO_VERSION = 1;
+
+/**
+ * `test/fixtures/tts/gemini/` (`plan/09` `P6-T03`'s `Files`).
+ *
+ * @param source - the TTS source
+ * @returns the absolute directory
+ */
+export function ttsFixtureDirFor(source: TtsRecordableSource): string {
+  switch (source) {
+    case "gemini-tts":
+      return resolve(REPO_ROOT, "test/fixtures/tts/gemini");
+  }
+}
+
+/** Whose key, host and base URL the TTS recording uses. */
+const TTS_PROVIDER: LlmRecordableProvider = "gemini";
+
+/** The narrator: `tts.voice`'s default (`docs/07` §8.5; `docs/04` §2.7). */
+export const TTS_VOICE = "Charon";
+
+/**
+ * The two billed sentences, each about three seconds of speech, so a recorded
+ * body stays under {@link TTS_MAX_BODY_BYTES}. The Korean one carries one
+ * English term (`docs/04` §9.1).
+ */
+export const TTS_TEXTS = Object.freeze({
+  en: "This is a short test of the audio report voice.",
+  ko: "이것은 machine learning 용어가 든 짧은 시험입니다.",
+});
+
+/** A model id no service has: `error-unknown-model`'s. */
+export const TTS_UNKNOWN_MODEL = "gemini-recorder-no-such-model-tts";
+
+/**
+ * `docs/04` §4.2's table, verified 2026-09-08: US dollars per million input
+ * (text) and output (audio) tokens. The estimate is only as current as that
+ * table, which the owner checks first (`docs/04` §4.2's 2026-12-01
+ * re-verification).
+ */
+export const TTS_DOCUMENTED_PRICES: Readonly<
+  Record<
+    string,
+    { readonly inputPerMTokUsd: number; readonly outputPerMTokUsd: number }
+  >
+> = Object.freeze({
+  "gemini-3.1-flash-tts-preview": { inputPerMTokUsd: 1, outputPerMTokUsd: 20 },
+  "gemini-2.5-flash-preview-tts": {
+    inputPerMTokUsd: 0.5,
+    outputPerMTokUsd: 10,
+  },
+  "gemini-2.5-pro-preview-tts": { inputPerMTokUsd: 1, outputPerMTokUsd: 20 },
+});
+
+/** {@link TTS_DOCUMENTED_PRICES}' date. */
+export const TTS_PRICES_AS_OF = "2026-09-08";
+
+/** Audio output tokens per second: `docs/04` §4.1, measured 24.998 on 2026-09-29. */
+export const TTS_AUDIO_TOKENS_PER_SECOND = 25;
+
+/** The seconds each billed call is priced at: ten times the sentence, so the estimate is a ceiling. */
+export const TTS_SECONDS_BOUND = 30;
+
+/** The largest body a TTS fixture may hold (`P6-T03`'s **Do NOT**: a few seconds of speech). */
+export const TTS_MAX_BODY_BYTES = 300 * 1024;
+
+/** How one TTS scenario drives the service. */
+export type TtsScenarioKind = "list-models" | "synthesize";
+
+/** One entry of the versioned TTS scenario list. */
+export interface TtsScenario {
+  readonly scenario: string;
+  readonly kind: TtsScenarioKind;
+  /** `live`: the owner records it; `synthetic`: written, with a reason. */
+  readonly recording: "live" | "synthetic";
+  /** Whether a live request is charged for tokens. */
+  readonly billed: boolean;
+  /** Which key a live request carries. */
+  readonly key: "environment" | "environment-plus-one" | "none";
+  /** The sentence spoken, for `synthesize`. */
+  readonly language?: "en" | "ko";
+  /** The model named, for `synthesize`: the chosen one, or {@link TTS_UNKNOWN_MODEL}. */
+  readonly model?: "chosen" | "unknown";
+  readonly purpose: string;
+}
+
+/**
+ * `P6-T03` step 1's scenarios. `models-list` is always sent first, as on the
+ * LLM path: it is free, and the run stops if the chosen model is absent.
+ */
+export const TTS_SCENARIOS: readonly TtsScenario[] = Object.freeze([
+  {
+    scenario: "models-list",
+    kind: "list-models",
+    recording: "live",
+    billed: false,
+    key: "environment",
+    purpose:
+      "GET /v1beta/models, kept to its TTS entries (docs/04 §2.2). Free; " +
+      "always sent first",
+  },
+  {
+    scenario: "tts-en-short",
+    kind: "synthesize",
+    recording: "live",
+    billed: true,
+    key: "environment",
+    language: "en",
+    model: "chosen",
+    purpose:
+      "one English sentence, about 3 s, voice Charon (docs/04 §2.3–§2.4)",
+  },
+  {
+    scenario: "tts-ko-short",
+    kind: "synthesize",
+    recording: "live",
+    billed: true,
+    key: "environment",
+    language: "ko",
+    model: "chosen",
+    purpose:
+      "one Korean sentence with one embedded English term, voice Charon " +
+      "(docs/04 §9.1)",
+  },
+  {
+    scenario: "error-unknown-model",
+    kind: "synthesize",
+    recording: "live",
+    billed: false,
+    key: "environment",
+    language: "en",
+    model: "unknown",
+    purpose: `a model id that does not exist (${TTS_UNKNOWN_MODEL}). Not billed`,
+  },
+  {
+    scenario: "error-invalid-key",
+    kind: "synthesize",
+    recording: "live",
+    billed: false,
+    key: "environment-plus-one",
+    language: "en",
+    model: "chosen",
+    purpose: "the real key with one character appended. Not billed",
+  },
+  {
+    scenario: "error-429",
+    kind: "synthesize",
+    recording: "synthetic",
+    billed: false,
+    key: "none",
+    purpose: "rate limit, with Retry-After: 2; cannot be provoked on purpose",
+  },
+  {
+    scenario: "no-audio-part",
+    kind: "synthesize",
+    recording: "synthetic",
+    billed: false,
+    key: "none",
+    purpose:
+      "HTTP 200 with a text part and no inlineData; cannot be provoked on purpose",
+  },
+] satisfies readonly TtsScenario[]);
+
+/**
+ * The scenarios `--only` keeps, in list order.
+ *
+ * @throws UsageError naming a scenario the list does not have
+ */
+export function selectTtsScenarios(
+  only: readonly string[] | undefined,
+): readonly TtsScenario[] {
+  if (only === undefined) return TTS_SCENARIOS;
+  const known = TTS_SCENARIOS.map((s) => s.scenario);
+  const unknown = only.filter((name) => !known.includes(name));
+  if (unknown.length > 0) {
+    throw new UsageError(
+      `--only names scenarios the TTS list does not have: ${unknown.join(", ")}. ` +
+        `Known: ${known.join(", ")}`,
+    );
+  }
+  return TTS_SCENARIOS.filter((s) => only.includes(s.scenario));
+}
+
+/**
+ * `docs/04` §2.3's single-speaker body: the text, `responseModalities`
+ * `["AUDIO"]` and the prebuilt voice. No language field: the legacy surface has
+ * none (§2.8).
+ *
+ * @param text - what to speak
+ * @param voice - a prebuilt voice name
+ * @returns the body
+ */
+export function ttsRequestBody(text: string, voice: string): GeminiTtsRequest {
+  return {
+    contents: [{ parts: [{ text }] }],
+    generationConfig: {
+      responseModalities: ["AUDIO"],
+      speechConfig: {
+        voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } },
+      },
+    },
+  };
+}
+
+/** `${base}/v1beta/models/<model>:generateContent`, with no query. */
+function ttsEndpoint(model: string): string {
+  return `${LLM_BASE_URLS.resolveBaseUrl(TTS_PROVIDER)}/v1beta/models/${model}:generateContent`;
+}
+
+/** One TTS scenario's share of the estimate. */
+export interface TtsScenarioBound {
+  readonly scenario: string;
+  readonly recording: "live" | "synthetic";
+  readonly billed: boolean;
+  readonly requests: number;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly costUsd: number;
+}
+
+/** What the TTS dry run prints and live mode is confirmed against. */
+export interface TtsSpendStatement {
+  readonly model: string;
+  readonly prices: {
+    readonly inputPerMTokUsd: number;
+    readonly outputPerMTokUsd: number;
+  };
+  readonly scenarios: readonly TtsScenarioBound[];
+  readonly requests: number;
+  readonly billedCalls: number;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  /** Fractional US dollars, never rounded. */
+  readonly costUsd: number;
+}
+
+/**
+ * The estimate, from the documented prices: each billed call at the larger of
+ * the shipped token estimate with headroom and one token per two characters,
+ * plus {@link LLM_ESTIMATE_OVERHEAD_TOKENS}, and at {@link TTS_SECONDS_BOUND}
+ * seconds of audio.
+ *
+ * @param model - a model in {@link TTS_DOCUMENTED_PRICES}
+ * @param scenarios - the selected scenarios
+ * @returns the statement
+ * @throws UsageError when the model has no documented price
+ */
+export function stateTtsSpend(
+  model: string,
+  scenarios: readonly TtsScenario[],
+): TtsSpendStatement {
+  const prices = TTS_DOCUMENTED_PRICES[model];
+  if (prices === undefined) {
+    throw new UsageError(
+      `--model "${model}" has no price in docs/04 §4.2's table: a spend ` +
+        `that cannot be estimated is not stated, and not recorded. Priced: ` +
+        `${Object.keys(TTS_DOCUMENTED_PRICES).sort().join(", ")}.`,
+    );
+  }
+  const bounds = scenarios.map((s): TtsScenarioBound => {
+    const base = {
+      scenario: s.scenario,
+      recording: s.recording,
+      billed: false,
+      requests: s.recording === "live" ? 1 : 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+    };
+    if (s.recording !== "live" || !s.billed || s.language === undefined) {
+      return base;
+    }
+    const text = TTS_TEXTS[s.language];
+    const inputTokens =
+      Math.max(
+        withHeadroom(estTokens(text)),
+        Math.ceil(text.length / LLM_ESTIMATE_CHARS_PER_TOKEN),
+      ) + LLM_ESTIMATE_OVERHEAD_TOKENS;
+    const outputTokens = TTS_SECONDS_BOUND * TTS_AUDIO_TOKENS_PER_SECOND;
+    const costUsd =
+      (inputTokens * prices.inputPerMTokUsd +
+        outputTokens * prices.outputPerMTokUsd) /
+      1_000_000;
+    return { ...base, billed: true, inputTokens, outputTokens, costUsd };
+  });
+  const sum = (pick: (b: TtsScenarioBound) => number): number =>
+    bounds.reduce((acc, b) => acc + pick(b), 0);
+  return {
+    model,
+    prices,
+    scenarios: bounds,
+    requests: sum((b) => b.requests),
+    billedCalls: bounds.filter((b) => b.billed).length,
+    inputTokens: sum((b) => b.inputTokens),
+    outputTokens: sum((b) => b.outputTokens),
+    costUsd: sum((b) => b.costUsd),
+  };
+}
+
+/**
+ * The model to record with: `override` when given (it must be priced), else
+ * the documented model with the lowest estimate (ties by id).
+ */
+export function chooseTtsModel(override?: string): string {
+  if (override !== undefined) return override;
+  const ids = Object.keys(TTS_DOCUMENTED_PRICES).sort();
+  let best: { id: string; costUsd: number } | undefined;
+  for (const id of ids) {
+    const { costUsd } = stateTtsSpend(id, TTS_SCENARIOS);
+    if (best === undefined || costUsd < best.costUsd) best = { id, costUsd };
+  }
+  if (best === undefined) throw new UsageError("No TTS model is priced.");
+  return best.id;
+}
+
+/** The script scenarios' readiness and command, printed under the TTS plan (`P6-T03` step 2). */
+function audioScriptStatusText(): string {
+  const rows = LLM_AUDIO_SCRIPT_SCENARIOS.map((s) => {
+    const prompt = audioScriptPrompt(s.scenario);
+    return (
+      `  ${s.scenario.padEnd(26)}` +
+      `${prompt.ready ? "ready" : `pending: ${prompt.reason}`}\n`
+    );
+  }).join("");
+  return (
+    `\nThe two script scenarios go on the LLM path, on the owner's reportModel:\n` +
+    rows +
+    `  Their estimate: npm run fixtures:record -- --source <reportModel's provider> ` +
+    `--only audio-script-en,audio-script-ko --model <reportModel> --dry-run\n`
+  );
+}
+
+/** The TTS dry run's and the gate's account of the estimate. */
+function ttsStatementText(
+  statement: TtsSpendStatement,
+  only: readonly string[] | undefined,
+): string {
+  const p = statement.prices;
+  const rows = statement.scenarios
+    .map(
+      (b) =>
+        `  ${b.scenario.padEnd(26)}${b.recording.padEnd(11)}` +
+        `${(b.billed ? "yes" : "no").padEnd(8)}` +
+        `${String(b.inputTokens).padStart(7)}  ${String(b.outputTokens).padStart(7)}  ` +
+        `${b.billed ? usdUp(b.costUsd) : "$0"}\n`,
+    )
+    .join("");
+  const onlyFlag = only === undefined ? "" : ` --only ${only.join(",")}`;
+  return (
+    `Model: ${statement.model}, the cheapest in docs/04 §4.2's table unless ` +
+    `--model named it. Voice: ${TTS_VOICE}.\n` +
+    `Prices: $${String(p.inputPerMTokUsd)} in (text) / $${String(p.outputPerMTokUsd)} ` +
+    `out (audio) per 1M tokens, docs/04 §4.2, as of ${TTS_PRICES_AS_OF}; audio at ` +
+    `${String(TTS_AUDIO_TOKENS_PER_SECOND)} tokens a second, each billed call priced ` +
+    `at ${String(TTS_SECONDS_BOUND)} s. Check the prices before approving.\n\n` +
+    `  ${"scenario".padEnd(26)}${"recording".padEnd(11)}${"billed".padEnd(8)}` +
+    `${"input<=".padStart(7)}  ${"output<=".padStart(7)}  cost<=\n` +
+    rows +
+    `\nEstimated spend (a ceiling, from the documented prices): ` +
+    `${String(statement.requests)} live request(s), ` +
+    `${String(statement.billedCalls)} billed, at most ` +
+    `${String(statement.inputTokens)} input + ${String(statement.outputTokens)} ` +
+    `output tokens, at most ${usdUp(statement.costUsd)}.\n` +
+    `To record (the owner only, plan/09 P6-T04), with ` +
+    `${LLM_KEY_ENV_VARS[TTS_PROVIDER]} set in this shell for this session only:\n` +
+    `  FIXTURE_MODE=record npm run fixtures:record -- --source gemini-tts` +
+    `${onlyFlag} --live --confirm-spend-usd ${usdUp(statement.costUsd).slice(1)}\n`
+  );
+}
+
+// --- TTS stand-ins -------------------------------------------------------------
+
+/** The stand-ins' audio length, in seconds: ten audio tokens at 25 a second. */
+export const TTS_STAND_IN_SECONDS = 0.4;
+
+/** The legacy path's `mimeType` (`docs/04` §2.4, §3.1). */
+export const TTS_PCM_MIME_TYPE = "audio/L16;codec=pcm;rate=24000";
+
+/**
+ * A sine tone as raw PCM, signed 16-bit little-endian mono (`docs/04` §3.1):
+ * what a stand-in's `inlineData.data` decodes to.
+ *
+ * @param seconds - its length
+ * @param frequencyHz - its pitch
+ * @param sampleRateHz - samples a second; 24,000 on the legacy path
+ * @returns the bytes
+ */
+export function pcmTone(
+  seconds: number,
+  frequencyHz: number,
+  sampleRateHz = 24_000,
+): Uint8Array {
+  const samples = Math.round(seconds * sampleRateHz);
+  const bytes = new Uint8Array(samples * 2);
+  const view = new DataView(bytes.buffer);
+  for (let i = 0; i < samples; i += 1) {
+    const value = Math.round(
+      0.25 * 32_767 * Math.sin((2 * Math.PI * frequencyHz * i) / sampleRateHz),
+    );
+    view.setInt16(i * 2, value, true);
+  }
+  return bytes;
+}
+
+/** Why each TTS scenario has a stand-in. */
+const SYNTHETIC_TTS_REASONS: Readonly<Record<string, string>> = Object.freeze({
+  "models-list":
+    "Stand-in, not evidence (P6-T03): docs/04 §2.2's three TTS model ids in " +
+    "docs/03 §9.3's entry shape. inputTokenLimit is docs/04 §4.1's 32,000-token " +
+    "context window; no other limit is documented, so none is written. The " +
+    "owner's run (P6-T04) replaces it.",
+  "tts-en-short":
+    "Stand-in, not evidence (P6-T03): docs/04 §2.4's response shape around a " +
+    "0.4 s generated 440 Hz tone (24 kHz, 16-bit, mono), not speech. " +
+    "candidatesTokenCount is 0.4 s at docs/04 §4.1's 25 tokens a second; " +
+    "promptTokenCount is a placeholder. The owner's run (P6-T04) replaces it.",
+  "tts-ko-short":
+    "Stand-in, not evidence (P6-T03): as tts-en-short, around a 0.4 s 330 Hz " +
+    "tone. The owner's run (P6-T04) replaces it.",
+  "error-unknown-model":
+    "Stand-in, not evidence (P6-T03): docs/03 §11.5's not_found row in " +
+    "Google's error envelope; the message wording is assumed. The owner's run " +
+    "(P6-T04) replaces it.",
+  "error-invalid-key":
+    "Stand-in, not evidence (P6-T03): docs/03 §11.5's auth row, HTTP 400 " +
+    "API_KEY_INVALID as the Gemini chat adapter reads it; the message wording " +
+    "is assumed. The owner's run (P6-T04) replaces it.",
+  "error-429":
+    "Hand-written (P6-T03): provoking a rate limit spends money and risks the " +
+    "owner's account, so it stays synthetic after P6-T04. docs/03 §11.5's " +
+    "rate_limit row in Google's envelope; status and Retry-After: 2 are the " +
+    "assertable parts.",
+  "no-audio-part":
+    "Hand-written (P6-T03): a 200 whose only part is text cannot be provoked " +
+    "on purpose, so it stays synthetic after P6-T04. docs/04 §2.4's shape with " +
+    "the inlineData part replaced by a text part.",
+});
+
+/** The marker every TTS stand-in's text carries. */
+const SYNTHETIC_TTS_NOTE = "[synthetic fixture, P6-T03; not a recorded answer]";
+
+/** One TTS stand-in's status, headers and body. */
+function syntheticTtsBody(scenario: string): {
+  readonly status: number;
+  readonly headers: Readonly<Record<string, string>>;
+  readonly body: unknown;
+} {
+  const json = { "content-type": "application/json; charset=UTF-8" };
+  const audio = (frequencyHz: number, promptTokenCount: number): unknown => {
+    const candidatesTokenCount = Math.round(
+      TTS_STAND_IN_SECONDS * TTS_AUDIO_TOKENS_PER_SECOND,
+    );
+    return {
+      candidates: [
+        {
+          content: {
+            parts: [
+              {
+                inlineData: {
+                  mimeType: TTS_PCM_MIME_TYPE,
+                  data: Buffer.from(
+                    pcmTone(TTS_STAND_IN_SECONDS, frequencyHz),
+                  ).toString("base64"),
+                },
+              },
+            ],
+            role: "model",
+          },
+          finishReason: "STOP",
+        },
+      ],
+      usageMetadata: {
+        promptTokenCount,
+        candidatesTokenCount,
+        totalTokenCount: promptTokenCount + candidatesTokenCount,
+      },
+    };
+  };
+  switch (scenario) {
+    case "models-list":
+      return {
+        status: 200,
+        headers: json,
+        body: {
+          models: Object.keys(TTS_DOCUMENTED_PRICES)
+            .sort()
+            .map((id) => ({
+              name: `${GEMINI_MODEL_PREFIX}${id}`,
+              displayName: id,
+              description: `${SYNTHETIC_TTS_NOTE} docs/04 §2.2`,
+              inputTokenLimit: 32_000,
+              supportedGenerationMethods: ["generateContent"],
+            })),
+        },
+      };
+    case "tts-en-short":
+      return { status: 200, headers: json, body: audio(440, 12) };
+    case "tts-ko-short":
+      return { status: 200, headers: json, body: audio(330, 16) };
+    case "error-unknown-model":
+      return {
+        status: 404,
+        headers: json,
+        body: {
+          error: {
+            code: 404,
+            message:
+              `models/${TTS_UNKNOWN_MODEL} is not found for API version v1beta. ` +
+              SYNTHETIC_TTS_NOTE,
+            status: "NOT_FOUND",
+          },
+        },
+      };
+    case "error-invalid-key":
+      return {
+        status: 400,
+        headers: json,
+        body: {
+          error: {
+            code: 400,
+            message: `API key not valid. Please pass a valid API key. ${SYNTHETIC_TTS_NOTE}`,
+            status: "INVALID_ARGUMENT",
+            details: [
+              {
+                "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+                reason: "API_KEY_INVALID",
+                domain: "googleapis.com",
+              },
+            ],
+          },
+        },
+      };
+    case "error-429":
+      return {
+        status: 429,
+        headers: { ...json, "retry-after": "2" },
+        body: {
+          error: {
+            code: 429,
+            message: `Resource has been exhausted (e.g. check quota). ${SYNTHETIC_TTS_NOTE}`,
+            status: "RESOURCE_EXHAUSTED",
+          },
+        },
+      };
+    case "no-audio-part":
+      return {
+        status: 200,
+        headers: json,
+        body: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  { text: `I cannot read that aloud. ${SYNTHETIC_TTS_NOTE}` },
+                ],
+                role: "model",
+              },
+              finishReason: "STOP",
+            },
+          ],
+          usageMetadata: {
+            promptTokenCount: 12,
+            candidatesTokenCount: 8,
+            totalTokenCount: 20,
+          },
+        },
+      };
+    default:
+      throw new Error(`No TTS stand-in for scenario "${scenario}"`);
+  }
+}
+
+/** A TTS fixture's sidecar: {@link FixtureMeta} plus what it was made against. */
+export interface TtsFixtureMeta extends FixtureMeta {
+  readonly source: TtsRecordableSource;
+  readonly provider: LlmRecordableProvider;
+  /** The model the request named; absent for the model list and a stand-in. */
+  readonly model?: string;
+  /** The voice the request named; absent for the model list. */
+  readonly voice?: string;
+  readonly page: number;
+}
+
+/** One TTS stand-in, built with no network and no key. */
+export interface SyntheticTtsFixture {
+  readonly scenario: string;
+  readonly method: string;
+  readonly endpoint: string;
+  readonly exchange: RecordedExchange;
+  readonly reason: string;
+}
+
+/**
+ * One TTS stand-in (`P6-T03` step 4).
+ *
+ * @param scenario - a scenario of {@link TTS_SCENARIOS}
+ * @returns the fixture
+ */
+export function syntheticTtsFixture(
+  scenario: TtsScenario,
+): SyntheticTtsFixture {
+  const reason = SYNTHETIC_TTS_REASONS[scenario.scenario];
+  if (reason === undefined) {
+    throw new Error(`No TTS stand-in for scenario "${scenario.scenario}"`);
+  }
+  const { status, headers, body } = syntheticTtsBody(scenario.scenario);
+  const base = LLM_BASE_URLS.resolveBaseUrl(TTS_PROVIDER);
+  return {
+    scenario: scenario.scenario,
+    method: scenario.kind === "list-models" ? "GET" : "POST",
+    endpoint:
+      scenario.kind === "list-models"
+        ? `${base}${GEMINI_MODELS_PATH}`
+        : `${base}/v1beta/models/{model}:generateContent`,
+    exchange: { status, headers, body: `${JSON.stringify(body, null, 2)}\n` },
+    reason,
+  };
+}
+
+// --- TTS redaction -------------------------------------------------------------
+
+/**
+ * The audio's base64 strings in a TTS body (`candidates[].content.parts[]
+ * .inlineData.data`): the only tokens the redaction pass shields. Opaque and
+ * long, so `redact()`'s 40-character net would take them, and not secret.
+ *
+ * @param body - a response body
+ * @returns the strings, or none when the body is not that shape
+ */
+export function ttsAudioTokens(body: string): readonly string[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return [];
+  }
+  const out: string[] = [];
+  const candidates = (parsed as { candidates?: unknown }).candidates;
+  if (!Array.isArray(candidates)) return out;
+  for (const c of candidates as unknown[]) {
+    const parts = (c as { content?: { parts?: unknown } }).content?.parts;
+    if (!Array.isArray(parts)) continue;
+    for (const part of parts as unknown[]) {
+      const data = (part as { inlineData?: { data?: unknown } }).inlineData
+        ?.data;
+      if (typeof data === "string" && data !== "") out.push(data);
+    }
+  }
+  return out;
+}
+
+/**
+ * The model list kept to its TTS entries (`TTS_MODEL_ID`, `docs/04` §2.2),
+ * without `nextPageToken`. A body that is not a model list is returned as is.
+ *
+ * @param body - `GET /v1beta/models`' body
+ * @returns the body to store, and notes for the sidecar
+ */
+export function ttsModelsOnly(body: string): {
+  readonly body: string;
+  readonly notes: readonly string[];
+} {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return { body, notes: [] };
+  }
+  const models = (parsed as { models?: unknown }).models;
+  if (!Array.isArray(models)) return { body, notes: [] };
+  const kept = (models as unknown[]).filter((m) => {
+    const name = (m as { name?: unknown }).name;
+    return typeof name === "string" && TTS_MODEL_ID.test(name);
+  });
+  const notes = [
+    `kept ${String(kept.length)} TTS model entr(ies) of ${String(models.length)}; ` +
+      `the others were dropped (P6-T03 step 1)`,
+  ];
+  if ((parsed as { nextPageToken?: unknown }).nextPageToken !== undefined) {
+    notes.push(
+      "a further page existed; it was not requested and its token was dropped",
+    );
+  }
+  return { body: `${JSON.stringify({ models: kept }, null, 2)}\n`, notes };
+}
+
+/**
+ * {@link assertClean} plus the TTS rules: no header outside
+ * {@link LLM_HEADER_ALLOW}, nothing naming `x-goog-api-key`, no `key=`, and
+ * the shielded audio exempt from the credential-shape check only.
+ *
+ * @param scenario - for the message
+ * @param exchange - the redacted exchange
+ * @param text - its JSON, exactly as it will be written
+ * @param deny - the deny-list, the session's key and the altered key included
+ * @param allow - the audio tokens {@link ttsAudioTokens} found
+ * @throws Error naming what matched, never quoting it
+ */
+export function assertCleanTtsFixture(
+  scenario: string,
+  exchange: RecordedExchange | undefined,
+  text: string,
+  deny: readonly string[],
+  allow: readonly string[] = [],
+): void {
+  const stray =
+    exchange === undefined
+      ? []
+      : Object.keys(exchange.headers).filter((name) => !llmHeaderAllowed(name));
+  if (stray.length > 0) {
+    throw new Error(
+      `Refusing to write fixture "${scenario}": header(s) ${stray.join(", ")} ` +
+        `are not on the allow-list (docs/13 §3.2).`,
+    );
+  }
+  if (/x-goog-api-key/iu.test(text)) {
+    throw new Error(
+      `Refusing to write fixture "${scenario}": it names the key header.`,
+    );
+  }
+  if (/key=/iu.test(text)) {
+    throw new Error(
+      `Refusing to write fixture "${scenario}": it holds a key= parameter.`,
+    );
+  }
+  assertClean(scenario, text, deny, allow);
+}
+
+/** Serialise and check one TTS fixture and its sidecar; throws, writing nothing, when either is not clean. */
+function stageTtsFixture(
+  key: string,
+  exchange: RecordedExchange,
+  meta: TtsFixtureMeta,
+  deny: readonly string[],
+  allow: readonly string[],
+): StagedLlmFixture {
+  if (Buffer.byteLength(exchange.body, "utf8") > TTS_MAX_BODY_BYTES) {
+    throw new Error(
+      `Refusing to write fixture "${meta.scenario}": its body is over ` +
+        `${String(TTS_MAX_BODY_BYTES / 1024)} KB (P6-T03: a few seconds of speech).`,
+    );
+  }
+  const fixtureText = toJson(exchange);
+  assertCleanTtsFixture(meta.scenario, exchange, fixtureText, deny, allow);
+  const metaText = toJson(meta);
+  assertCleanTtsFixture(
+    `${meta.scenario} (metadata)`,
+    undefined,
+    metaText,
+    deny,
+  );
+  return {
+    key,
+    status: exchange.status,
+    bytes: exchange.body.length,
+    fixtureText,
+    metaText,
+  };
+}
+
+// --- The TTS run -----------------------------------------------------------------
+
+/**
+ * The TTS path of `npm run fixtures:record -- --source gemini-tts`.
+ *
+ * - **dry run** (the default): prints the scenarios, the request count and the
+ *   estimate, and the script scenarios' readiness. Reads no key, sends nothing.
+ * - **synthetic**: writes every selected scenario's stand-in, never over a
+ *   recording ({@link standInMayBeWritten}). No key, no network.
+ * - **record**: refused without `--live` (exit 2) or the key (exit 2); stops at
+ *   the spend gate without `--confirm-spend-usd` ({@link LLM_EXIT_SPEND_GATE});
+ *   refused below the estimate (exit 2). Then the model list (free) and a stop
+ *   if the model is absent; each selected live scenario once, never retried;
+ *   every exchange redacted and checked before **any** file is written.
+ *
+ * @param cli - the parsed options; `source` is a TTS source
+ * @param mode - dry run, synthetic or record
+ * @param run - the environment, streams, directory, transport and clock
+ * @returns the exit code
+ */
+export async function runTtsRecorder(
+  cli: CliOptions & { readonly source: TtsRecordableSource },
+  mode: Mode,
+  run: LlmRunEnvironment,
+): Promise<number> {
+  let scenarios: readonly TtsScenario[];
+  let statement: TtsSpendStatement;
+  try {
+    if (cli.rescrub === true) {
+      throw new UsageError("--rescrub is for the literature sources only.");
+    }
+    scenarios = selectTtsScenarios(cli.only);
+    statement = stateTtsSpend(chooseTtsModel(cli.model), scenarios);
+  } catch (error) {
+    if (error instanceof UsageError) {
+      run.stderr(`fixtures:record: ${error.message}\n`);
+      return 2;
+    }
+    throw error;
+  }
+
+  if (mode === "dry-run") {
+    run.stdout(
+      `fixtures:record — dry run for gemini-tts. Nothing was requested, no ` +
+        `key was read and nothing was written.\n` +
+        `TTS scenario list version ${String(TTS_SCENARIO_VERSION)}; ` +
+        `${String(scenarios.length)} scenario(s), fixtures in test/fixtures/tts/gemini/.\n` +
+        ttsStatementText(statement, cli.only) +
+        audioScriptStatusText(),
+    );
+    return 0;
+  }
+
+  const base = literalDenyList(run.env);
+
+  if (mode === "synthetic") {
+    await mkdir(run.fixtureDir, { recursive: true });
+    const staged: StagedLlmFixture[] = [];
+    const kept: string[] = [];
+    for (const s of scenarios) {
+      if (
+        s.recording === "live" &&
+        !(await standInMayBeWritten(run.fixtureDir, s.scenario))
+      ) {
+        kept.push(`  ${s.scenario}  kept: a recording is there\n`);
+        continue;
+      }
+      const fixture = syntheticTtsFixture(s);
+      const meta: TtsFixtureMeta = {
+        scenario: s.scenario,
+        scenarioVersion: TTS_SCENARIO_VERSION,
+        recordedAt: new Date(run.clock.now()).toISOString(),
+        endpoint: fixture.endpoint,
+        method: fixture.method,
+        toolVersion: run.toolVersion,
+        synthetic: true,
+        syntheticReason: fixture.reason,
+        redactions: ["synthetic: nothing was received, nothing to redact"],
+        source: cli.source,
+        provider: TTS_PROVIDER,
+        ...(s.kind === "synthesize" && { voice: TTS_VOICE }),
+        page: 1,
+      };
+      staged.push(
+        stageTtsFixture(
+          s.scenario,
+          fixture.exchange,
+          meta,
+          base,
+          ttsAudioTokens(fixture.exchange.body),
+        ),
+      );
+    }
+    for (const file of staged) await writeStaged(run.fixtureDir, file);
+    run.stdout(
+      staged.map((f) => `  ${f.key}  (synthetic)\n`).join("") +
+        kept.join("") +
+        `Wrote ${String(staged.length)} stand-in(s) to test/fixtures/tts/gemini/. ` +
+        `Zero requests, no key read.\n`,
+    );
+    return 0;
+  }
+
+  // --- record: the gates, in order, before anything is sent -----------------
+  if (cli.live !== true) {
+    run.stderr(
+      `fixtures:record: recording gemini-tts spends money against a real key, ` +
+        `so FIXTURE_MODE=record needs --live as well. Nothing was sent.\n`,
+    );
+    return 2;
+  }
+  const key = llmKeyFromEnvironment(TTS_PROVIDER, run.env);
+  if (key === undefined) {
+    run.stderr(
+      `fixtures:record: ${LLM_KEY_ENV_VARS[TTS_PROVIDER]} is not set in this ` +
+        `shell. Set it for this session only; the recorder reads a key from ` +
+        `the environment and from nowhere else. Nothing was sent.\n`,
+    );
+    return 2;
+  }
+  const alteredKey = `${key}x`;
+  const deny = [...new Set([...base, key, alteredKey])].sort(
+    (a, b) => b.length - a.length,
+  );
+  const out = (text: string): void => {
+    run.stdout(scrubForPrinting(text, deny));
+  };
+  const err = (text: string): void => {
+    run.stderr(scrubForPrinting(text, deny));
+  };
+  out(
+    `fixtures:record — LIVE recording for gemini-tts.\n` +
+      ttsStatementText(statement, cli.only),
+  );
+  const confirmed = cli.confirmSpendUsd;
+  if (confirmed === undefined) {
+    out(
+      `\nStopped at the spend gate: nothing was sent. To approve the ` +
+        `estimate, run the command above (it adds --confirm-spend-usd).\n`,
+    );
+    return LLM_EXIT_SPEND_GATE;
+  }
+  if (!(confirmed >= statement.costUsd)) {
+    err(
+      `fixtures:record: --confirm-spend-usd ${String(confirmed)} is below the ` +
+        `estimate of ${usdUp(statement.costUsd)}. Nothing was sent.\n`,
+    );
+    return 2;
+  }
+
+  // --- record: sending --------------------------------------------------------
+  const captured: CapturedLlmExchange[] = [];
+  let current: string | undefined;
+  let page = 0;
+  const transport = capturingTransport(run.transport(), (method, url, xhr) => {
+    if (current === undefined) return;
+    page += 1;
+    let body: string;
+    try {
+      body = xhr.responseText ?? "";
+    } catch {
+      body = "";
+    }
+    captured.push({
+      scenario: current,
+      page,
+      method,
+      url,
+      status: xhr.status,
+      headers: parseHeaderBlock(xhr.getAllResponseHeaders()),
+      body,
+    });
+  });
+  const http = createHttpClient({
+    transport,
+    userAgent: buildUserAgent(run.toolVersion),
+    clock: run.clock,
+  });
+  const token = createCancellationTokenSource().token;
+  const notes: string[] = [];
+  const failures: string[] = [];
+  const begin = (scenario: string): void => {
+    current = scenario;
+    page = 0;
+  };
+
+  // The model list first, always: free, and the check that the model the
+  // estimate names exists before anything billed is sent.
+  begin("models-list");
+  let listedIds: readonly string[];
+  try {
+    const listed = await http.request(
+      "GET",
+      `${LLM_BASE_URLS.resolveBaseUrl(TTS_PROVIDER)}${GEMINI_MODELS_PATH}`,
+      { headers: { [GEMINI_API_KEY_HEADER]: key }, token, singleAttempt: true },
+    );
+    const models = (JSON.parse(listed.body) as { models?: unknown }).models;
+    listedIds = (Array.isArray(models) ? (models as unknown[]) : [])
+      .map((m) => (m as { name?: unknown }).name)
+      .filter((n): n is string => typeof n === "string")
+      .map((n) =>
+        n.startsWith(GEMINI_MODEL_PREFIX)
+          ? n.slice(GEMINI_MODEL_PREFIX.length)
+          : n,
+      );
+  } catch (error) {
+    err(
+      `fixtures:record: the model list failed (${describe(error)}). Nothing ` +
+        `billed was sent and nothing was written.\n`,
+    );
+    return 1;
+  }
+  if (!listedIds.includes(statement.model)) {
+    const tts = listedIds.filter((id) => TTS_MODEL_ID.test(id)).sort();
+    err(
+      `fixtures:record: Gemini does not list "${statement.model}". Nothing ` +
+        `billed was sent and nothing was written. Listed TTS models: ` +
+        `${tts.length === 0 ? "(none)" : tts.join(", ")}. Re-run the dry run ` +
+        `with --model <id> for a priced one.\n`,
+    );
+    return 1;
+  }
+
+  for (const s of scenarios) {
+    if (s.recording !== "live" || s.kind !== "synthesize") continue;
+    if (s.language === undefined) continue;
+    begin(s.scenario);
+    const sendKey = s.key === "environment-plus-one" ? alteredKey : key;
+    const model = s.model === "unknown" ? TTS_UNKNOWN_MODEL : statement.model;
+    try {
+      await http.request("POST", ttsEndpoint(model), {
+        headers: {
+          [GEMINI_API_KEY_HEADER]: sendKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(ttsRequestBody(TTS_TEXTS[s.language], TTS_VOICE)),
+        token,
+        singleAttempt: true,
+      });
+      if (s.scenario === "error-unknown-model") {
+        failures.push("error-unknown-model: the unknown model was accepted");
+      }
+      if (s.scenario === "error-invalid-key") {
+        failures.push("error-invalid-key: the altered key was accepted");
+      }
+    } catch (error) {
+      notes.push(`${s.scenario}: the service answered ${describe(error)}`);
+    }
+    if (!captured.some((c) => c.scenario === s.scenario)) {
+      failures.push(`${s.scenario}: nothing was captured`);
+    }
+  }
+  current = undefined;
+
+  // --- record: redact and check everything, then write ----------------------
+  const selected = new Set(scenarios.map((s) => s.scenario));
+  let staged: StagedLlmFixture[];
+  try {
+    staged = captured
+      .filter((c) => selected.has(c.scenario))
+      .map((c) => {
+        const listing =
+          c.scenario === "models-list"
+            ? ttsModelsOnly(c.body)
+            : { body: c.body, notes: [] };
+        const allow = ttsAudioTokens(listing.body);
+        const keptHeaders: Record<string, string> = {};
+        const dropped: string[] = [];
+        for (const [name, value] of Object.entries(c.headers)) {
+          if (llmHeaderAllowed(name)) keptHeaders[name.toLowerCase()] = value;
+          else dropped.push(name.toLowerCase());
+        }
+        const shared = redactExchange(
+          { status: c.status, headers: keptHeaders, body: listing.body },
+          deny,
+          allow,
+        );
+        const survived = ttsAudioTokens(shared.exchange.body);
+        if (survived.length !== allow.length) {
+          throw new Error(
+            `Refusing to write fixture "${c.scenario}": its audio could not be ` +
+              `kept verbatim through the redaction pass.`,
+          );
+        }
+        const u = new URL(c.url);
+        const scenario = TTS_SCENARIOS.find((t) => t.scenario === c.scenario);
+        const meta: TtsFixtureMeta = {
+          scenario: c.scenario,
+          scenarioVersion: TTS_SCENARIO_VERSION,
+          recordedAt: new Date(run.clock.now()).toISOString(),
+          endpoint: `${u.origin}${u.pathname}`,
+          method: c.method,
+          toolVersion: run.toolVersion,
+          synthetic: false,
+          redactions: [
+            ...(dropped.length === 0
+              ? []
+              : [
+                  `dropped ${String(dropped.length)} header(s) not on the allow-list: ` +
+                    // The key header is not named even here: a sidecar naming
+                    // it is refused, as P5-T31's check refuses S2's.
+                    dropped
+                      .map((name) =>
+                        name === GEMINI_API_KEY_HEADER
+                          ? "[the key header]"
+                          : name,
+                      )
+                      .sort()
+                      .join(", "),
+                ]),
+            ...listing.notes,
+            ...(allow.length === 0
+              ? []
+              : [
+                  `preserved ${String(allow.length)} base64 audio string(s); not credentials`,
+                ]),
+            ...shared.notes,
+          ],
+          source: cli.source,
+          provider: TTS_PROVIDER,
+          ...(scenario?.kind === "synthesize" && {
+            model:
+              scenario.model === "unknown"
+                ? TTS_UNKNOWN_MODEL
+                : statement.model,
+            voice: TTS_VOICE,
+          }),
+          page: c.page,
+        };
+        return stageTtsFixture(
+          llmFixtureKey(c.scenario, c.page),
+          shared.exchange,
+          meta,
+          deny,
+          allow,
+        );
+      });
+  } catch (error) {
+    err(
+      `fixtures:record: ${describe(error)}\nNothing was written: one ` +
+        `exchange failed a check, so none is kept.\n`,
+    );
+    return 1;
+  }
+  await mkdir(run.fixtureDir, { recursive: true });
+  for (const file of staged) await writeStaged(run.fixtureDir, file);
+  out(
+    staged
+      .map(
+        (f) => `  ${f.key}  status=${String(f.status)} ${String(f.bytes)}B\n`,
+      )
+      .join("") +
+      notes.map((n) => `  note: ${n}\n`).join("") +
+      `\n${String(captured.length)} request(s) answered; ${String(staged.length)} ` +
+      `fixture(s) written to test/fixtures/tts/gemini/. Estimated ` +
+      `${usdUp(statement.costUsd)}; the spend is in each body's usageMetadata.\n`,
+  );
+  if (failures.length > 0) {
+    err(
+      `${String(failures.length)} scenario(s) failed:\n  ${failures.join("\n  ")}\n`,
+    );
+    return 1;
+  }
+  return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -5935,6 +7478,22 @@ async function main(argv: readonly string[]): Promise<number> {
     ? "dry-run"
     : readMode(process.env["FIXTURE_MODE"]);
   const source = cli.source;
+  if (isTtsRecordableSource(source)) {
+    // `P6-T03`: Gemini TTS, with the LLM path's gates (`runTtsRecorder`).
+    return runTtsRecorder({ ...cli, source }, mode, {
+      env: process.env,
+      stdout: (text) => process.stdout.write(text),
+      stderr: (text) => process.stderr.write(text),
+      fixtureDir: ttsFixtureDirFor(source),
+      transport: () =>
+        createFetchTransport(
+          spacingMsFor(LLM_HOSTS[TTS_PROVIDER]),
+          () => undefined,
+        ),
+      clock: createSystemClock(),
+      toolVersion: await toolVersion(),
+    });
+  }
   if (isLlmRecordableProvider(source)) {
     // `P3-T30`: the LLM path, with its own gates (`runLlmRecorder`).
     return runLlmRecorder({ ...cli, source }, mode, {

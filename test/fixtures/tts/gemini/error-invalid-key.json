@@ -1,0 +1,7 @@
+{
+  "status": 400,
+  "headers": {
+    "content-type": "application/json; charset=UTF-8"
+  },
+  "body": "{\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"API key not valid. Please pass a valid API key. [synthetic fixture, P6-T03; not a recorded answer]\",\n    \"status\": \"INVALID_ARGUMENT\",\n    \"details\": [\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.ErrorInfo\",\n        \"reason\": \"API_KEY_INVALID\",\n        \"domain\": \"googleapis.com\"\n      }\n    ]\n  }\n}\n"
+}

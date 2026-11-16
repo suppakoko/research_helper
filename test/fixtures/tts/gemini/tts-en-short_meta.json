@@ -1,0 +1,17 @@
+{
+  "scenario": "tts-en-short",
+  "scenarioVersion": 1,
+  "recordedAt": "2026-11-16T09:35:23.775Z",
+  "endpoint": "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+  "method": "POST",
+  "toolVersion": "0.0.2",
+  "synthetic": true,
+  "syntheticReason": "Stand-in, not evidence (P6-T03): docs/04 §2.4's response shape around a 0.4 s generated 440 Hz tone (24 kHz, 16-bit, mono), not speech. candidatesTokenCount is 0.4 s at docs/04 §4.1's 25 tokens a second; promptTokenCount is a placeholder. The owner's run (P6-T04) replaces it.",
+  "redactions": [
+    "synthetic: nothing was received, nothing to redact"
+  ],
+  "source": "gemini-tts",
+  "provider": "gemini",
+  "voice": "Charon",
+  "page": 1
+}
