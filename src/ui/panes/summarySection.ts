@@ -48,6 +48,7 @@
 import { encodeTagValue } from "../../core/cache/keys";
 import { redact } from "../../core/errors";
 import { WORK_TAG_PREFIX } from "../../core/jobQueue/queue";
+import { formatDateTime } from "../../i18n/format";
 import type { MainWindowMessageId } from "../../i18n/keys";
 import { deriveTldr, type StoredSummary } from "../../model/summary";
 import { PREFERENCES_PANE_ID } from "../prefs/preferencesPane";
@@ -161,6 +162,99 @@ export class SummaryNotStoredError extends Error {
 }
 
 /**
+ * A run that failed, as `runItemSummary` (`src/ui/dialogs/summarizeDialog.ts`)
+ * throws it: the failure's machine values and its message id, never its
+ * `detail` (owner, 2026-11-17, `plan/00` §6 items 389(f) and 392(a);
+ * `P7-T03` step 5). `detail` is free text built from the failing request;
+ * the debug log has it, after `redact`, and the screen does not.
+ */
+export class SummaryFailedError extends Error {
+  readonly code: string;
+  readonly messageKey: string;
+  readonly httpStatus: number | undefined;
+
+  constructor(failure: {
+    readonly code: string;
+    readonly messageKey: string;
+    readonly httpStatus?: number | undefined;
+  }) {
+    super(`[research-helper] summary failed (${failure.code})`);
+    this.name = "SummaryFailedError";
+    this.code = failure.code;
+    this.messageKey = failure.messageKey;
+    this.httpStatus = failure.httpStatus;
+  }
+}
+
+/**
+ * The error messages the banner may show by id: those whose `en-US` text
+ * takes no argument, because the section has none to give (item 392(a): "with
+ * its arguments, where the section has them"). A test holds each to the
+ * bundle. Any other failure shows the banner's own line and its code.
+ */
+export const ARGUMENT_FREE_FAILURE_IDS: readonly MainWindowMessageId[] =
+  Object.freeze([
+    "rh-error-configuration",
+    "rh-error-offline",
+    "rh-error-zotero",
+    "rh-error-storage",
+    "rh-error-content-filter",
+    "rh-error-policy",
+  ] as const satisfies readonly MainWindowMessageId[]);
+
+/**
+ * A failure as the banner shows it: machine values only (`docs/07` §10.2;
+ * owner, item 389(f)). Read by shape, for the reason {@link failureText}
+ * gives.
+ */
+export interface SummaryFailure {
+  /** `"LLM"`, `"LLM · HTTP 502"`, or `""` when the error carries no code. */
+  readonly code: string;
+  /** Set when the error's message id is on {@link ARGUMENT_FREE_FAILURE_IDS}. */
+  readonly messageId?: MainWindowMessageId | undefined;
+}
+
+/** An error code's shape (`docs/07` §10.1): capitals and underscores. */
+const ERROR_CODE = /^[A-Z][A-Z0-9_]*$/u;
+
+/**
+ * The banner's {@link SummaryFailure} for whatever a run rejected with. Only
+ * an error code, an HTTP status and a listed message id are read; the
+ * error's message is never read.
+ */
+export function summaryFailure(error: unknown): SummaryFailure {
+  if (typeof error !== "object" || error === null) return { code: "" };
+  const shape = error as {
+    code?: unknown;
+    httpStatus?: unknown;
+    messageKey?: unknown;
+  };
+  const code =
+    typeof shape.code === "string" && ERROR_CODE.test(shape.code)
+      ? shape.code
+      : "";
+  const status =
+    typeof shape.httpStatus === "number" &&
+    Number.isInteger(shape.httpStatus) &&
+    shape.httpStatus >= 100 &&
+    shape.httpStatus <= 599
+      ? shape.httpStatus
+      : undefined;
+  const line =
+    code === ""
+      ? ""
+      : status === undefined
+        ? code
+        : `${code} · HTTP ${String(status)}`;
+  const messageId = (ARGUMENT_FREE_FAILURE_IDS as readonly unknown[]).includes(
+    shape.messageKey,
+  )
+    ? (shape.messageKey as MainWindowMessageId)
+    : undefined;
+  return messageId === undefined ? { code: line } : { code: line, messageId };
+}
+
+/**
  * The reason a {@link SummaryNotStoredError} carries, read by shape rather
  * than `instanceof`, for the reason {@link failureText} gives.
  */
@@ -190,6 +284,7 @@ export const SUMMARY_SECTION_PARTS = {
   cancel: "rh-summary-cancel",
   error: "rh-summary-error",
   errorText: "rh-summary-error-text",
+  errorCode: "rh-summary-error-code",
   retry: "rh-summary-retry",
   content: "rh-summary-content",
   meta: "rh-summary-meta",
@@ -269,8 +364,9 @@ export type SectionState =
   | { readonly kind: "loading" }
   | {
       readonly kind: "error";
-      readonly message: string;
-      /** Set when the run stored nothing: the banner's line, not `message`. */
+      /** Machine values only (item 389(f)): never the error's text. */
+      readonly failure: SummaryFailure;
+      /** Set when the run stored nothing: the banner's line, not `failure`'s. */
       readonly reason?: NotSummarizedReason | undefined;
     };
 
@@ -295,9 +391,12 @@ export interface SectionView {
   readonly noKey: boolean;
   readonly empty: boolean;
   readonly loading: boolean;
-  /** The redacted message, when `kind` is `error`. */
-  readonly errorText: string | undefined;
-  /** Instead of {@link SectionView.errorText}: why the run stored nothing. */
+  /**
+   * The failure's machine values, when `kind` is `error` (item 389(f)):
+   * its code line and, for an argument-free message, its id. Never text.
+   */
+  readonly errorFailure: SummaryFailure | undefined;
+  /** Instead of the failure's message: why the run stored nothing. */
   readonly errorReason: NotSummarizedReason | undefined;
   readonly content: SummaryView | undefined;
   readonly generate: ButtonStatus;
@@ -362,15 +461,7 @@ export function summaryView(
   locale: string,
 ): SummaryView {
   const content = stored.content;
-  let when: string;
-  try {
-    when = new Intl.DateTimeFormat(locale, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(stored.generatedAtEpochMs));
-  } catch {
-    when = new Date(stored.generatedAtEpochMs).toISOString();
-  }
+  const when = formatDateTime(stored.generatedAtEpochMs, locale);
   return {
     researchQuestion: content.researchQuestion?.trim() ?? "",
     keyFindings: nonEmpty(
@@ -426,7 +517,7 @@ export function sectionView(
     noKey: state.kind === "no-key",
     empty: state.kind === "empty",
     loading: busy,
-    errorText: state.kind === "error" ? state.message : undefined,
+    errorFailure: state.kind === "error" ? state.failure : undefined,
     errorReason: state.kind === "error" ? state.reason : undefined,
     content,
     generate,
@@ -453,7 +544,7 @@ export function deriveState(input: {
   readonly loaded: boolean;
   readonly stored: StoredSummary | undefined;
   readonly running: boolean;
-  readonly error: string | undefined;
+  readonly error: SummaryFailure | undefined;
   /** Why the run stored nothing, when it ended that way. */
   readonly reason?: NotSummarizedReason | undefined;
   readonly configured: boolean;
@@ -461,8 +552,8 @@ export function deriveState(input: {
   if (input.running) return { kind: "loading" };
   if (input.error !== undefined) {
     return input.reason === undefined
-      ? { kind: "error", message: input.error }
-      : { kind: "error", message: input.error, reason: input.reason };
+      ? { kind: "error", failure: input.error }
+      : { kind: "error", failure: input.error, reason: input.reason };
   }
   if (!input.loaded) return { kind: "blank" };
   if (input.stored !== undefined)
@@ -492,7 +583,9 @@ export function mayAutoSummarize(input: {
 }
 
 /**
- * A failure as the banner shows it: the message, redacted (`docs/09` §2.1).
+ * A failure's message, redacted (`docs/09` §2.1), **for the debug log only**:
+ * since 2026-11-17 the banner draws {@link summaryFailure}'s machine values
+ * and never this (owner, `plan/00` §6 items 389(f), 392(a)).
  *
  * The message of any error-shaped object, never `instanceof Error`: an error
  * made in another global — a Zotero or XPCOM error, or one thrown by code
@@ -534,6 +627,7 @@ export const SUMMARY_BODY_XHTML =
   `<html:div class="${SUMMARY_SECTION_PARTS.error}" hidden="true" role="alert">` +
   `<html:p data-l10n-id="${SUMMARY_SECTION_L10N.failed}"/>` +
   `<html:p class="${SUMMARY_SECTION_PARTS.errorText}"/>` +
+  `<html:p class="${SUMMARY_SECTION_PARTS.errorCode}" hidden="true"/>` +
   `<html:button class="${SUMMARY_SECTION_PARTS.retry}" data-l10n-id="${SUMMARY_SECTION_L10N.retry}"/>` +
   `</html:div>` +
   `<html:div class="${SUMMARY_SECTION_PARTS.content}" hidden="true"/>` +
@@ -594,22 +688,33 @@ export function paintBody(body: HTMLElement, view: SectionView): void {
   setHidden(part(body, "empty"), !view.empty);
   applyButton(part(body, "generate"), view.generate);
   setHidden(part(body, "loading"), !view.loading);
-  setHidden(part(body, "error"), view.errorText === undefined);
+  setHidden(part(body, "error"), view.errorFailure === undefined);
   const errorText = part(body, "errorText");
   if (errorText) {
+    // Only messages of the plugin's own, by id: Fluent fills them in. The
+    // error's text is never drawn (item 389(f), 392(a)).
+    errorText.textContent = "";
     if (view.errorReason !== undefined) {
-      // A message of the plugin's own, by id: Fluent fills it in.
-      errorText.textContent = "";
       errorText.setAttribute("data-l10n-id", SUMMARY_RESULT_L10N.notSummarized);
       errorText.setAttribute(
         "data-l10n-args",
         JSON.stringify({ reason: view.errorReason }),
       );
+    } else if (view.errorFailure?.messageId !== undefined) {
+      errorText.setAttribute("data-l10n-id", view.errorFailure.messageId);
+      errorText.removeAttribute("data-l10n-args");
     } else {
       errorText.removeAttribute("data-l10n-id");
       errorText.removeAttribute("data-l10n-args");
-      errorText.textContent = view.errorText ?? "";
     }
+  }
+  const errorCode = part(body, "errorCode");
+  if (errorCode) {
+    // Machine values (an error code, an HTTP status): not language.
+    const line =
+      view.errorReason === undefined ? (view.errorFailure?.code ?? "") : "";
+    errorCode.textContent = line;
+    setHidden(errorCode, line === "");
   }
   applyButton(part(body, "retry"), view.retry);
 
@@ -741,7 +846,7 @@ interface BodyState {
   error:
     | {
         readonly itemID: number;
-        readonly message: string;
+        readonly failure: SummaryFailure;
         readonly reason: NotSummarizedReason | undefined;
       }
     | undefined;
@@ -812,7 +917,7 @@ export function summarySectionOptions(
       loaded,
       stored: loaded ? state.loaded?.stored : undefined,
       running: state.run?.itemID === itemID,
-      error: state.error?.itemID === itemID ? state.error.message : undefined,
+      error: state.error?.itemID === itemID ? state.error.failure : undefined,
       reason: state.error?.itemID === itemID ? state.error.reason : undefined,
       configured: host.isConfigured(),
     });
@@ -861,7 +966,7 @@ export function summarySectionOptions(
     } catch (error) {
       state.error = {
         itemID,
-        message: failureText(error),
+        failure: summaryFailure(error),
         reason: notStoredReason(error),
       };
       repaint(state);
@@ -883,7 +988,7 @@ export function summarySectionOptions(
         if (!entry.cancelled) {
           state.error = {
             itemID,
-            message: failureText(error),
+            failure: summaryFailure(error),
             reason: notStoredReason(error),
           };
           host.onError("[research-helper] summary generation failed", error);

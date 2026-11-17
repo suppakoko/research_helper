@@ -68,10 +68,33 @@ export type { ReportFileWriter } from "../../zotero/notes";
  */
 export const DEFAULT_RETRACTED_HEADING = "Retracted — not used in this report";
 
+/**
+ * The line under the numbered references when any of them came from Semantic
+ * Scholar ({@link BibliographyEntry.semanticScholar}), as the owner adopted it
+ * on 2026-11-17 (`plan/00` §6 item 395(c), `P7-T35`; `docs/09` §7). An
+ * English report's default; `reportLabels.ts` holds it as
+ * `semanticScholarAttribution` and a `ko` caller passes its label.
+ */
+export const DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION =
+  "Some records: Semantic Scholar, Allen Institute for AI.";
+
 /** Report-language text the export writes itself (`docs/08` §10.4). */
 export interface ReportExportLabels {
   /** Defaults to {@link DEFAULT_RETRACTED_HEADING}. */
   readonly retractedHeading?: string;
+  /** Defaults to {@link DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION} (`P7-T35`). */
+  readonly semanticScholarAttribution?: string;
+}
+
+/**
+ * Whether §11 carries the Semantic Scholar line: some numbered entry's record
+ * came from Semantic Scholar. A retracted entry is not cited, so it does not
+ * count (`P7-T35`; owner, `plan/00` §6 item 395(c)).
+ */
+export function needsSemanticScholarAttribution(
+  entries: readonly BibliographyEntry[],
+): boolean {
+  return entries.some((entry) => entry.semanticScholar === true);
 }
 
 // ---------------------------------------------------------------------------
@@ -355,11 +378,17 @@ function bibliographyBlock(
   entries: readonly BibliographyEntry[],
   retracted: readonly RetractedEntry[],
   retractedHeading: string,
+  attribution: string,
 ): readonly string[] {
   const lines: string[] = [];
   for (const entry of entries) {
     if (lines.length > 0) lines.push("");
     lines.push(`[${entry.index}] ${entryWithDoiLink(entry.text, entry.doi)}`);
+  }
+  // Under the numbered entries, before the retracted list's heading, so the
+  // line belongs to the references and not to that list (`P7-T35`).
+  if (needsSemanticScholarAttribution(entries)) {
+    lines.push("", escapeMarkdownText(attribution));
   }
   if (retracted.length > 0) {
     if (lines.length > 0) lines.push("");
@@ -437,6 +466,7 @@ export function renderReportMarkdown(
     entries,
     report.retracted,
     labels.retractedHeading ?? DEFAULT_RETRACTED_HEADING,
+    labels.semanticScholarAttribution ?? DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION,
   );
   const head = bound.slice(0, at + 1);
   const tail = bound.slice(at + 1);

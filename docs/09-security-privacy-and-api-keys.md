@@ -419,6 +419,7 @@ Requirements for `08-ui-ux-spec.md`:
 6. **A "Remove all stored keys" button** that clears every `SecretId` and reports how many were removed.
 7. **No key is ever placed on the clipboard by the plugin**, and no "copy key" affordance exists.
 8. **On a fresh install where a data-directory restore has brought the library but not the keys**, the empty-key state explains *why*: "API keys are stored in this computer's credential store and do not travel with your Zotero data folder." **This string is only correct for the three OS stores (2026-09-30, `G-09`):** under the `NSSKeyStore` fallback the key *does* travel with the profile, so a restored profile arrives with the key present and this state never appears. Condition the string on the live backend rather than on the keys being absent.
+   *Found and fixed 2026-11-17 (`plan/00` §6 item 398(i)): the "used before" half of this condition, `pluginDatabaseHasData` in `src/bootstrap/registerUI.ts`, wrote its `LIKE` pattern as a literal, which Zotero's database connection (Firefox's `Sqlite.sys.mjs`) refuses; the pane read the refusal as "no data", so in Zotero this state could not appear. The pattern is now bound; `test/unit/bootstrap/sqlLikeBindings.test.ts` and `preferences.spec.ts`'s `P7-T10` test hold it.*
 
 ---
 
@@ -702,6 +703,8 @@ Two design rules follow:
 
 - **Collection names, tag names, and folder structure are user-authored metadata and are not sent** unless the user explicitly asks for them to be (e.g. "use my collection name as context"). They frequently contain project codenames, grant numbers, and collaborator names.
 - **Zotero notes and PDF annotations are never sent by default**, in any feature. They are the user's own unpublished thinking. Sending them requires a separate, explicitly labelled opt-in (§3.5), and is off in every privacy mode except the most permissive.
+
+> **Decided 2026-11-17 (owner, `plan/00` §6 item 395(a), "태그는 안 보냄"; `plan/10` `P7-T34`).** Rows 3a and 3b, and the first rule above, as built. **Row 3a now holds:** until this date the summary prompts' `{{TAGS}}` carried the item's tags in every mode (found by `P7-T16`, `docs/spikes/phase-7-security-review.md`); it is now `not supplied` unless full mode carries the collection-and-tag-names opt-in, and no v1.0 setting sets that opt-in (`docs/12` §4's note of this date). Row 6 already sent no tag the user typed. **Row 3b also sends the collection's name**, and so does row 5's script request: the report's title and the audio script's prompt name the collection, as they have since Phase 4 and Phase 6, and the owner kept this as the one exception to the first rule, because a report about a collection that does not say which collection it is about is not useful. The summary cache key holds `{{TAGS}}`, so each summary made before this date is made again on its next run.
 
 ### 3.3 Per-provider data-usage and retention
 
@@ -997,6 +1000,8 @@ The plugin does **not** attempt to detect confidential content — heuristics he
 4. **The egress log** (§3.6) exists precisely so a researcher can answer an institutional question after the fact.
 5. **Documentation, not advice.** The plugin's docs state what is sent and cite the providers' own retention terms. They do not tell the user whether their IRB will permit it.
 
+> **Decided 2026-11-17 (owner, `plan/00` §6 item 395(b), "주의 문장만 추가"; found by `P7-T16`).** **Item 2:** v1.0 ships the **global** privacy mode only; a per-collection mode is a candidate for a later release, not v1.0 work. A user marks material off-limits by the global mode, or by not running a job on it. **Item 3:** the shipped first-job notice is `research-helper-egress-first-job-notice` in the cost dialog (§3.6), not a separate first-run dialog, and since this date it carries the second sentence of the quotation above, verbatim, in `en-US` (`plan/10` `P7-T03`). Its Korean is a commented draft awaiting `G-41`; until the owner approves it, a `ko-KR` user sees the earlier Korean, without the sentence.
+
 > **Unverified:** the NIH notice number `NOT-OD-23-149` and the exact Elsevier policy URL above were not re-fetched for this document; the substance (NIH prohibits generative AI in peer review of applications; Elsevier prohibits uploading manuscripts to generative AI tools) is confirmed, but verify the citations before publishing them in user-facing text.
 
 ### 4.4 Licensing and redistribution of publisher content
@@ -1239,9 +1244,11 @@ Verify each before release. Items marked **[BLOCKER]** must not ship unresolved.
 
 - [ ] **[BLOCKER]** No key appears in `Zotero.debug` output at any log level. Verified by running a full summarize job with `debug.level` at maximum and grepping the debug output for known key prefixes.
   *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* met, gap noted: `P7-T14`'s audit found none of 30 planted values in three runs, with two of the six keys exercised; Zotero 10.0.3's `Zotero.HTTP.request` drops a `key=` parameter from the URL it logs, never logs headers, and logs no body because the plugin passes `logBodyLength: 0` (read from Zotero's source, not captured at run time; item 395(e)).
+  *Decided 2026-11-17 (owner, `plan/00` §6 item 395(e) and (f)):* (e) the gap is closed by a release-checklist line that `P7-T24` writes and the owner runs in `P7-T25`: a real-key job at debug level, then the debug output searched for the key; (f) since `P7-T37` (built 2026-11-17, awaiting the owner's review), the audit also searches every text and blob cell of every table of the plugin's own database for the same values after the three jobs.
 - [ ] `Secret` wrapper is used; `.expose()` has exactly one call site per provider and each is reviewed.
 - [ ] Logger redaction runs unconditionally on every message and context value, before emission.
   *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* partly met: the scope's `onError` reporter in `src/addon.ts` calls `Zotero.debug` with a teardown error's message and stack, not through the logger (item 395(d)).
+  *Built 2026-11-17 (owner, `plan/00` §6 item 395(d); `plan/10` `P7-T36`, awaiting the owner's review):* the reporter writes `teardownErrorLine` (`src/core/errors.ts`), which passes the whole line, message and stack, through `redact`; a unit test plants a key-shaped value in a thrown teardown error.
 - [ ] `Authorization`, `x-api-key`, and `x-goog-api-key` headers are never logged.
 - [ ] Gemini uses the `x-goog-api-key` **header**, never the `key` query parameter.
 - [ ] `Zotero.HTTP.request` is never called with `debug: true`. Enforced by lint.
@@ -1259,9 +1266,11 @@ Verify each before release. Items marked **[BLOCKER]** must not ship unresolved.
 - [ ] **[BLOCKER]** User notes and PDF annotations are not sent in any default configuration.
 - [ ] Collection and tag names are not sent by default.
   *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* **not met as built**: `metadataVariables` (`src/pipeline/summarize/summarizeItem.ts`) sends the item's Zotero tags in every summary prompt, and the report and audio prompts carry the collection's name (item 395(a)).
+  *Built 2026-11-17 (owner, `plan/00` §6 item 395(a); `plan/10` `P7-T34`, awaiting the owner's review):* tags are no longer sent: `{{TAGS}}` is `not supplied` unless full mode carries the opt-in, which no v1.0 setting sets (§3.2's note of this date). The collection's name stays in the report and audio prompts, by the owner's decision, and §3.2 row 3b now says so.
 - [ ] The pre-flight dialog states destination, model, item count, content scope, privacy mode, and cost.
 - [ ] Per-collection privacy overrides exist, are visible at the point of action, and can only tighten a global setting.
   *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* partly met: overrides are read and only tighten, but nothing in the UI writes one (item 395(b)).
+  *Decided 2026-11-17 (owner, `plan/00` §6 item 395(b)):* v1.0 ships the global privacy mode only; a per-collection mode is a later-release candidate (§4.3's note of this date). This line is out of v1.0's scope.
 - [ ] OpenRouter requests set `provider.data_collection: "deny"` in every mode, and `zdr: true` in strict mode.
 - [ ] A guardrail-restriction 404 from OpenRouter produces an explanatory message, not a generic failure.
 - [ ] Models with `dataPolicy.trainsOnInputByDefault === "unknown"` are refused in strict mode and warned elsewhere.
@@ -1279,6 +1288,7 @@ Verify each before release. Items marked **[BLOCKER]** must not ship unresolved.
 - [ ] Crossref: polite pool via `mailto` and a contact-bearing `User-Agent`; limiter reconfigured from `x-rate-limit-*` and `x-concurrency-limit` response headers, never from the published table alone (list endpoints are limited far below the headline figure).
 - [ ] Semantic Scholar: ≤1/s; attribution present in the README and in generated reports.
   *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* partly met: the rate holds and the README carries the attribution (`P7-T19`); generated reports do not (item 395(c)).
+  *Built 2026-11-17 (owner, `plan/00` §6 item 395(c); `plan/10` `P7-T35`, awaiting the owner's review):* when any numbered reference came from Semantic Scholar (its `extra` names it on the `rh-sources` line, or carries `rh-s2-corpus-id`), the report prints "Some records: Semantic Scholar, Allen Institute for AI." under the numbered references, in the scaffold, the Markdown export and the Zotero note; its Korean awaits `G-41`.
 - [ ] arXiv: ≥3 s between requests, exactly one concurrent connection.
 - [ ] Europe PMC: automated full-text retrieval restricted to the OA subset; no bulk download of anything else.
 - [ ] bioRxiv/medRxiv: conservative self-imposed limit; per-record licence field respected.
@@ -1299,11 +1309,13 @@ Verify each before release. Items marked **[BLOCKER]** must not ship unresolved.
 - [ ] Lockfile committed; releases built with `npm ci`; runtime dependencies pinned to exact versions.
 - [ ] `npm audit` runs in CI; new high-severity advisories block release.
   *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* met for the runtime tree, 0 advisories on 2026-11-17; the development tree has 17 (4 high), not gated (item 395(g)).
+  *Decided 2026-11-17 (owner, `plan/00` §6 item 395(g)):* `npm audit fix`, never `--force`, is its own reviewed change, `plan/10` `P7-T38`, before `P7-T26`; not run yet.
 - [ ] Releases are built in CI from a tagged commit, with restricted tag/release permissions and review required on the release workflow.
 - [ ] **[BLOCKER]** No secret of any kind is embedded in the XPI — no default API key, no analytics token, no signing key.
   *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* met for the working-tree build: a key- and token-shape search over the 25 files of the built XPI found none; the tag's XPI is `P7-T26`'s.
 - [ ] `SECURITY.md` exists with a contact address.
   *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* `SECURITY.md` exists; its contact is a placeholder for the owner to fill, and its response times are a draft (item 395(h)).
+  *Decided 2026-11-17 (owner, `plan/00` §6 item 395(h)):* the owner fills in the contact channel before `P7-T26`; the 7-day and 30-day response times are kept; `P7-T24` checks that the placeholder is gone.
 - [ ] A post-compromise plan exists and includes "rotate all configured API keys" as the first user instruction.
   *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* met: `SECURITY.md`'s "If a release is compromised", step 1.
 
@@ -1313,6 +1325,7 @@ Verify each before release. Items marked **[BLOCKER]** must not ship unresolved.
   *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* met: `test/unit/ui/preferencesPane.test.ts`, "reproduces all five paragraphs word for word".
 - [ ] The first-run notice about peer review, confidential material, and participant data is shown once and is not skippable by default.
   *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* partly met: shown once and not skippable, but the shipped `research-helper-egress-first-job-notice` does not carry §4.3's peer-review, confidentiality and participant-data cautions (item 395(b)).
+  *Built 2026-11-17 (owner, `plan/00` §6 item 395(b); `plan/10` `P7-T03`, awaiting the owner's review):* the `en-US` notice carries the owner's sentence verbatim (§4.3's note of this date); the Korean is a commented draft awaiting `G-41`.
 - [ ] The plugin claims **no** protection it does not provide. No "military-grade encryption", no "your data is safe", no "we never see your data" phrasing that implies more than it means.
 - [ ] Provider retention figures in the UI cite the provider's own page and carry the date they were verified.
 - [ ] Every policy claim in user-facing text is traceable to a source in this document's §8.

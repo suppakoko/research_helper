@@ -438,6 +438,10 @@ research-helper-remove-notes-done = 노트 { $count }개를 휴지통으로 옮�
 # plan/00 §6 item 269(a)).
 
 research-helper-egress-first-job-notice = Research Helper는 사용자의 컴퓨터에서 실행되고 사용자의 API 키를 쓰며, 개발자에게는 아무것도 보내지 않습니다. 그렇다고 제공자에게까지 자료가 비공개로 유지되는 것은 아닙니다. 위에 적힌 내용은 사용자가 고른 제공자에게 전송되며, 제공자는 자체 약관에 따라 이를 처리합니다. 확인을 누르면 이 안내를 읽었다는 사실만 기록됩니다. 이 창이나 창 안의 경고가 꺼지지는 않습니다.
+# Draft (coordinator, 2026-11-17, not adopted; G-41, P7-T03):
+# The whole message with the owner's new sentence (plan/00 §6 item 395(b)).
+# Until it is approved, the live Korean above keeps the earlier text.
+# research-helper-egress-first-job-notice = Research Helper는 사용자의 컴퓨터에서 실행되고 사용자의 API 키를 쓰며, 개발자에게는 아무것도 보내지 않습니다. 그렇다고 제공자에게까지 자료가 비공개로 유지되는 것은 아닙니다. 위에 적힌 내용은 사용자가 고른 제공자에게 전송되며, 제공자는 자체 약관에 따라 이를 처리합니다. 동료 심사 중인 원고, 비밀유지 계약이 적용되는 미발표 연구, 연구 참여자 데이터가 담긴 자료에는 소속 기관의 규정을 먼저 확인하지 않은 채 사용하지 마세요. 확인을 누르면 이 안내를 읽었다는 사실만 기록됩니다. 이 창이나 창 안의 경고가 꺼지지는 않습니다.
 research-helper-egress-gemini-free-tier = 이 Google API 키는 무료 등급으로 보입니다. Google 약관에 따르면 무료 등급으로 보낸 내용은 Google 제품 개선에 쓰이며, 사람 검토자가 읽을 수 있습니다. 발표하지 않았거나 기밀인 자료에는 무료 등급을 쓰지 마세요.
 
 # Korean drafted by the coordinator and reviewed by the owner on 2026-10-23 (G-41,
@@ -967,61 +971,61 @@ research-helper-prefs-diagnostics-status =
     }
 
 ## The Advanced section's stored data (P7-T10).
-# Draft (coordinator, 2026-11-17, not adopted; G-41, P7-T10):
-# research-helper-prefs-data-title = 저장된 데이터
-# research-helper-prefs-data-note = Research Helper가 자체 데이터베이스에 보관한 내용을 지웁니다. Zotero 항목과 노트는 그대로 남고, API 키도 그대로 남습니다.
-# research-helper-prefs-clear-responses =
-#     .label = 캐시된 응답 지우기…
-# research-helper-prefs-clear-summaries =
-#     .label = 저장된 요약 지우기…
-# research-helper-prefs-clear-jobs =
-#     .label = 작업 기록 지우기…
-# research-helper-prefs-clear-embeddings =
-#     .label = 임베딩 지우기…
-# research-helper-prefs-delete-all-data =
-#     .label = 플러그인 데이터 모두 삭제…
-# research-helper-prefs-reset-defaults =
-#     .label = 설정을 기본값으로 되돌리기…
-# research-helper-prefs-data-confirm-title = Research Helper
-# research-helper-prefs-confirm-clear-responses = 캐시된 응답 { $entries }개({ NUMBER($megabytes, maximumFractionDigits: 1) } MB)를 지울까요? 다음에 필요할 때 다시 가져옵니다.
-# research-helper-prefs-confirm-clear-summaries = Research Helper 데이터베이스에서 저장된 요약 { $rows }개를 지울까요? Zotero 라이브러리의 노트는 그대로 남습니다.
-# research-helper-prefs-confirm-clear-jobs = 끝난 작업 { $rows }개의 기록을 지울까요? 대기 중이거나 실행 중이거나 일시 중지된 작업은 그대로 남습니다.
-# research-helper-prefs-confirm-clear-embeddings = 저장된 임베딩 { $rows }개를 지울까요? 다음에 필요할 때 다시 계산합니다.
-# research-helper-prefs-confirm-delete-all = Research Helper에 저장된 데이터를 모두 삭제할까요? 저장된 기록 { $rows }개와 캐시 항목 { $entries }개({ NUMBER($megabytes, maximumFractionDigits: 1) } MB)입니다. Zotero 항목과 노트, API 키는 그대로 남습니다. 되돌릴 수 없습니다.
-# research-helper-prefs-confirm-reset = Research Helper의 모든 설정을 기본값으로 되돌릴까요? API 키와 저장된 데이터는 그대로 남습니다.
-# research-helper-prefs-data-status =
-#     { $outcome ->
-#         [cleared] 저장된 기록 { $removed }개를 지웠습니다.
-#         [reset] 설정을 기본값으로 되돌렸습니다.
-#         [nothing] 지울 것이 없습니다.
-#         [declined] 아무것도 바꾸지 않았습니다.
-#         [failed] 실행하지 못했습니다.
-#        *[unavailable] 지금은 Research Helper 데이터베이스가 열려 있지 않습니다.
-#     }
+# Korean drafted by the coordinator and reviewed by the owner on 2026-11-17 (G-41, plan/00 §6 item 397).
+research-helper-prefs-data-title = 저장된 데이터
+research-helper-prefs-data-note = Research Helper가 자체 데이터베이스에 보관한 내용을 지웁니다. Zotero 항목과 노트는 그대로 남고, API 키도 그대로 남습니다.
+research-helper-prefs-clear-responses =
+    .label = 캐시된 응답 지우기…
+research-helper-prefs-clear-summaries =
+    .label = 저장된 요약 지우기…
+research-helper-prefs-clear-jobs =
+    .label = 작업 기록 지우기…
+research-helper-prefs-clear-embeddings =
+    .label = 임베딩 지우기…
+research-helper-prefs-delete-all-data =
+    .label = 플러그인 데이터 모두 삭제…
+research-helper-prefs-reset-defaults =
+    .label = 설정을 기본값으로 되돌리기…
+research-helper-prefs-data-confirm-title = Research Helper
+research-helper-prefs-confirm-clear-responses = 캐시된 응답 { $entries }개({ NUMBER($megabytes, maximumFractionDigits: 1) } MB)를 지울까요? 다음에 필요할 때 다시 가져옵니다.
+research-helper-prefs-confirm-clear-summaries = Research Helper 데이터베이스에서 저장된 요약 { $rows }개를 지울까요? Zotero 라이브러리의 노트는 그대로 남습니다.
+research-helper-prefs-confirm-clear-jobs = 끝난 작업 { $rows }개의 기록을 지울까요? 대기 중이거나 실행 중이거나 일시 중지된 작업은 그대로 남습니다.
+research-helper-prefs-confirm-clear-embeddings = 저장된 임베딩 { $rows }개를 지울까요? 다음에 필요할 때 다시 계산합니다.
+research-helper-prefs-confirm-delete-all = Research Helper에 저장된 데이터를 모두 삭제할까요? 저장된 기록 { $rows }개와 캐시 항목 { $entries }개({ NUMBER($megabytes, maximumFractionDigits: 1) } MB)입니다. Zotero 항목과 노트, API 키는 그대로 남습니다. 되돌릴 수 없습니다.
+research-helper-prefs-confirm-reset = Research Helper의 모든 설정을 기본값으로 되돌릴까요? API 키와 저장된 데이터는 그대로 남습니다.
+research-helper-prefs-data-status =
+    { $outcome ->
+        [cleared] 저장된 기록 { $removed }개를 지웠습니다.
+        [reset] 설정을 기본값으로 되돌렸습니다.
+        [nothing] 지울 것이 없습니다.
+        [declined] 아무것도 바꾸지 않았습니다.
+        [failed] 실행하지 못했습니다.
+       *[unavailable] 지금은 Research Helper 데이터베이스가 열려 있지 않습니다.
+    }
 
 ## "Remove all Research Helper content" (P7-T11).
-# Draft (coordinator, 2026-11-17, not adopted; G-41, P7-T11):
-# research-helper-prefs-remove-content =
-#     .label = Research Helper 콘텐츠 모두 제거…
-# research-helper-prefs-remove-content-note = Research Helper가 만든 노트와 오디오 첨부 파일을 Zotero 휴지통으로 옮기고(휴지통에서 복원할 수 있습니다), 저장된 데이터를 삭제합니다. 가져온 항목과 직접 쓴 노트는 그대로 남습니다.
-# research-helper-prefs-confirm-remove-content =
-#     Research Helper가 만든 모든 것을 Zotero 휴지통으로 옮기고(휴지통에서 복원할 수 있습니다), 저장된 데이터를 삭제할까요?
-#     생성된 노트: { $generated }. 검색 출처 노트: { $provenance }. 오디오 첨부 파일: { $audio }. 저장된 기록: { $records }.{ $libraryCount ->
-#         [0] {""}
-#        *[other] {" "}위치: { $libraries }.
-#     }{ $folderCount ->
-#         [0] {""}
-#        *[other] {" "}링크된 오디오 파일은 디스크의 다음 폴더에 그대로 남습니다: { $folders }.
-#     }{ $skippedCount ->
-#         [0] {""}
-#        *[other] {" "}편집 권한이 없어 바꾸지 않는 라이브러리: { $skipped }.
-#     }
-#     가져온 항목과 그 태그, 직접 쓴 노트는 그대로 남습니다.
-# research-helper-prefs-remove-content-status =
-#     { $outcome ->
-#         [removed] Zotero 휴지통으로 옮긴 항목: { $moved }. 삭제한 저장 기록: { $records }.
-#         [nothing] Research Helper가 만든 것 중 제거할 것이 없습니다.
-#         [declined] 아무것도 바꾸지 않았습니다.
-#         [failed] 실행하지 못했습니다.
-#        *[unavailable] 지금은 Research Helper 데이터베이스가 열려 있지 않습니다.
-#     }
+# Korean drafted by the coordinator and reviewed by the owner on 2026-11-17 (G-41, plan/00 §6 item 397).
+research-helper-prefs-remove-content =
+    .label = Research Helper 콘텐츠 모두 제거…
+research-helper-prefs-remove-content-note = Research Helper가 만든 노트와 오디오 첨부 파일을 Zotero 휴지통으로 옮기고(휴지통에서 복원할 수 있습니다), 저장된 데이터를 삭제합니다. 가져온 항목과 직접 쓴 노트는 그대로 남습니다.
+research-helper-prefs-confirm-remove-content =
+    Research Helper가 만든 모든 것을 Zotero 휴지통으로 옮기고(휴지통에서 복원할 수 있습니다), 저장된 데이터를 삭제할까요?
+    생성된 노트: { $generated }. 검색 출처 노트: { $provenance }. 오디오 첨부 파일: { $audio }. 저장된 기록: { $records }.{ $libraryCount ->
+        [0] {""}
+       *[other] {" "}위치: { $libraries }.
+    }{ $folderCount ->
+        [0] {""}
+       *[other] {" "}링크된 오디오 파일은 디스크의 다음 폴더에 그대로 남습니다: { $folders }.
+    }{ $skippedCount ->
+        [0] {""}
+       *[other] {" "}편집 권한이 없어 바꾸지 않는 라이브러리: { $skipped }.
+    }
+    가져온 항목과 그 태그, 직접 쓴 노트는 그대로 남습니다.
+research-helper-prefs-remove-content-status =
+    { $outcome ->
+        [removed] Zotero 휴지통으로 옮긴 항목: { $moved }. 삭제한 저장 기록: { $records }.
+        [nothing] Research Helper가 만든 것 중 제거할 것이 없습니다.
+        [declined] 아무것도 바꾸지 않았습니다.
+        [failed] 실행하지 못했습니다.
+       *[unavailable] 지금은 Research Helper 데이터베이스가 열려 있지 않습니다.
+    }

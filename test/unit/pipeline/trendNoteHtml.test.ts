@@ -411,6 +411,43 @@ describe("renderReportNoteHtml", () => {
   });
 });
 
+describe("renderReportNoteHtml — the Semantic Scholar line (P7-T35, item 395(c))", () => {
+  const LINE = "Some records: Semantic Scholar, Allen Institute for AI.";
+  const s2 = (entry: BibliographyEntry): BibliographyEntry => ({
+    ...entry,
+    semanticScholar: true,
+  });
+
+  it("is absent when no cited record came from Semantic Scholar", () => {
+    expect(render()).not.toContain("Semantic Scholar");
+  });
+
+  it("follows the numbered entries and comes before the retracted list", () => {
+    const html = render({ bibliography: [ENTRY_C, ENTRY_A, s2(ENTRY_B)] });
+    expect(html.split(LINE)).toHaveLength(2);
+    expect(html).toContain(
+      `title with *stars*.</p><p>${LINE}</p><h3>Retracted — not used in this report</h3>`,
+    );
+    // Removing the line gives the plain render back.
+    expect(html.replace(`<p>${LINE}</p>`, "")).toBe(render());
+  });
+
+  it("closes §11 when the run kept no retracted entry, and takes the caller's text, escaped", () => {
+    const html = renderReportNoteHtml(
+      report({ bibliography: [s2(ENTRY_C), ENTRY_A, ENTRY_B], retracted: [] }),
+      NODES,
+      { semanticScholarAttribution: "<b>caller</b> & line" },
+    );
+    expect(html).toContain(
+      "<p>&lt;b&gt;caller&lt;/b&gt; &amp; line</p><h2>Appendix A — Excluded from synthesis</h2>",
+    );
+    expect(html).not.toContain(LINE);
+    expect(() => {
+      assertNoteHtmlAllowed(html);
+    }).not.toThrow();
+  });
+});
+
 describe("renderReportNoteHtml — model output is never trusted", () => {
   const hostile = [
     "<script>alert(1)</script>",

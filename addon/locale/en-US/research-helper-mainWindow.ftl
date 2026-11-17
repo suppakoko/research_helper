@@ -710,7 +710,10 @@ research-helper-remove-notes-done =
 ## verbatim (edit docs/09 first): shown on every job whose Gemini key's tier is
 ## free or unknown, with no way to turn it off.
 
-research-helper-egress-first-job-notice = Research Helper runs on your computer, uses your own API key, and sends nothing to its authors. That does not keep your material private from the provider: the content listed above leaves your computer for the provider you chose, which handles it under its own terms. Confirming records that you have read this notice. It does not turn off this dialog or any warning in it.
+# The sentence beginning "Do not use it on manuscripts" was added on
+# 2026-11-17, verbatim from the owner (plan/00 §6 item 395(b); docs/09 §4.3
+# item 2). Its Korean waits for G-41 (P7-T03).
+research-helper-egress-first-job-notice = Research Helper runs on your computer, uses your own API key, and sends nothing to its authors. That does not keep your material private from the provider: the content listed above leaves your computer for the provider you chose, which handles it under its own terms. Do not use it on manuscripts you are peer-reviewing, on unpublished work covered by a confidentiality agreement, or on any material containing participant data, without checking your institution's rules first. Confirming records that you have read this notice. It does not turn off this dialog or any warning in it.
 research-helper-egress-gemini-free-tier = This Google API key appears to be on the free tier. Google's terms state that content you send on the unpaid tier is used to improve Google products, and that human reviewers may read it. Do not use the free tier for unpublished or confidential material.
 # The reminder that replaces the Gemini warning when the user has declared the
 # key paid (gemini.paidTier; owner, 2026-10-22, plan/00 §6 item 269(b)). It is

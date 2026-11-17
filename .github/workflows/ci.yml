@@ -171,12 +171,12 @@ jobs:
       # (G-41, item 389(b)) and the stale-allow rule would have failed the step.
       # The 50 `--allow`s P7-T08, P7-T09, P7-T17 and P7-T13 passed here were removed on
       # 2026-11-17, when the owner approved their Korean (G-41, plan/00 §6 item 394).
-      # The 20 `--allow`s below are P7-T10's 16 and P7-T11's 4 (2026-11-17): their
-      # Korean is drafted, commented out in the ko-KR bundle and on
-      # KO_PENDING_REVIEW until the owner reviews it (G-41). Remove each with its
-      # adoption, or the stale-allow rule fails the step.
+      # The 20 `--allow`s P7-T10 and P7-T11 passed here were removed on 2026-11-17,
+      # when the owner approved their Korean (G-41, plan/00 §6 item 397). A new id
+      # whose Korean is only drafted is passed here with `--allow <id>` until its
+      # adoption, or the step fails; none is pending today.
       - name: Verify Korean localization completeness (P7-T02)
-        run: npm run l10n:check -- --allow research-helper-prefs-data-title --allow research-helper-prefs-data-note --allow research-helper-prefs-clear-responses --allow research-helper-prefs-clear-summaries --allow research-helper-prefs-clear-jobs --allow research-helper-prefs-clear-embeddings --allow research-helper-prefs-delete-all-data --allow research-helper-prefs-reset-defaults --allow research-helper-prefs-data-confirm-title --allow research-helper-prefs-confirm-clear-responses --allow research-helper-prefs-confirm-clear-summaries --allow research-helper-prefs-confirm-clear-jobs --allow research-helper-prefs-confirm-clear-embeddings --allow research-helper-prefs-confirm-delete-all --allow research-helper-prefs-confirm-reset --allow research-helper-prefs-data-status --allow research-helper-prefs-remove-content --allow research-helper-prefs-remove-content-note --allow research-helper-prefs-confirm-remove-content --allow research-helper-prefs-remove-content-status
+        run: npm run l10n:check
 
   unit:
     name: Unit and contract tests

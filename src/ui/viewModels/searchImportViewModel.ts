@@ -127,8 +127,8 @@ import type {
   SearchWindowRecord,
 } from "../dialogs/searchDialog";
 import { NEW_COLLECTION_VALUE } from "../dialogs/searchDialog";
+import { formatUsd } from "../../i18n/format";
 import {
-  formatUsd,
   shouldOpenCostDialog,
   type CostDialogOutcome,
 } from "../dialogs/costConfirmDialog";

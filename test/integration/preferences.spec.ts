@@ -1678,7 +1678,16 @@ describe("P7-T10 — the stored-data actions, from the live plugin", function ()
     }
   }
 
+  /**
+   * The UI locale as found, put back in `after()`. The block asserts one
+   * English sentence of the confirmation; since the owner adopted its Korean on
+   * 2026-11-17 (`plan/00` §6 item 397), a `ko-KR` machine draws it in Korean,
+   * so the block pins `en-US` as "P1-T44 — the preference pane" does.
+   */
+  let localeBefore: UILocaleSnapshot | undefined;
+
   before(async function () {
+    localeBefore = await pinUILocale(["en-US"], log);
     snapshot = new Map();
     for (const key of listBranchPrefs()) {
       if (prefHasUserValue(key)) {
@@ -1689,6 +1698,10 @@ describe("P7-T10 — the stored-data actions, from the live plugin", function ()
   });
 
   after(async function () {
+    if (localeBefore) {
+      await restoreUILocale(localeBefore, log);
+      localeBefore = undefined;
+    }
     if (snapshot === undefined) return;
     for (const key of listBranchPrefs()) {
       const value = snapshot.get(key);
@@ -1732,6 +1745,13 @@ describe("P7-T10 — the stored-data actions, from the live plugin", function ()
         `${MARK}%`,
       ]);
     assert.strictEqual(await mine("summary"), 2);
+    // `docs/09` §1.9 item 8's restore notice reads this. Its query bound no
+    // LIKE pattern before 2026-11-17, Zotero's connection refused it, and the
+    // pane read the refusal as "no data" (`plan/00` §6 item 398(i)).
+    assert.isTrue(
+      (await host.readState()).pluginDataPresent,
+      "the pane sees that the plugin database holds rows",
+    );
 
     // Summaries: a no removes nothing; a yes removes the rows; the prompt
     // names the count and says the notes stay.

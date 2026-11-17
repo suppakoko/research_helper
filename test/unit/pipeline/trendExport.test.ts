@@ -23,8 +23,10 @@ import type {
 } from "../../../src/model/trend";
 import {
   DEFAULT_RETRACTED_HEADING,
+  DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION,
   doiUrl,
   escapeMarkdownText,
+  needsSemanticScholarAttribution,
   escapeReportProse,
   exportReportMarkdown,
   renderReportMarkdown,
@@ -684,5 +686,82 @@ describe("renderReportMarkdown — the model's prose (item 296(c), (d))", () => 
 
   it("still numbers every marker in first-appearance order", () => {
     expect(firstAppearances(bodyNumbers(out))).toEqual([1, 2, 3]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The Semantic Scholar line (P7-T35; owner, plan/00 §6 item 395(c))
+// ---------------------------------------------------------------------------
+
+describe("renderReportMarkdown — the Semantic Scholar line (P7-T35, item 395(c))", () => {
+  const fromS2 = (entry: BibliographyEntry): BibliographyEntry => ({
+    ...entry,
+    semanticScholar: true,
+  });
+
+  it("is the owner's sentence", () => {
+    expect(DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION).toBe(
+      "Some records: Semantic Scholar, Allen Institute for AI.",
+    );
+  });
+
+  it("is absent when no cited record came from Semantic Scholar", () => {
+    const out = renderReportMarkdown(report());
+    expect(out).toBe(EXPECTED);
+    expect(out).not.toContain("Semantic Scholar");
+    expect(needsSemanticScholarAttribution(report().bibliography)).toBe(false);
+  });
+
+  it("is printed once, under the numbered entries and before the retracted list", () => {
+    const out = renderReportMarkdown(
+      report({ bibliography: [ENTRY_C, fromS2(ENTRY_A), ENTRY_B] }),
+    );
+    expect(out.split(DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION)).toHaveLength(2);
+    expect(out).toContain(
+      "[3] Choi, M. (2023). \\[\\[Odd\\]\\] title with \\*stars\\* and\\_underscores.\n\n" +
+        DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION +
+        "\n\n### Retracted — not used in this report",
+    );
+    // Everything else is the fixture's output.
+    expect(out.replace(`${DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION}\n\n`, "")).toBe(
+      EXPECTED,
+    );
+  });
+
+  it("closes §11 when the run kept no retracted entry", () => {
+    const out = renderReportMarkdown(
+      report({
+        bibliography: [fromS2(ENTRY_C), ENTRY_A, ENTRY_B],
+        retracted: [],
+      }),
+    );
+    expect(out).toContain(
+      `and\\_underscores.\n\n${DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION}\n\n## Appendix A`,
+    );
+  });
+
+  it("does not count a retracted record, which the report does not cite", () => {
+    expect(needsSemanticScholarAttribution([ENTRY_A, ENTRY_B, ENTRY_C])).toBe(
+      false,
+    );
+    expect(needsSemanticScholarAttribution([])).toBe(false);
+    expect(
+      needsSemanticScholarAttribution([
+        ENTRY_A,
+        { ...ENTRY_B, semanticScholar: false },
+      ]),
+    ).toBe(false);
+    expect(needsSemanticScholarAttribution([ENTRY_A, fromS2(ENTRY_B)])).toBe(
+      true,
+    );
+  });
+
+  it("takes the line from the caller, escaped", () => {
+    const out = renderReportMarkdown(
+      report({ bibliography: [ENTRY_C, ENTRY_A, fromS2(ENTRY_B)] }),
+      { semanticScholarAttribution: "LINE *FROM* CALLER" },
+    );
+    expect(out).toContain("\n\nLINE \\*FROM\\* CALLER\n\n### ");
+    expect(out).not.toContain(DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION);
   });
 });

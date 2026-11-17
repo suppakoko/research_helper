@@ -59,6 +59,14 @@
 
 import { config } from "../../../package.json";
 import {
+  formatBytes,
+  formatDate,
+  formatList,
+  formatMinutes,
+  formatNumber,
+  formatUsd,
+} from "../../i18n/format";
+import {
   L10N_EGRESS_AUDIO_NOTICE,
   L10N_EGRESS_PROFILE_NOTICE,
   L10N_EGRESS_REPORT_NOTICE,
@@ -204,60 +212,8 @@ export interface FluentLine {
 // 2. Formatting (docs/08 §10.3: the caller formats with Intl)
 // ===========================================================================
 
-/**
- * US dollars for display. A positive amount under one cent keeps four
- * decimals, so a $0.004 call does not read "$0.00".
- */
-export function formatUsd(usd: number, locale: string): string {
-  const small = usd > 0 && usd < 0.01;
-  return new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: small ? 4 : 2,
-  }).format(usd);
-}
-
-/** A token count, grouped for the locale. */
-export function formatCount(n: number, locale: string): string {
-  return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(n);
-}
-
-/** Names joined as a list for the locale ("a, b, and c"); never translated. */
-export function formatList(names: readonly string[], locale: string): string {
-  return new Intl.ListFormat(locale, {
-    style: "long",
-    type: "conjunction",
-  }).format(names);
-}
-
-/** A duration in whole minutes, at least one, for the locale ("10 minutes"). */
-export function formatMinutes(seconds: number, locale: string): string {
-  return new Intl.NumberFormat(locale, {
-    style: "unit",
-    unit: "minute",
-    unitDisplay: "long",
-    maximumFractionDigits: 0,
-  }).format(Math.max(1, Math.round(seconds / 60)));
-}
-
-/** A file size in decimal megabytes, one decimal ("28.8 MB"). */
-export function formatMegabytes(bytes: number, locale: string): string {
-  return new Intl.NumberFormat(locale, {
-    style: "unit",
-    unit: "megabyte",
-    unitDisplay: "short",
-    maximumFractionDigits: 1,
-  }).format(bytes / 1_000_000);
-}
-
-/** A price table's date, in UTC (the tables are dated, not timed). */
-export function formatDate(epochMs: number, locale: string): string {
-  return new Intl.DateTimeFormat(locale, {
-    dateStyle: "medium",
-    timeZone: "UTC",
-  }).format(epochMs);
-}
+// Since 2026-11-17 every formatter is `src/i18n/format.ts`'s (`P7-T03`
+// step 4): one place for every date, amount, count, duration and size.
 
 // ===========================================================================
 // 3. Whether to open it (docs/09 §3.6's dated note, 2026-10-23)
@@ -446,8 +402,8 @@ function usageLine(
     id,
     args: {
       calls: totals.calls,
-      input: formatCount(totals.inputTokens, locale),
-      output: formatCount(totals.outputTokens, locale),
+      input: formatNumber(totals.inputTokens, locale),
+      output: formatNumber(totals.outputTokens, locale),
       cost: formatUsd(totals.costUsd, locale),
     },
   };
@@ -600,11 +556,11 @@ function planView(
     ...partLines,
     {
       id: COST_DIALOG_L10N.input,
-      args: { tokens: formatCount(plan.inputTokens, locale) },
+      args: { tokens: formatNumber(plan.inputTokens, locale) },
     },
     {
       id: COST_DIALOG_L10N.output,
-      args: { tokens: formatCount(plan.outputTokens, locale) },
+      args: { tokens: formatNumber(plan.outputTokens, locale) },
     },
     ...(plan.costUsd === undefined
       ? unpricedModelIds.map((model): FluentLine => ({
@@ -880,7 +836,7 @@ function audioStepLines(
     {
       id: AUDIO_COST_L10N.length,
       args: {
-        chars: formatCount(plan.totalChars, locale),
+        chars: formatNumber(plan.totalChars, locale),
         chunks: plan.chunks.length,
       },
     },
@@ -888,7 +844,7 @@ function audioStepLines(
       id: AUDIO_COST_L10N.duration,
       args: {
         duration: formatMinutes(plan.estimatedSeconds, locale),
-        size: formatMegabytes(plan.estimatedBytes, locale),
+        size: formatBytes(plan.estimatedBytes, locale),
       },
     },
     { id: AUDIO_COST_L10N.attach, args: { mode: plan.mode } },
@@ -898,8 +854,8 @@ function audioStepLines(
       id: AUDIO_COST_L10N.lengthWarning,
       args: {
         unit: warning.length.unit === "words" ? "words" : "syllables",
-        count: formatCount(warning.length.count, locale),
-        target: formatCount(warning.length.target, locale),
+        count: formatNumber(warning.length.count, locale),
+        target: formatNumber(warning.length.target, locale),
       },
     });
   }

@@ -47,6 +47,12 @@ import {
 import { estTokens } from "../../../src/llm/shared/tokenEstimate";
 import type { ModelPrices } from "../../../src/llm/shared/pricing";
 import {
+  formatBytes,
+  formatMinutes,
+  formatNumber,
+  formatUsd,
+} from "../../../src/i18n/format";
+import {
   AUDIO_COST_L10N,
   COST_DIALOG_L10N,
   COST_DIALOG_URL,
@@ -56,10 +62,6 @@ import {
   buildCostDialogModel,
   createUsageHost,
   decideCostDialog,
-  formatCount,
-  formatMegabytes,
-  formatMinutes,
-  formatUsd,
   openCostConfirmDialog,
   shouldOpenCostDialog,
   skippedNoticeLine,
@@ -1082,13 +1084,13 @@ describe("P6-T15 — the audio step: FR-42's figures from the real script", () =
       { id: COST_DIALOG_L10N.calls, args: { calls: 2 } },
       {
         id: AUDIO_COST_L10N.length,
-        args: { chars: formatCount(plan.totalChars, LOCALE), chunks: 2 },
+        args: { chars: formatNumber(plan.totalChars, LOCALE), chunks: 2 },
       },
       {
         id: AUDIO_COST_L10N.duration,
         args: {
           duration: formatMinutes(plan.estimatedSeconds, LOCALE),
-          size: formatMegabytes(plan.estimatedBytes, LOCALE),
+          size: formatBytes(plan.estimatedBytes, LOCALE),
         },
       },
       { id: AUDIO_COST_L10N.attach, args: { mode: "imported" } },
@@ -1124,8 +1126,8 @@ describe("P6-T15 — the audio step: FR-42's figures from the real script", () =
     expect(formatMinutes(20, LOCALE)).toBe("1 minute");
     expect(formatMinutes(89, LOCALE)).toBe("1 minute");
     expect(formatMinutes(91, LOCALE)).toBe("2 minutes");
-    expect(formatMegabytes(28_800_044, LOCALE)).toBe("28.8 MB");
-    expect(formatMegabytes(144_044, LOCALE)).toBe("0.1 MB");
+    expect(formatBytes(28_800_044, LOCALE)).toBe("28.8 MB");
+    expect(formatBytes(144_044, LOCALE)).toBe("0.1 MB");
   });
 
   it("names a linked file, each length warning, and the unmeasured rate only when so", () => {

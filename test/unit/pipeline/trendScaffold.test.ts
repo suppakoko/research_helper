@@ -55,6 +55,7 @@ import {
 import { DIGEST_NO_YEAR } from "../../../src/pipeline/trendReport/digest";
 import {
   DEFAULT_RETRACTED_HEADING,
+  DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION,
   renderReportMarkdown,
 } from "../../../src/pipeline/trendReport/exportMarkdown";
 import { renderReportNoteHtml } from "../../../src/pipeline/trendReport/noteHtml";
@@ -1125,6 +1126,60 @@ describe("§11 is replaced, never merged (Done when 4)", () => {
   });
 });
 
+describe("§11's Semantic Scholar line (P7-T35, item 395(c))", () => {
+  const s2Bibliography = BIBLIOGRAPHY.map((entry, i) =>
+    i === 3 ? { ...entry, semanticScholar: true } : entry,
+  );
+
+  it("is absent when no numbered record came from Semantic Scholar", () => {
+    expect(scaffoldReport(input()).markdown).not.toContain("Semantic Scholar");
+  });
+
+  it("follows the numbered entries and comes before the retracted list, in the report's language", () => {
+    const report = scaffoldReport(input({ bibliography: s2Bibliography }));
+    const references = section(report, 11).markdown;
+    expect(references.split(DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION)).toHaveLength(
+      2,
+    );
+    expect(references).toContain(
+      `Title \\[AAAA0008\\].\n\n${DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION}\n\n### ${DEFAULT_RETRACTED_HEADING}`,
+    );
+    expect(
+      report.markdown.replace(
+        `${DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION}\n\n`,
+        "",
+      ),
+    ).toBe(EXPECTED);
+    // The export rebuilds §11 and prints the same line in the same place.
+    expect(renderReportMarkdown(stored(report))).toContain(
+      `\n\n${DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION}\n\n### `,
+    );
+    // Its Korean awaits G-41, so a ko report shows the English line.
+    expect(isKoLabelPending("semanticScholarAttribution")).toBe(true);
+    const ko = scaffoldReport(
+      input({ language: "ko", bibliography: s2Bibliography }),
+    ).markdown;
+    expect(ko).toContain(DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION);
+    expect(EN_REPORT_LABELS.semanticScholarAttribution).toBe(
+      DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION,
+    );
+  });
+
+  it("closes §11 under exclude_entirely", () => {
+    const report = scaffoldReport(
+      input({
+        bibliography: s2Bibliography,
+        retractionPolicy: "exclude_entirely",
+      }),
+    );
+    expect(
+      section(report, 11)
+        .markdown.trimEnd()
+        .endsWith(DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION),
+    ).toBe(true);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // The capped target, the banner, Appendix C
 // ---------------------------------------------------------------------------
@@ -1555,8 +1610,11 @@ describe("reportLabels.ts", () => {
     expect(KO_REPORT_LABELS.critiqueTextUnchecked).toBe(
       "일부 문단은 자동 검토를 거치지 않았습니다. 그 문단이 인용한 요약이 너무 길어 한 번의 검토 요청으로 보낼 수 없었기 때문입니다.",
     );
-    // FINDING P4-T22-2's two labels were approved as item 335(l).
-    expect(KO_REPORT_LABELS_PENDING_REVIEW).toEqual([]);
+    // FINDING P4-T22-2's two labels were approved as item 335(l); P7-T35's
+    // line (owner, item 395(c), 2026-11-17) waits for G-41.
+    expect(KO_REPORT_LABELS_PENDING_REVIEW).toEqual([
+      "semanticScholarAttribution",
+    ]);
   });
 
   it("gives a ko report its approved Korean and English for every pending label", () => {

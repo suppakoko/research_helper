@@ -7,6 +7,9 @@
  * Every summary below is SYNTHETIC.
  */
 
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -23,8 +26,11 @@ import {
   SUMMARY_SECTION_PARTS,
   deriveState,
   SUMMARY_RESULT_L10N,
+  ARGUMENT_FREE_FAILURE_IDS,
+  SummaryFailedError,
   SummaryNotStoredError,
   failureText,
+  summaryFailure,
   mayAutoSummarize,
   notStoredReason,
   paintBody,
@@ -209,7 +215,7 @@ describe("summarySection — the seven states as data (docs/08 §3.2)", () => {
       configured: true,
     };
     expect(deriveState({ ...base, running: true }).kind).toBe("loading");
-    expect(deriveState({ ...base, error: "x" }).kind).toBe("error");
+    expect(deriveState({ ...base, error: { code: "LLM" } }).kind).toBe("error");
     expect(deriveState({ ...base, loaded: false }).kind).toBe("blank");
     expect(deriveState(base).kind).toBe("content");
     expect(deriveState({ ...base, stored: undefined }).kind).toBe("empty");
@@ -269,9 +275,12 @@ describe("summarySection — the seven states as data (docs/08 §3.2)", () => {
     expect(view.saveNote.disabled).toBe(true);
   });
 
-  it("error: the message and Retry", () => {
-    const view = sectionView({ kind: "error", message: "HTTP 429" }, CAPS);
-    expect(view.errorText).toBe("HTTP 429");
+  it("error: the machine values and Retry", () => {
+    const view = sectionView(
+      { kind: "error", failure: { code: "RATE_LIMIT · HTTP 429" } },
+      CAPS,
+    );
+    expect(view.errorFailure).toEqual({ code: "RATE_LIMIT · HTTP 429" });
     expect(view.retry).toEqual({ hidden: false, disabled: false });
     expect(view.gist).toBe("");
   });
@@ -284,7 +293,7 @@ describe("summarySection — the seven states as data (docs/08 §3.2)", () => {
     expect(view.saveNote.hidden).toBe(true);
   });
 
-  it("redacts a key-shaped string from a failure before it is shown", () => {
+  it("redacts a key-shaped string from a failure's message, for the log", () => {
     const planted = `sk-or-v1-${"a".repeat(40)}`;
     const text = failureText(new Error(`provider said ${planted}`));
     expect(text).not.toContain(planted);
@@ -816,7 +825,7 @@ describe("summarySection — what the banner shows for a one-item run (plan/00 �
 
   it("carries the reason to the view, and keeps Retry", () => {
     const view = sectionView(
-      { kind: "error", message: "ignored", reason: "no-text" },
+      { kind: "error", failure: { code: "" }, reason: "no-text" },
       CAPS,
     );
     expect(view.errorReason).toBe("no-text");
@@ -826,34 +835,49 @@ describe("summarySection — what the banner shows for a one-item run (plan/00 �
         loaded: true,
         stored: undefined,
         running: false,
-        error: "x",
+        error: { code: "LLM" },
         reason: "time-limit",
         configured: true,
       }),
-    ).toEqual({ kind: "error", message: "x", reason: "time-limit" });
+    ).toEqual({
+      kind: "error",
+      failure: { code: "LLM" },
+      reason: "time-limit",
+    });
   });
 
-  it("paints a reason as the plugin's own line by id, and a message as text", () => {
+  it("paints a reason or an argument-free message by id, and the code as machine values", () => {
     const attributes = new Map<string, string>();
-    const errorText = {
+    const element = (into: Map<string, string> | undefined) => ({
       hidden: false,
       textContent: "old",
       setAttribute: (name: string, value: string) => {
-        attributes.set(name, value);
+        into?.set(name, value);
       },
       removeAttribute: (name: string) => {
-        attributes.delete(name);
+        into?.delete(name);
       },
-    };
+    });
+    const errorText = element(attributes);
+    const errorCode = element(undefined);
     const body = {
       ownerDocument: null,
       querySelector: (selector: string) =>
-        selector === ".rh-summary-error-text" ? errorText : null,
+        selector === ".rh-summary-error-text"
+          ? errorText
+          : selector === ".rh-summary-error-code"
+            ? errorCode
+            : null,
     } as unknown as HTMLElement;
     paintBody(
       body,
-      sectionView({ kind: "error", message: "m", reason: "existing" }, CAPS),
+      sectionView(
+        { kind: "error", failure: { code: "LLM" }, reason: "existing" },
+        CAPS,
+      ),
     );
+    expect(errorCode.textContent).toBe("");
+    expect(errorCode.hidden).toBe(true);
     expect(errorText.textContent).toBe("");
     expect(attributes.get("data-l10n-id")).toBe(
       SUMMARY_RESULT_L10N.notSummarized,
@@ -861,9 +885,110 @@ describe("summarySection — what the banner shows for a one-item run (plan/00 �
     expect(JSON.parse(attributes.get("data-l10n-args") ?? "{}")).toEqual({
       reason: "existing",
     });
-    paintBody(body, sectionView({ kind: "error", message: "HTTP 503" }, CAPS));
-    expect(errorText.textContent).toBe("HTTP 503");
+    paintBody(
+      body,
+      sectionView({ kind: "error", failure: { code: "LLM · HTTP 503" } }, CAPS),
+    );
+    expect(errorText.textContent).toBe("");
     expect(attributes.size).toBe(0);
+    expect(errorCode.textContent).toBe("LLM · HTTP 503");
+    expect(errorCode.hidden).toBe(false);
+    paintBody(
+      body,
+      sectionView(
+        {
+          kind: "error",
+          failure: { code: "OFFLINE", messageId: "rh-error-offline" },
+        },
+        CAPS,
+      ),
+    );
+    expect(errorText.textContent).toBe("");
+    expect(attributes.get("data-l10n-id")).toBe("rh-error-offline");
+    expect(attributes.has("data-l10n-args")).toBe(false);
+    expect(errorCode.textContent).toBe("OFFLINE");
+  });
+
+  it("never draws a failure's detail or message: machine values only (P7-T03 step 5, items 389(f), 392(a))", () => {
+    const planted =
+      "the provider said: model overloaded, see https://status.example";
+    // As runItemSummary throws a failed run, from the whole SerializedError:
+    // its detail is not carried, not even in the message.
+    const serialized = {
+      code: "UPSTREAM",
+      messageKey: "rh-error-llm",
+      detail: planted,
+      retryable: true,
+      httpStatus: 503,
+    };
+    const thrown = new SummaryFailedError(serialized);
+    expect(Object.values(thrown).join(" ")).not.toContain("provider said");
+    expect(thrown.message).not.toContain("provider said");
+    expect(thrown.message).toBe("[research-helper] summary failed (UPSTREAM)");
+    expect(String(thrown.stack ?? "")).not.toContain("provider said");
+    expect(summaryFailure(thrown)).toEqual({ code: "UPSTREAM · HTTP 503" });
+    // Any other error-shaped value: the message and detail are never read.
+    const foreign = {
+      message: planted,
+      detail: planted,
+      code: "LLM",
+      messageKey: "rh-error-offline",
+    };
+    const failure = summaryFailure(foreign);
+    expect(failure).toEqual({ code: "LLM", messageId: "rh-error-offline" });
+    expect(JSON.stringify(failure)).not.toContain("provider said");
+    expect(summaryFailure(new Error(planted))).toEqual({ code: "" });
+    expect(summaryFailure(planted)).toEqual({ code: "" });
+    expect(summaryFailure(null)).toEqual({ code: "" });
+    // A code or status that is not machine-shaped is dropped, not shown.
+    expect(summaryFailure({ code: planted, httpStatus: 503 })).toEqual({
+      code: "",
+    });
+    expect(summaryFailure({ code: "LLM", httpStatus: "503" })).toEqual({
+      code: "LLM",
+    });
+    expect(summaryFailure({ code: "LLM", httpStatus: 42 })).toEqual({
+      code: "LLM",
+    });
+    expect(summaryFailure({ code: "LLM", httpStatus: 600 })).toEqual({
+      code: "LLM",
+    });
+    expect(summaryFailure({ code: "LLM", httpStatus: 100 })).toEqual({
+      code: "LLM · HTTP 100",
+    });
+    expect(summaryFailure({ code: "LLM", httpStatus: 599 })).toEqual({
+      code: "LLM · HTTP 599",
+    });
+    expect(summaryFailure({ code: "LLM", httpStatus: 502.5 })).toEqual({
+      code: "LLM",
+    });
+    expect(summaryFailure({ code: "Llm" })).toEqual({ code: "" });
+    expect(summaryFailure({ code: "LLM2_X" })).toEqual({ code: "LLM2_X" });
+    // A message id that takes arguments is not drawn by id.
+    expect(summaryFailure({ code: "LLM", messageKey: "rh-error-llm" })).toEqual(
+      { code: "LLM" },
+    );
+  });
+
+  it("lists as argument-free only error messages that take no argument in either bundle", () => {
+    const read = (locale: string): string =>
+      readFileSync(
+        resolve(
+          dirname(fileURLToPath(import.meta.url)),
+          `../../../addon/locale/${locale}/research-helper-mainWindow.ftl`,
+        ),
+        "utf8",
+      );
+    for (const locale of ["en-US", "ko-KR"]) {
+      const ftl = read(locale);
+      for (const id of ARGUMENT_FREE_FAILURE_IDS) {
+        const at = ftl.search(new RegExp(`^${id} =`, "mu"));
+        expect(at, `${locale} ${id}`).toBeGreaterThanOrEqual(0);
+        const rest = ftl.slice(at).split(/\n(?=[a-z#\n])/u)[0] ?? "";
+        expect(rest, `${locale} ${id}`).not.toContain("{");
+      }
+    }
+    expect(ARGUMENT_FREE_FAILURE_IDS.length).toBeGreaterThan(0);
   });
 
   it("a hook run that stored nothing shows its reason for that item", async () => {

@@ -222,6 +222,15 @@ export const UNKNOWN_METADATA = "unknown";
 /** `docs/12` §4's `{{TAGS}}` with no tag. */
 export const NO_TAGS = "none";
 
+/**
+ * `docs/12` §4's `{{TAGS}}` when the privacy mode withholds the item's tags:
+ * every mode, unless full mode carries the `collectionAndTagNames` opt-in,
+ * which no v1.0 UI sets (`docs/09` §3.2 row 3a; owner, 2026-11-17, `plan/00`
+ * §6 item 395(a)). The same words the recommendation profile sends for the
+ * collection name it withholds (`PROFILE_COLLECTION_NAME_WITHHELD`).
+ */
+export const TAGS_NOT_SUPPLIED = "not supplied";
+
 /** The `json_schema` name of a payload request: the schema's `title`. */
 const PAPER_SUMMARY_SCHEMA_NAME = "PaperSummary";
 /** The `json_schema` name of a map request. */
@@ -524,17 +533,30 @@ function orUnknown(value: string | number | undefined): string {
 /**
  * `docs/12` §4's metadata variables (§5's note of 2026-10-28, item (2)).
  *
+ * `{{TAGS}}` carries the item's tags only when `sendTags` is true, which is
+ * `AllowedInputScope.collectionAndTagNames`: full mode with its opt-in.
+ * Otherwise it is {@link TAGS_NOT_SUPPLIED}, whether or not the item has a tag,
+ * so the prompt does not say whether it has one (owner, 2026-11-17, `plan/00`
+ * §6 item 395(a); `docs/09` §3.2 row 3a).
+ *
  * @param metadata - the item's metadata
  * @param itemKey - the true item key
+ * @param sendTags - whether the privacy mode lets the item's tags be sent
  */
 export function metadataVariables(
   metadata: SummaryItemMetadata,
   itemKey: string,
+  sendTags = false,
 ): Record<string, string> {
   const authors = metadata.authors
     .map((name) => name.trim())
     .filter((name) => name !== "");
   const tags = metadata.tags.map((tag) => tag.trim()).filter((t) => t !== "");
+  const tagText = !sendTags
+    ? TAGS_NOT_SUPPLIED
+    : tags.length > 0
+      ? tags.join(", ")
+      : NO_TAGS;
   return {
     ITEM_KEY: itemKey,
     TITLE: orUnknown(metadata.title),
@@ -543,7 +565,7 @@ export function metadataVariables(
     VENUE: orUnknown(metadata.venue),
     ITEM_TYPE: orUnknown(metadata.itemType),
     DOI: orUnknown(metadata.doi),
-    TAGS: tags.length > 0 ? tags.join(", ") : NO_TAGS,
+    TAGS: tagText,
   };
 }
 
@@ -782,7 +804,14 @@ export async function summarizeItem(
     return template.schema;
   };
 
-  const base = metadataVariables(input.metadata, source.itemKey);
+  // `docs/09` §3.2 row 3a: the item's tags only under full mode's opt-in
+  // (item 395(a)). The variable is in the cache key, so a summary made before
+  // 2026-11-17 is made again on the next run.
+  const base = metadataVariables(
+    input.metadata,
+    source.itemKey,
+    allowed.collectionAndTagNames,
+  );
 
   const cacheRequest = (
     promptId: SummaryPromptId,

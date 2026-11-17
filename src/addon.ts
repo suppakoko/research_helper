@@ -5,6 +5,7 @@ import {
   type Scope,
   type ServiceGraph,
 } from "./bootstrap/container";
+import { teardownErrorLine } from "./core/errors";
 import type { ProvenanceIndex } from "./core/provenance";
 import type {
   SearchImportViewModelDeps,
@@ -228,12 +229,10 @@ class Addon {
       // the teardown to finish. This is the one place they become visible,
       // so it logs the stack — `docs/01` §12 gotcha 15 forbids logging
       // request bodies and keys, not error stacks from our own lifecycle.
+      // The line passes through `redact` (owner, 2026-11-17, `plan/00` §6
+      // item 395(d), `P7-T36`): a stack can still carry a key-shaped run.
       onError: (message, error) => {
-        const detail =
-          error instanceof Error
-            ? `${error.message}\n${error.stack ?? "(no stack)"}`
-            : String(error);
-        Zotero.debug(`[${config.addonName}] ${message}: ${detail}`);
+        Zotero.debug(teardownErrorLine(config.addonName, message, error));
       },
       strict: __env__ === "development",
     });

@@ -62,6 +62,7 @@ import type {
 } from "../../pipeline/summarize/summarizePipeline";
 import type { PipelineContext } from "../../pipeline/types";
 import {
+  SummaryFailedError,
   SummaryNotStoredError,
   type NotSummarizedReason,
 } from "../panes/summarySection";
@@ -729,8 +730,11 @@ export async function runItemSummary(
     throw new SummaryNotStoredError(reasonForRow(status));
   }
   if (output.outcome === "failed") {
-    // `SerializedError.detail` is already redacted.
-    throw new Error(output.error?.detail ?? output.error?.code ?? "failed");
+    // The machine values and the message id, never `detail` (owner, items
+    // 389(f), 392(a); `P7-T03` step 5): the section draws what it is given.
+    throw output.error === undefined
+      ? new Error("[research-helper] summary failed")
+      : new SummaryFailedError(output.error);
   }
   // Cancelled or stopped: by the section's Cancel (which ignores this), or by
   // a question this surface answered "stop".

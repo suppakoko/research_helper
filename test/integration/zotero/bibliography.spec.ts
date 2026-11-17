@@ -498,4 +498,53 @@ describe("Bibliography and citation nodes through Zotero (P4-T11)", function () 
     }
     assert.isTrue(threw, "a missing entry throws");
   });
+
+  it("marks an entry whose record came from Semantic Scholar (P7-T35, item 395(c))", async function () {
+    const hong = Zotero.Items.getByLibraryAndKey(libraryID(), keys.hong);
+    const kim = Zotero.Items.getByLibraryAndKey(libraryID(), keys.kim);
+    if (hong === false || kim === false) assert.fail("fixture items exist");
+    const request = { libraryID: libraryID(), styleId: APA, locale: "en-US" };
+    const before = await zoteroBibliographyPort.formatBibliography(
+      order,
+      request,
+    );
+    assert.deepEqual(
+      before.entries.map((e) => e.semanticScholar),
+      [undefined, undefined, undefined],
+      "an item the plugin did not import is not marked",
+    );
+    try {
+      // The two lines the plugin writes (docs/02 §6.2): the sources list and
+      // the corpus id, which only a Semantic Scholar record supplies.
+      hong.setField(
+        "extra",
+        "rh-work-key: w1\nrh-sources: openalex,semanticscholar",
+      );
+      await hong.saveTx();
+      kim.setField("extra", "rh-work-key: w2\nrh-s2-corpus-id: 12345");
+      await kim.saveTx();
+      const after = await zoteroBibliographyPort.formatBibliography(
+        order,
+        request,
+      );
+      log(
+        `semanticScholar flags ${JSON.stringify(after.entries.map((e) => e.semanticScholar))}`,
+      );
+      // order is smith, hong, kim.
+      assert.deepEqual(
+        after.entries.map((e) => e.semanticScholar),
+        [undefined, true, true],
+      );
+      assert.deepEqual(
+        after.entries.map((e) => e.text),
+        before.entries.map((e) => e.text),
+        "the style's text does not change",
+      );
+    } finally {
+      for (const item of [hong, kim]) {
+        item.setField("extra", "");
+        await item.saveTx();
+      }
+    }
+  });
 });

@@ -43,6 +43,7 @@ import {
 } from "../../../src/model/summary";
 import { withBudget } from "../../../src/pipeline/shared/budget";
 import {
+  allowedInputScope,
   createPrivacyPolicy,
   type PrivacyMode,
 } from "../../../src/pipeline/shared/privacyPolicy";
@@ -58,7 +59,10 @@ import {
   GROUNDING_RETRY_INSTRUCTION,
   isFloatingModelAlias,
   ITEM_KEY_MISMATCH_WARNING,
+  metadataVariables,
+  NO_TAGS,
   summarizeItem,
+  TAGS_NOT_SUPPLIED,
   type SummarizeItemDeps,
   type SummarizeItemInput,
 } from "../../../src/pipeline/summarize/summarizeItem";
@@ -542,6 +546,100 @@ describe("summarizeItem — DR-1 through the summarizer", () => {
     expect(result.kind).toBe("stub");
     expect(h.provider.calls).toHaveLength(0);
     expect(h.rows()).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 1b. The item's tags (docs/09 §3.2 row 3a; owner, plan/00 §6 item 395(a))
+// ---------------------------------------------------------------------------
+
+describe("summarizeItem — the item's tags are not sent (P7-T34; docs/09 §3.2 row 3a, item 395(a))", () => {
+  const tagsLine = (h: Harness): string | undefined =>
+    userOf(h.provider.calls[0]!.request)
+      .split("\n")
+      .find((line) => line.startsWith("- User-supplied tags:"));
+
+  it.each(["strict", "balanced", "full"] as const)(
+    "sends 'not supplied' in %s mode without the opt-in, and no tag",
+    async (mode) => {
+      const h = await harness([answering()], { mode });
+      await summarized(
+        h,
+        input(makeSource(), {
+          metadata: {
+            ...input(makeSource()).metadata,
+            tags: ["Project Falcon", "grant R01-SYNTHETIC"],
+          },
+        }),
+      );
+      expect(tagsLine(h)).toBe(`- User-supplied tags: ${TAGS_NOT_SUPPLIED}`);
+      const user = userOf(h.provider.calls[0]!.request);
+      expect(user).not.toContain("Project Falcon");
+      expect(user).not.toContain("R01-SYNTHETIC");
+    },
+  );
+
+  it("sends the tags only when full mode carries the collectionAndTagNames opt-in", async () => {
+    const full = createPrivacyPolicy("full");
+    const h = await harness([answering()], {
+      mode: "full",
+      deps: {
+        privacy: {
+          ...full,
+          allowedInputScope: (mode, request) =>
+            allowedInputScope(mode, {
+              ...request,
+              optIns: { collectionAndTagNames: true },
+            }),
+        },
+      },
+    });
+    await summarized(h, input(makeSource()));
+    expect(tagsLine(h)).toBe("- User-supplied tags: trial");
+  });
+
+  it("does not say whether an item has a tag: an untagged item sends the same words", async () => {
+    const h = await harness();
+    await summarized(
+      h,
+      input(makeSource(), {
+        metadata: { ...input(makeSource()).metadata, tags: [] },
+      }),
+    );
+    expect(tagsLine(h)).toBe(`- User-supplied tags: ${TAGS_NOT_SUPPLIED}`);
+  });
+
+  it("metadataVariables: withheld by default; sent, or 'none', only when allowed", () => {
+    const meta = input(makeSource()).metadata;
+    expect(metadataVariables(meta, "K").TAGS).toBe(TAGS_NOT_SUPPLIED);
+    expect(metadataVariables({ ...meta, tags: [] }, "K", false).TAGS).toBe(
+      TAGS_NOT_SUPPLIED,
+    );
+    expect(
+      metadataVariables({ ...meta, tags: [" a ", "", "b"] }, "K", true).TAGS,
+    ).toBe("a, b");
+    expect(metadataVariables({ ...meta, tags: [] }, "K", true).TAGS).toBe(
+      NO_TAGS,
+    );
+    expect(TAGS_NOT_SUPPLIED).toBe("not supplied");
+  });
+
+  it("keys the cache on what is sent: a summary made with the tags is not reused once they are withheld", async () => {
+    const h = await harness([answering(), answering()]);
+    const sent = createPrivacyPolicy("full");
+    await summarizeItem(input(makeSource()), {
+      ...h.deps,
+      privacy: {
+        ...sent,
+        allowedInputScope: (mode, request) =>
+          allowedInputScope(mode, {
+            ...request,
+            optIns: { collectionAndTagNames: true },
+          }),
+      },
+    });
+    await summarizeItem(input(makeSource()), h.deps);
+    expect(h.provider.calls).toHaveLength(2);
   });
 });
 

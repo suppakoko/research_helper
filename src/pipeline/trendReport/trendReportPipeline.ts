@@ -2590,6 +2590,11 @@ export function createTrendReportPipeline(
                   trendReport.language,
                   "retractedHeading",
                 ),
+                // `P7-T35` (owner, `plan/00` §6 item 395(c)).
+                semanticScholarAttribution: reportLabel(
+                  trendReport.language,
+                  "semanticScholarAttribution",
+                ),
               },
             }),
           );

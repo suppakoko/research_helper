@@ -1532,34 +1532,10 @@ export const KO_PENDING_REVIEW = [
   // All 50 were added 2026-11-17 as commented drafts and left this list the same day: the
   // owner approved the coordinator's Korean in chat (`G-41`, plan/00 §6 item 394), so all
   // are on KO_PRESENT.
-  // --- P7-T10's stored-data strings (mainWindow) ---
-  // Added 2026-11-17. The ko-KR bundle carries each as a commented draft under the
-  // marker "# Draft (coordinator, 2026-11-17, not adopted; G-41, P7-T10):"; nothing was
-  // machine-translated. CI's l10n step allows each until the owner decides (G-41).
-  "research-helper-prefs-data-title",
-  "research-helper-prefs-data-note",
-  "research-helper-prefs-clear-responses",
-  "research-helper-prefs-clear-summaries",
-  "research-helper-prefs-clear-jobs",
-  "research-helper-prefs-clear-embeddings",
-  "research-helper-prefs-delete-all-data",
-  "research-helper-prefs-reset-defaults",
-  "research-helper-prefs-data-confirm-title",
-  "research-helper-prefs-confirm-clear-responses",
-  "research-helper-prefs-confirm-clear-summaries",
-  "research-helper-prefs-confirm-clear-jobs",
-  "research-helper-prefs-confirm-clear-embeddings",
-  "research-helper-prefs-confirm-delete-all",
-  "research-helper-prefs-confirm-reset",
-  "research-helper-prefs-data-status",
-  // --- P7-T11's content-removal strings (mainWindow) ---
-  // Added 2026-11-17, as P7-T10's are: commented drafts in ko-KR under the marker
-  // "# Draft (coordinator, 2026-11-17, not adopted; G-41, P7-T11):", nothing
-  // machine-translated, allowed in CI's l10n step until the owner decides (G-41).
-  "research-helper-prefs-remove-content",
-  "research-helper-prefs-remove-content-note",
-  "research-helper-prefs-confirm-remove-content",
-  "research-helper-prefs-remove-content-status",
+  // --- P7-T10's stored-data strings and P7-T11's content-removal strings (mainWindow) ---
+  // All 20 were added 2026-11-17 as commented drafts and left this list the same day: the
+  // owner approved the coordinator's Korean in chat (`G-41`, plan/00 §6 item 397), so all
+  // are on KO_PRESENT.
 ] as const satisfies readonly FluentMessageId[];
 
 /**
@@ -2225,6 +2201,29 @@ export const KO_PRESENT = [
   "research-helper-prefs-diagnostics-save",
   "research-helper-prefs-diagnostics-copy",
   "research-helper-prefs-diagnostics-status",
+  // P7-T10's 16 and P7-T11's 4 preference-pane strings: Korean drafted by the coordinator and
+  // reviewed by the owner on 2026-11-17 (`G-41`, plan/00 §6 item 397), inserted byte for byte
+  // from the drafts recorded in plan/reports/ko-review-p7c.ftl.
+  "research-helper-prefs-data-title",
+  "research-helper-prefs-data-note",
+  "research-helper-prefs-clear-responses",
+  "research-helper-prefs-clear-summaries",
+  "research-helper-prefs-clear-jobs",
+  "research-helper-prefs-clear-embeddings",
+  "research-helper-prefs-delete-all-data",
+  "research-helper-prefs-reset-defaults",
+  "research-helper-prefs-data-confirm-title",
+  "research-helper-prefs-confirm-clear-responses",
+  "research-helper-prefs-confirm-clear-summaries",
+  "research-helper-prefs-confirm-clear-jobs",
+  "research-helper-prefs-confirm-clear-embeddings",
+  "research-helper-prefs-confirm-delete-all",
+  "research-helper-prefs-confirm-reset",
+  "research-helper-prefs-data-status",
+  "research-helper-prefs-remove-content",
+  "research-helper-prefs-remove-content-note",
+  "research-helper-prefs-confirm-remove-content",
+  "research-helper-prefs-remove-content-status",
 ] as const satisfies readonly FluentMessageId[];
 
 /* ---------------------------------------------------------------- arguments */

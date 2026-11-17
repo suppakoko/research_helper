@@ -41,6 +41,14 @@
  * searched for (the other headers carry no secret; see the search below).
  * Not captured: `Zotero.HTTP.request`'s own debug lines, because its request is
  * doubled; the double checks that no URL carries a key instead.
+ *
+ * **The plugin database (`P7-T37`; owner, 2026-11-17, `plan/00` §6 item
+ * 395(f)).** After the three jobs and the diagnostics text, every table of the
+ * plugin's own database is read from `sqlite_master`, so a table a later
+ * migration adds is searched without an edit here: every text cell is read
+ * and searched for the same values, and every blob cell is searched in SQL,
+ * byte for byte (`instr` on the cell and the value, both as blobs). The
+ * counts of tables, rows and cells searched are logged; no cell is.
  */
 
 import { config } from "../../package.json";
@@ -655,6 +663,97 @@ interface ReportWindow extends Window {
 
 /* -------------------------------------------------------------- the spec */
 
+/* ---------------------------------------------------- the plugin database */
+
+/** What {@link searchPluginDatabase} searched, and what it found. */
+interface DatabaseSearch {
+  readonly tables: number;
+  readonly rows: number;
+  readonly textCells: number;
+  readonly blobCells: number;
+  readonly hits: readonly string[];
+}
+
+/** Quotes a name read from `sqlite_master` or `table_info` (not input). */
+function quoted(name: string): string {
+  return `"${name.replaceAll('"', '""')}"`;
+}
+
+/**
+ * `P7-T37` (owner, item 395(f)): searches every cell of every table of the
+ * plugin's database for each of `needles`. A text cell is read and searched
+ * here; a blob cell is searched in SQL, so no blob is read into the log.
+ * Zotero's rows are read by column name, so the columns come from
+ * `table_info`.
+ */
+async function searchPluginDatabase(
+  needles: ReadonlyMap<string, string>,
+): Promise<DatabaseSearch> {
+  const open = await graphOf().database.ready;
+  if (open === undefined) assert.fail("the plugin database is not open");
+  const connection = open.connection;
+  const rowsOf = async (sql: string, params?: string[]) => {
+    const result: unknown = await connection.queryAsync(sql, params);
+    return Array.isArray(result) ? (result as Record<string, unknown>[]) : [];
+  };
+  const names = (
+    await rowsOf(
+      // Zotero's query layer refuses a LIKE with a literal pattern, so it is bound.
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE ? ORDER BY name",
+      ["sqlite_%"],
+    )
+  )
+    .map((row) => row.name)
+    .filter((name): name is string => typeof name === "string");
+  let rows = 0;
+  let textCells = 0;
+  let blobCells = 0;
+  const hits: string[] = [];
+  for (const table of names) {
+    const columns = (await rowsOf(`PRAGMA table_info(${quoted(table)})`))
+      .map((row) => row.name)
+      .filter((name): name is string => typeof name === "string");
+    rows += Number(
+      await connection.valueQueryAsync(`SELECT COUNT(*) FROM ${quoted(table)}`),
+    );
+    for (const column of columns) {
+      const cells = await rowsOf(
+        `SELECT ${quoted(column)} AS v FROM ${quoted(table)} WHERE typeof(${quoted(column)}) = 'text'`,
+      );
+      for (const cell of cells) {
+        const value = cell.v;
+        if (typeof value !== "string") continue;
+        textCells += 1;
+        for (const [what, needle] of needles) {
+          if (needle.length > 0 && value.includes(needle)) {
+            hits.push(`${what} in the plugin database, ${table}.${column}`);
+          }
+        }
+      }
+      const blobs = Number(
+        await connection.valueQueryAsync(
+          `SELECT COUNT(*) FROM ${quoted(table)} WHERE typeof(${quoted(column)}) = 'blob'`,
+        ),
+      );
+      blobCells += blobs;
+      if (blobs === 0) continue;
+      for (const [what, needle] of needles) {
+        if (needle.length === 0) continue;
+        const found = Number(
+          await connection.valueQueryAsync(
+            `SELECT COUNT(*) FROM ${quoted(table)} WHERE typeof(${quoted(column)}) = 'blob' AND instr(${quoted(column)}, CAST(? AS BLOB)) > 0`,
+            [needle],
+          ),
+        );
+        if (found > 0) {
+          hits.push(`${what} in the plugin database, blob ${table}.${column}`);
+        }
+      }
+    }
+  }
+  return { tables: names.length, rows, textCells, blobCells, hits };
+}
+
 describe("P7-T14: no planted key in the debug output or the diagnostics text, across a summarize, a report and an audio job", function () {
   let locale: UILocaleSnapshot | undefined;
   let collection: Zotero.Collection | undefined;
@@ -1010,6 +1109,30 @@ describe("P7-T14: no planted key in the debug output or the diagnostics text, ac
         }
       }
     }
+    // The plugin database (P7-T37; owner, item 395(f)).
+    const database = await searchPluginDatabase(needles);
+    hits.push(...database.hits);
+    log(
+      `plugin database: ${String(database.tables)} tables, ${String(database.rows)} rows, ` +
+        `${String(database.textCells)} text cells and ${String(database.blobCells)} blob cells searched ` +
+        `for ${String(needles.size)} values; ${String(database.hits.length)} found`,
+    );
+    assert.isAbove(database.tables, 0, "the plugin database has tables");
+    assert.isAbove(
+      database.textCells,
+      0,
+      "the jobs left text in the plugin database",
+    );
+    // The control: the same search finds what the summarize job did store,
+    // the key of a summarized item, so a search that reads nothing fails.
+    const firstKey = made[0]?.key ?? "";
+    const control = await searchPluginDatabase(
+      new Map([["a summarized item's key", firstKey]]),
+    );
+    log(
+      `plugin database control: ${String(control.hits.length)} cells hold a summarized item's key`,
+    );
+    assert.isAbove(control.hits.length, 0, "the search finds a stored value");
     const pluginLines = captured.filter((line) =>
       line.includes("[research_helper]"),
     ).length;

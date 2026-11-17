@@ -54,7 +54,9 @@ import {
 import { bindMarkers, citedKeysOf, fencedRanges } from "./citations";
 import {
   DEFAULT_RETRACTED_HEADING,
+  DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION,
   doiUrl,
+  needsSemanticScholarAttribution,
   printedDoiAddress,
   sectionRange,
 } from "./exportMarkdown";
@@ -67,6 +69,8 @@ import {
 export interface ReportNoteLabels {
   /** Defaults to {@link DEFAULT_RETRACTED_HEADING}. */
   readonly retractedHeading?: string;
+  /** Defaults to {@link DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION} (`P7-T35`). */
+  readonly semanticScholarAttribution?: string;
 }
 
 /** What {@link renderReportNote} takes besides the report. */
@@ -596,6 +600,7 @@ function bibliographyHtml(
   nodes: ReadonlyMap<string, CitationNode>,
   retracted: readonly RetractedEntry[],
   retractedHeading: string,
+  attribution: string,
 ): string {
   let html = entries
     .map((entry) => {
@@ -608,6 +613,10 @@ function bibliographyHtml(
       return `<p>[${entry.index}] ${node.html} ${entryHtml(entry.text, entry.doi)}</p>`;
     })
     .join("");
+  // Under the numbered entries, before the retracted list (`P7-T35`).
+  if (needsSemanticScholarAttribution(entries)) {
+    html += `<p>${escapeHtml(attribution)}</p>`;
+  }
   if (retracted.length > 0) {
     html +=
       `<h3>${escapeHtml(retractedHeading)}</h3><ul>` +
@@ -762,6 +771,8 @@ export function renderReportNoteHtml(
         byKey,
         report.retracted,
         labels.retractedHeading ?? DEFAULT_RETRACTED_HEADING,
+        labels.semanticScholarAttribution ??
+          DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION,
       ),
     ],
   ]);

@@ -52,6 +52,12 @@
 
 import type { BibliographyEntry, RetractedEntry } from "../model/trend";
 import { normalizeDoi } from "../model/ids";
+import {
+  findExtraLine,
+  parseExtra,
+  RH_S2_CORPUS_ID_KEY,
+  RH_SOURCES_KEY,
+} from "./extraField";
 
 // ---------------------------------------------------------------------------
 // 1. Types
@@ -572,6 +578,25 @@ async function formatEntries(
   }
 }
 
+/**
+ * Whether the item's record came from Semantic Scholar, for its attribution
+ * under the report's references (`docs/09` §7; owner, 2026-11-17,
+ * `plan/00` §6 item 395(c), `P7-T35`): `extra`'s `rh-sources` line names
+ * `semanticscholar`, or it carries an `rh-s2-corpus-id` line, which only a
+ * Semantic Scholar record supplies. An item the plugin did not import has
+ * neither line.
+ *
+ * @param extra - the item's `extra` field
+ */
+export function recordFromSemanticScholar(extra: unknown): boolean {
+  const lines = parseExtra(typeof extra === "string" ? extra : undefined);
+  if (findExtraLine(lines, RH_S2_CORPUS_ID_KEY) !== undefined) return true;
+  const sources = findExtraLine(lines, RH_SOURCES_KEY)?.value ?? "";
+  return sources
+    .split(",")
+    .some((source) => source.trim() === "semanticscholar");
+}
+
 function doiOf(item: Zotero.Item): BibliographyEntry["doi"] {
   const raw: unknown = item.getField("DOI");
   return normalizeDoi(typeof raw === "string" ? raw : undefined) ?? undefined;
@@ -593,6 +618,9 @@ async function formatBibliography(
       index: i + 1,
       text: texts[i] ?? "",
       doi: doiOf(item),
+      ...(recordFromSemanticScholar(item.getField("extra")) && {
+        semanticScholar: true,
+      }),
     })),
   };
 }

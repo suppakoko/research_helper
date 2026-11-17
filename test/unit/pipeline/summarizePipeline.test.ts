@@ -92,7 +92,11 @@ import {
   type SummarizeConfirmDeps,
 } from "../../../src/ui/dialogs/summarizeDialog";
 import type { CostDialogInput } from "../../../src/ui/dialogs/costConfirmDialog";
-import { notStoredReason } from "../../../src/ui/panes/summarySection";
+import {
+  notStoredReason,
+  SummaryFailedError,
+  summaryFailure,
+} from "../../../src/ui/panes/summarySection";
 import {
   createJobStore,
   createSummaryStore,
@@ -1372,6 +1376,53 @@ describe("runItemSummary — the item pane's one-item run (item 303(a))", () => 
     const h = await harness(["abstract"], { script: [failure] });
     const t = itemRun(h);
     await expect(t.run("K0000", false)).rejects.toBe(failure);
+  });
+
+  it("a failed run rejects with its machine values and message id, never its detail (P7-T03 step 5, item 392(a))", async () => {
+    const planted = "provider text that must not reach the screen";
+    const ready = {
+      status: "ready",
+      state: { planned: [{}], fromStore: [], rows: new Map() },
+      disclosure: undefined,
+    };
+    const pipeline = {
+      prepare: () => Promise.resolve(ready),
+      execute: () =>
+        Promise.resolve({
+          outcome: "failed",
+          error: {
+            code: "STORAGE",
+            messageKey: "rh-error-storage",
+            detail: planted,
+            retryable: false,
+          },
+        }),
+    } as unknown as NonNullable<ItemSummaryDeps["pipeline"]>;
+    const job = { context: {}, finish: () => Promise.resolve() };
+    const deps = {
+      pipeline,
+      collectionsOf: () => [],
+      openJob: () => Promise.resolve(job),
+      enqueue: () => Promise.resolve({ id: "job-1" }),
+      confirm: {},
+      askCeiling: () => Promise.resolve("cancel"),
+    } as unknown as ItemSummaryDeps;
+    const source = createCancellationTokenSource();
+    const rejected = await runItemSummary(
+      deps,
+      { libraryID: 1, itemKey: "K0000", regenerate: false },
+      source.token,
+    ).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(rejected).toBeInstanceOf(SummaryFailedError);
+    expect((rejected as Error).message).not.toContain(planted);
+    expect(JSON.stringify(rejected)).not.toContain(planted);
+    expect(summaryFailure(rejected)).toEqual({
+      code: "STORAGE",
+      messageId: "rh-error-storage",
+    });
   });
 
   it("with no key: stops after zero requests and says why", async () => {

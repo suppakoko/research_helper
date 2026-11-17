@@ -68,8 +68,8 @@ import {
   type TrendReportStageKey,
   type TrendReportStop,
 } from "../../pipeline/trendReport/trendReportPipeline";
+import { formatUsd } from "../../i18n/format";
 import {
-  formatUsd,
   shouldOpenCostDialog,
   skippedNoticeLine,
   type CostDialogInput,

@@ -34,6 +34,7 @@ import {
   SourceError,
   StorageError,
   StructuredOutputError,
+  teardownErrorLine,
   TimeoutError,
   TTSError,
   UpstreamServerError,
@@ -944,5 +945,87 @@ describe("toSerialized (docs/07 §5.2, §10.1)", () => {
     );
     expect(JSON.stringify(e.context)).not.toContain("abc123");
     expect(e.timeoutMs).toBe(60_000);
+  });
+});
+
+/**
+ * `P7-T36` (owner, 2026-11-17, `plan/00` §6 item 395(d)): the add-on's
+ * teardown reporter, `src/addon.ts`'s `onError`, writes its line through
+ * {@link redact}. Every key-shaped value is built here, at run time, from a
+ * repeated character: none is anybody's key.
+ */
+describe("teardownErrorLine (P7-T36, item 395(d))", () => {
+  const planted = `sk-or-v1-${"k".repeat(40)}`;
+
+  it("redacts a key planted in a thrown teardown error's message and stack", () => {
+    const error = new Error(`provider refused ${planted}`);
+    error.stack = `Error: provider refused ${planted}\n    at teardown (chrome://x.js:1:1)`;
+    const line = teardownErrorLine(
+      "Research Helper",
+      "service dispose failed",
+      error,
+    );
+    expect(line).not.toContain(planted);
+    expect(line).not.toContain("k".repeat(40));
+    expect(line.match(/\[redacted:49\]/g)).toHaveLength(2);
+    expect(
+      line.startsWith(
+        "[Research Helper] service dispose failed: provider refused ",
+      ),
+    ).toBe(true);
+    expect(line).toContain("at teardown (chrome://x.js:1:1)");
+  });
+
+  it("redacts a key in something thrown that is not an Error, and in the scope's own message", () => {
+    const bearer = `Bearer ${"t".repeat(30)}`;
+    expect(teardownErrorLine("RH", "dispose", bearer)).toBe(
+      "[RH] dispose: [redacted:37]",
+    );
+    expect(teardownErrorLine("RH", `closing ${planted}`, 1)).toBe(
+      "[RH] closing [redacted:49]: 1",
+    );
+  });
+
+  it("keeps an ordinary line as it was, and says when there is no stack", () => {
+    const error = new Error("database is locked");
+    Object.defineProperty(error, "stack", { value: undefined });
+    expect(teardownErrorLine("RH", "close", error)).toBe(
+      "[RH] close: database is locked\n(no stack)",
+    );
+    expect(teardownErrorLine("RH", "close", undefined)).toBe(
+      "[RH] close: undefined",
+    );
+  });
+
+  it("is what src/addon.ts's onError writes", () => {
+    const source = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), "../../../src/addon.ts"),
+      "utf8",
+    );
+    const sf = ts.createSourceFile(
+      "addon.ts",
+      source,
+      ts.ScriptTarget.ES2022,
+      true,
+    );
+    let reporter: ts.Node | undefined;
+    const visit = (node: ts.Node): void => {
+      if (
+        ts.isPropertyAssignment(node) &&
+        ts.isIdentifier(node.name) &&
+        node.name.text === "onError"
+      ) {
+        reporter = node.initializer;
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sf);
+    if (reporter === undefined) throw new Error("no onError in src/addon.ts");
+    const body = reporter.getText(sf).replace(/\s+/g, " ");
+    expect(body).toContain(
+      "Zotero.debug(teardownErrorLine(config.addonName, message, error))",
+    );
+    // Nothing else in the reporter writes to the debug output.
+    expect(body.match(/Zotero\.debug\(/g)).toHaveLength(1);
   });
 });

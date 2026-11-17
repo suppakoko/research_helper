@@ -60,7 +60,10 @@ import {
   UNMAPPED_THEME_REASON,
 } from "./cluster";
 import { DIGEST_NO_YEAR } from "./digest";
-import { DEFAULT_RETRACTED_HEADING } from "./exportMarkdown";
+import {
+  DEFAULT_RETRACTED_HEADING,
+  DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION,
+} from "./exportMarkdown";
 import type { StudyDesignLabel } from "../../model/summary";
 import type { ReportLanguage } from "../../model/trend";
 
@@ -145,6 +148,10 @@ const EN = {
 
   // §11's unnumbered list (owner, item 286; `P4-T15`'s default).
   retractedHeading: DEFAULT_RETRACTED_HEADING,
+
+  // The line under §11's numbered entries when any record came from Semantic
+  // Scholar (owner, 2026-11-17, `plan/00` §6 item 395(c); `P7-T35`'s default).
+  semanticScholarAttribution: DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION,
 
   // The invalid-citation text (`docs/06` §10.1; `P4-T10`'s default).
   invalidCitation: INVALID_CITATION_TEXT,
@@ -448,7 +455,11 @@ export const KO_REPORT_LABELS: Readonly<
  * {@link KO_REPORT_LABELS}.
  */
 export const KO_REPORT_LABELS_PENDING_REVIEW: readonly ReportLabelKey[] =
-  Object.freeze([] as const satisfies readonly ReportLabelKey[]);
+  Object.freeze([
+    // Draft (coordinator, 2026-11-17, not adopted; G-41, P7-T35):
+    // semanticScholarAttribution: "일부 기록 출처: Semantic Scholar, Allen Institute for AI.",
+    "semanticScholarAttribution",
+  ] as const satisfies readonly ReportLabelKey[]);
 
 // ---------------------------------------------------------------------------
 // 3. Study-design labels

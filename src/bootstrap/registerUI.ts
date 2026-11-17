@@ -392,6 +392,7 @@ import {
   exportReportMarkdown,
   renderReportMarkdown,
   reportExportFileName,
+  type ReportExportLabels,
 } from "../pipeline/trendReport/exportMarkdown";
 import {
   announcePausedReports,
@@ -1857,6 +1858,12 @@ function preferencesModelSuggestions(
  *
  * `false` when there is no database this run. Reads only whether a row
  * exists, never what it holds.
+ *
+ * The `LIKE` pattern is bound: the connection's `Sqlite.sys.mjs` refuses a
+ * `LIKE` followed by a literal ("Please enter a LIKE clause with bindings"),
+ * so before 2026-11-17 this query threw in Zotero, the pane's catch read it
+ * as "no data", and the restore notice could not show (`plan/00` §6 item
+ * 398(i); `test/unit/bootstrap/sqlLikeBindings.test.ts`).
  */
 async function pluginDatabaseHasData(
   database: PluginDatabase,
@@ -1865,7 +1872,8 @@ async function pluginDatabaseHasData(
   if (open === undefined) return false;
   const result: unknown = await open.connection.queryAsync(
     "SELECT name FROM sqlite_master WHERE type = 'table' " +
-      "AND name NOT LIKE 'sqlite_%' AND name <> 'schema_version'",
+      "AND name NOT LIKE ? AND name <> 'schema_version'",
+    ["sqlite_%"],
   );
   const tables = Array.isArray(result)
     ? (result as readonly { name?: unknown }[])
@@ -3058,8 +3066,13 @@ function createReportWindowSession(
     },
   };
 
-  const labelsOf = (stored: TrendReport): { retractedHeading: string } => ({
+  const labelsOf = (stored: TrendReport): Required<ReportExportLabels> => ({
     retractedHeading: reportLabel(stored.language, "retractedHeading"),
+    // `P7-T35` (owner, `plan/00` §6 item 395(c)).
+    semanticScholarAttribution: reportLabel(
+      stored.language,
+      "semanticScholarAttribution",
+    ),
   });
 
   /** The text the preview ends on and Copy takes: what the export writes. */

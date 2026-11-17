@@ -6,7 +6,7 @@
 > §8 item 7). Every card is `TODO`. Like `plan/09`, this file has had **no independent review** yet;
 > the author's report is `plan/reports/P7-decomposition.md`, and §0.4 lists the lines the owner still
 > has to answer. *Updated 2026-11-16, later (`plan/00` §6 item 381): the owner answered §0.4's lines 18–23; no
-> line is open now, and line 20 added `P7-T32` (0.75 d), so the file holds 32 cards summing to 29.25 d.* *Updated 2026-11-17 (`plan/00` §6 item 393(d)): the owner answered item 393, and `P7-T33` (0.5 d) was added, so the file holds 33 cards summing to 29.75 d.* The card sum replaced `docs/11`'s scaled 21–29 d on 2026-11-16 at the five places
+> line is open now, and line 20 added `P7-T32` (0.75 d), so the file holds 32 cards summing to 29.25 d.* *Updated 2026-11-17 (`plan/00` §6 item 393(d)): the owner answered item 393, and `P7-T33` (0.5 d) was added, so the file holds 33 cards summing to 29.75 d.* *Updated 2026-11-17, later (`plan/00` §6 items 395, 398): the owner answered item 395; `P7-T34`–`P7-T38` (2.0 d) were added and `P7-T03` went from 1.5 to 1.75 d for item 395(b)'s step, so the file holds 38 cards summing to 32.00 d.* The card sum replaced `docs/11`'s scaled 21–29 d on 2026-11-16 at the five places
 > `plan/README.md` §7 names (`docs/11` §1–§2, `plan/00` §1, `plan/05` §4, now a pointer here).
 >
 > **What this file is.** The task-card decomposition of `docs/11-implementation-roadmap.md` §1
@@ -78,14 +78,14 @@ documents, `plan/reports/` and the tree:
 mitigation by `P7-T31`; R-15 was already retired on 2026-09-16 (`P0-T27`) and `P7-T30` re-confirms it
 on a real release; R-1 moves to ongoing handling with `P7-T22`'s job.
 
-**Effort.** **29.75 developer-days over 33 cards** (§1), so the band these cards imply is
-**29.75–42 d** (29.75 × 1.4 = 41.65 → 42). Against the scaled 21–29 d `docs/11` published before this
-file, the low end is **+42 %** (29.75 ÷ 21 = 1.417) and 3 % above the scaled top (29.75 ÷ 29 = 1.026)
+**Effort.** **32.00 developer-days over 38 cards** (§1), so the band these cards imply is
+**32.00–45 d** (32.00 × 1.4 = 44.8 → 45). Against the scaled 21–29 d `docs/11` published before this
+file, the low end is **+52 %** (32.00 ÷ 21 = 1.524) and 10 % above the scaled top (32.00 ÷ 29 = 1.103)
 — above the ~30 % `plan/README.md` §7 calls a signal to re-estimate the phase in `docs/11`, which was
-done. Against the old 10–14 d band the low end is **+113 %** (29.75 ÷ 14 = 2.125). **Propagated
+done. Against the old 10–14 d band the low end is **+129 %** (32.00 ÷ 14 = 2.286). **Propagated
 2026-11-16** to `docs/11` §1–§2, `plan/00` §1 and `plan/05` §4. *Updated 2026-11-16, later (`plan/00` §6
 item 381): this read 28.50 d over 31 cards, 28.50–40 d, +36 %, 2 % below the scaled top and +104 %, before
-`P7-T32` (0.75 d) was added for §0.4 line 20; propagated the same day to the same five sites.* *Updated 2026-11-17 (`plan/00` §6 item 393(d)): this read 29.25 d over 32 cards, 29.25–41 d, +39 %, 1 % above the scaled top and +109 %, before `P7-T33` (0.5 d) was added for the owner's answer to item 393; propagated the same day to the same five sites.* §3 says where the days went and where
+`P7-T32` (0.75 d) was added for §0.4 line 20; propagated the same day to the same five sites.* *Updated 2026-11-17 (`plan/00` §6 item 393(d)): this read 29.25 d over 32 cards, 29.25–41 d, +39 %, 1 % above the scaled top and +109 %, before `P7-T33` (0.5 d) was added for the owner's answer to item 393; propagated the same day to the same five sites.* *Updated 2026-11-17, later (`plan/00` §6 item 398): this read 29.75 d over 33 cards, 29.75–42 d, +42 %, 3 % above the scaled top and +113 %, before `P7-T34`–`P7-T38` (2.0 d) were added for the owner's answers to item 395 and `P7-T03` rose by 0.25 d for item 395(b); propagated the same day to the same five sites.* §3 says where the days went and where
 the sum is still likely low.
 
 ### Phase definition of done
@@ -225,7 +225,7 @@ them (`plan/04` §0.2 item 10) may now be executed as the answer says. Every ans
 |---|---|---|---|
 | `P7-T01` | Reconcile Phase 7 documents: debug bundle, pane sections, remove-all scope | 0.75 | none |
 | `P7-T02` | Key-parity check script as a blocking CI step | 0.75 | none |
-| `P7-T03` | Hard-coded string and `Intl` sweep | 1.5 | none |
+| `P7-T03` | Hard-coded string and `Intl` sweep | 1.75 | none |
 | `P7-T04` | Retire the spike command; keep its fixture in the tests | 0.75 | none |
 | `P7-T05` | Korean review of the UI, the prompts and `README.ko.md` | 0.75 | **Yes** |
 | `P7-T06` | Keyboard, focus, accessible names and contrast pass | 2.0 | none |
@@ -256,13 +256,20 @@ them (`plan/04` §0.2 item 10) may now be executed as the answer says. Every ans
 | `P7-T31` | Forum post and community-list submissions | 0.25 | **Yes** |
 | `P7-T32` | Gemini in balanced mode: warn and confirm, not refuse | 0.75 | none |
 | `P7-T33` | Offline message in report, related and summarize windows | 0.5 | none |
-| | **Total** | **29.75** | 10 gates |
+| `P7-T34` | Summary prompts send no tags | 0.5 | none |
+| `P7-T35` | Semantic Scholar attribution under the report's references | 0.5 | none |
+| `P7-T36` | Teardown error line through `redact` | 0.25 | none |
+| `P7-T37` | Redaction audit reads the plugin database | 0.25 | none |
+| `P7-T38` | `npm audit fix` as its own reviewed change | 0.5 | none |
+| | **Total** | **32.00** | 10 gates |
 
 *Updated 2026-11-16, later (`plan/00` §6 item 381): `P7-T32` added for §0.4 line 20; the total read 28.50. It is
 a new entry point that blocks `P7-T16`, and it does not lie on the critical path below (it ends at 0.75 d, before
 `P7-T16`'s other inputs; recompute with the script after `npm run index:derive`).*
 
 *Updated 2026-11-17 (`plan/00` §6 item 393(d)): `P7-T33` added for the owner's answer to item 393; the total read 29.25. It depends on `P7-T12` and `P7-T18` and blocks `P7-T03`; it ends at 2.75 d (1.25 + 1.0 + 0.5), before `P7-T03`'s other inputs, so it does not lie on the critical path below, which stays 14.5 d (recomputed by script the same day).*
+
+*Updated 2026-11-17, later (`plan/00` §6 items 395, 398): `P7-T34`–`P7-T38` added for the owner's answers to item 395 (2.0 d), and `P7-T03` rose from 1.5 to 1.75 d for item 395(b)'s step; the total read 29.75. Each new card depends on `P7-T16`; `P7-T34`–`P7-T37` block `P7-T24`, `P7-T35` also blocks `P7-T05`, and `P7-T38` blocks `P7-T26`. None lies on the critical path below; `P7-T03` does, so the path is now 14.75 d (recomputed by script the same day).*
 
 **Entry points** (no `Depends on`): `P7-T01`, `P7-T04`, `P7-T12`, `P7-T21`, `P7-T22`, `P7-T28`, and `P7-T32`
 (added 2026-11-16, `plan/00` §6 item 381). They
@@ -272,9 +279,9 @@ none touches a file another entry point holds, except that `P7-T04` and `P7-T12`
 
 **Critical path inside the phase:** `P7-T01` → `P7-T08` → `P7-T09` → `P7-T10` → `P7-T11` → `P7-T03`
 → `P7-T06` → `P7-T15` → `P7-T24` → `P7-T26` → `P7-T25` → `P7-T29` → `P7-T30` → `P7-T31`,
-**14.5 d**, computed by script over the **Depends on** rows. The documents chain (`P7-T19` →
+**14.75 d** *(14.5 d before 2026-11-17's `P7-T03` change, item 398)*, computed by script over the **Depends on** rows. The documents chain (`P7-T19` →
 `P7-T20` → `P7-T05`, ending at 9.0 d) and the security chain (`P7-T13` → `P7-T14` → `P7-T16`, ending
-at 7.0 d) finish before `P7-T24` (12.25 d) and `P7-T26` need them. Ten of the 31 cards are
+at 7.0 d) finish before `P7-T24` (12.5 d; 12.25 d before 2026-11-17, item 398) and `P7-T26` need them. Ten of the 31 cards are
 human-gated, and six of those sit on the path: the calendar time of `P7-T15`, `P7-T26`, `P7-T25`,
 `P7-T29`, `P7-T30` and `P7-T31` is the owner's, not the developer's.
 
@@ -417,12 +424,12 @@ npm run l10n:check && npm run test:unit -- checkL10n && npm run lint:check
 | Field | Value |
 |---|---|
 | **ID** | `P7-T03` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T03.md`. |
 | **Depends on** | `P7-T08`, `P7-T09`, `P7-T10`, `P7-T11`, `P7-T12`, `P7-T13`, `P7-T33` |
 | **Blocks** | `P7-T05`, `P7-T06` |
 | **Retires** | none |
 | **Implements** | `NFR-11`, part of `FR-55` |
-| **Estimate** | 1.5 d |
+| **Estimate** | 1.75 d |
 | **Human gate** | none |
 
 **Goal.** No user-visible string is written outside Fluent, no sentence is assembled from English
@@ -478,6 +485,23 @@ section. Callers of `format.ts`: the dialogs, panes and view models it is wired 
 > already in this card's Files; no estimate change is claimed here, and the executing agent re-prices if it is not
 > small.
 
+
+> **Added 2026-11-17 (owner, `plan/00` §6 item 395(b), "주의 문장만 추가"; +0.25 d, propagated as item 398).** Step 6:
+> add this sentence, verbatim, to the `en-US` `research-helper-egress-first-job-notice`, after "under its own terms.":
+> "Do not use it on manuscripts you are peer-reviewing, on unpublished work covered by a confidentiality agreement, or
+> on any material containing participant data, without checking your institution's rules first." The Korean of the whole
+> message goes in as a commented draft for `G-41` beside the live Korean, which stays on `KO_PRESENT`; no `--allow`
+> is needed, because the id is not new. v1.0 ships the global privacy mode only; a per-collection mode is a
+> later-release candidate (`docs/09` §4.3's note of this date).
+
+> **Built 2026-11-17 (coordinator's batch D; `plan/reports/P7-T03.md`).** `src/i18n/format.ts` holds every formatter
+> (`formatUsd`, `formatNumber`, `formatList`, `formatMinutes`, `formatBytes`, `formatDate`, `formatDateTime`; callers:
+> `costConfirmDialog.ts`, `reportViewModel.ts`, `searchImportViewModel.ts`, `summarySection.ts`; nothing is
+> constructed). `addon/content/preferences.js` keeps its three helpers, because a chrome script cannot import the bundle
+> (coordinator, under item 313). Step 5 is `summaryFailure` and `SummaryFailedError` in `src/ui/panes/summarySection.ts`
+> (callers: the section's own run handlers, and `runItemSummary` in `src/ui/dialogs/summarizeDialog.ts`). The summarize
+> window's second-run note finding of `plan/reports/P7-batchB.md` is behaviour, not a string or `Intl` call, and is not
+> under this sweep (`plan/00` §6 item 398).
 
 *Updated 2026-11-17 (`plan/00` §6 item 393(d)): depends on `P7-T33`, which changes `src/ui/viewModels/reportViewModel.ts`, `src/ui/viewModels/relatedViewModel.ts` and `src/ui/dialogs/summarizeDialog.ts`, files this sweep also edits.*
 ---
@@ -546,7 +570,7 @@ npm run typecheck && npm run lint:check && npm run test:unit && npm run test:int
 |---|---|
 | **ID** | `P7-T05` |
 | **State** | `TODO` |
-| **Depends on** | `P7-T02`, `P7-T03`, `P7-T20` |
+| **Depends on** | `P7-T02`, `P7-T03`, `P7-T20`, `P7-T35` |
 | **Blocks** | `P7-T26` |
 | **Retires** | none |
 | **Implements** | `FR-55`, part of `FR-28`, part of `FR-38` |
@@ -1180,7 +1204,7 @@ Then the owner's run of the written procedure.
 | **ID** | `P7-T16` |
 | **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T16.md`. |
 | **Depends on** | `P7-T10`, `P7-T14`, `P7-T21`, `P7-T32` |
-| **Blocks** | `P7-T24`, `P7-T26` |
+| **Blocks** | `P7-T24`, `P7-T26`, `P7-T34`, `P7-T35`, `P7-T36`, `P7-T37`, `P7-T38` |
 | **Retires** | none |
 | **Implements** | `NFR-16`, `NFR-19`, part of `NFR-20` |
 | **Estimate** | 1.5 d |
@@ -1584,7 +1608,7 @@ every point `docs/13` §7.2 item 2 lists, and an entry for each community list i
 |---|---|
 | **ID** | `P7-T24` |
 | **State** | `TODO` |
-| **Depends on** | `P7-T02`, `P7-T15`, `P7-T16`, `P7-T17`, `P7-T18`, `P7-T22` |
+| **Depends on** | `P7-T02`, `P7-T15`, `P7-T16`, `P7-T17`, `P7-T18`, `P7-T22`, `P7-T34`, `P7-T35`, `P7-T36`, `P7-T37` |
 | **Blocks** | `P7-T26` |
 | **Retires** | none |
 | **Implements** | `docs/11` §1 Phase 7 DoD line 1 |
@@ -1619,6 +1643,12 @@ reason and decision, or "to be run in `P7-T25`".
 4. The phase sign-offs as they stand: `P3-T31`, `P4-T25`, `P5-T30`, `P6-T19`; and the waived
    `P3-T37`.
 5. The per-minor-release policy re-verification line (§0.4 line 9).
+6. *Added 2026-11-17 (owner, `plan/00` §6 item 395(e)).* A line the owner runs in `P7-T25`: one summarize
+   job with a real key at debug level, then the saved debug output searched for the key and its first eight
+   characters; the result is recorded, never the key.
+7. *Added 2026-11-17 (owner, `plan/00` §6 item 395(h)).* A line checking that `SECURITY.md`'s contact
+   placeholder is gone, filled by the owner before `P7-T26`, and that the 7-day and 30-day response times
+   are as decided.
 
 **Do NOT.**
 - Do **not** write a result that no card or run produced.
@@ -1685,7 +1715,7 @@ v0.9.0 build on Windows.
 |---|---|
 | **ID** | `P7-T26` |
 | **State** | `TODO` |
-| **Depends on** | `P7-T05`, `P7-T16`, `P7-T19`, `P7-T20`, `P7-T21`, `P7-T24` |
+| **Depends on** | `P7-T05`, `P7-T16`, `P7-T19`, `P7-T20`, `P7-T21`, `P7-T24`, `P7-T38` |
 | **Blocks** | `P7-T07`, `P7-T25`, `P7-T27` |
 | **Retires** | none |
 | **Implements** | `docs/11` §1 Phase 7 DoD line 3 (the starting version) |
@@ -2081,15 +2111,263 @@ written by `P7-T18`. Callers: `drawFailure` (related), `finishRun` and `runJob`'
 `publishReportWindowCommands` (report), `createSummarizeSession` (summarize); constructed in
 `src/bootstrap/registerUI.ts`. It blocks `P7-T03` because that sweep edits the same three files.
 
+### P7-T34 — Summary prompts send no tags
+
+| Field | Value |
+|---|---|
+| **ID** | `P7-T34` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T34.md`. |
+| **Depends on** | `P7-T16` |
+| **Blocks** | `P7-T24` |
+| **Retires** | none |
+| **Implements** | `docs/09` §3.2 row 3a; `docs/09` §7 "Collection and tag names are not sent by default" |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** No summary request carries the item's Zotero tags unless full mode carries the collection-and-tag-names
+opt-in, which no v1.0 setting sets.
+
+> **DECIDED 2026-11-17 (owner, `plan/00` §6 item 395(a)):** "태그는 안 보냄" — the draft answer. `{{TAGS}}` is "not
+> supplied" unless full mode carries the opt-in; no v1.0 UI sets it. The collection name stays in the report and audio
+> prompts, recorded in `docs/09` §3.2 row 3b.
+
+**Read first.**
+- `docs/spikes/phase-7-security-review.md` (the tags row); `docs/09` §3.2; `docs/12` §4
+- `metadataVariables` and `summarizeItem` in `src/pipeline/summarize/summarizeItem.ts`; `allowedInputScope` in
+  `src/pipeline/shared/privacyPolicy.ts`
+
+**Files.**
+- modify `src/pipeline/summarize/summarizeItem.ts` (`TAGS_NOT_SUPPLIED`; `metadataVariables` takes `sendTags`;
+  caller: `summarizeItem` in the same file, which passes `allowedInputScope(...).collectionAndTagNames`)
+- modify `test/unit/pipeline/summarizeItem.test.ts`
+- modify `docs/12` §4, `docs/09` §3.2 and §7, `README.md` ("What is sent where")
+
+**Do.**
+1. `{{TAGS}}` is `not supplied` unless the privacy scope allows collection and tag names; with it, the tags joined
+   by `, `, or `none`.
+2. Tests in strict, balanced and full without the opt-in, full with it, and an untagged item.
+3. Record that the cache key changes, so every summary is made again on its next run.
+
+**Do NOT.**
+- Do **not** add a setting for the opt-in.
+- Do **not** change the prompt files.
+
+**Done when.**
+- [ ] No mode without the opt-in sends a tag; the opt-in sends them.
+- [ ] Mutation sweep per `plan/08` §0.2 item 24.
+
+**Verify with.**
+```bash
+npm run typecheck && npm run test:unit -- summarizeItem
+```
+
+**Notes.** Added 2026-11-17 (`plan/00` §6 item 398) for the owner's answer to item 395(a). Priced 0.5 d: one
+variable, its tests and four documents. Caller: `summarizeItem`; nothing new is constructed (`summarizeItem.ts` is
+called by `summarizePipeline.ts`, wired in `src/bootstrap/registerPipelines.ts`).
+
+---
+
+### P7-T35 — Semantic Scholar attribution under the report's references
+
+| Field | Value |
+|---|---|
+| **ID** | `P7-T35` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T35.md`. |
+| **Depends on** | `P7-T16` |
+| **Blocks** | `P7-T05`, `P7-T24` |
+| **Retires** | none |
+| **Implements** | `docs/09` §7 "Semantic Scholar: … attribution present in … generated reports" |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** When any cited record came from Semantic Scholar, the report prints one line under its numbered
+references: "Some records: Semantic Scholar, Allen Institute for AI."
+
+> **DECIDED 2026-11-17 (owner, `plan/00` §6 item 395(c)):** adopt the draft: the line, a new string, a Korean draft
+> and tests.
+
+**Read first.**
+- `docs/09` §7's Semantic Scholar line; `docs/02` §6.2 (`rh-sources`, `rh-s2-corpus-id`)
+- `formatBibliography` in `src/zotero/bibliography.ts`; `bibliographyBody` in `scaffold.ts`, `bibliographyBlock`
+  in `exportMarkdown.ts`, `bibliographyHtml` in `noteHtml.ts`; `reportLabels.ts`
+
+**Files.**
+- modify `src/model/trend.ts` (`BibliographyEntry.semanticScholar`), `src/zotero/bibliography.ts`
+  (`recordFromSemanticScholar`; caller: `formatBibliography`)
+- modify `src/pipeline/trendReport/exportMarkdown.ts` (`DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION`,
+  `needsSemanticScholarAttribution`), `scaffold.ts`, `noteHtml.ts`, `reportLabels.ts`
+  (`semanticScholarAttribution`, on `KO_REPORT_LABELS_PENDING_REVIEW`)
+- modify the callers that pass report labels: `trendReportPipeline.ts` (`renderReportNote`) and
+  `src/bootstrap/registerUI.ts` (`labelsOf`)
+- create `test/unit/zotero/bibliographySource.test.ts`; modify `trendExport.test.ts`, `trendNoteHtml.test.ts`,
+  `trendScaffold.test.ts`, `test/integration/zotero/bibliography.spec.ts`, `test/integration/l10n.spec.ts`
+- modify `docs/07` (`BibliographyEntry`), `docs/09` §7
+
+**Do.**
+1. Mark an entry whose item's `extra` names `semanticscholar` on `rh-sources` or carries `rh-s2-corpus-id`.
+2. Print the line under the numbered entries, before the retracted list, in the scaffold, the export and the note.
+3. The Korean is a commented draft; the key waits on `KO_REPORT_LABELS_PENDING_REVIEW` until `G-41`.
+
+**Do NOT.**
+- Do **not** count a retracted entry: the report does not cite it.
+
+**Done when.**
+- [ ] The three renderers print the line exactly when a numbered entry is marked, and the integration spec marks
+      entries Zotero formats.
+- [ ] Mutation sweep per `plan/08` §0.2 item 24.
+
+**Verify with.**
+```bash
+npm run typecheck && npm run test:unit -- bibliographySource trendExport trendNoteHtml trendScaffold
+```
+
+**Notes.** Added 2026-11-17 (`plan/00` §6 item 398) for the owner's answer to item 395(c). Priced 0.5 d. It blocks
+`P7-T05`, which reviews the line's Korean. Callers: `formatBibliography` (through `zoteroBibliographyPort`, a
+constant passed in by `trendReportPipeline.ts`), `renderReportNote` and `labelsOf`; constructed in
+`src/bootstrap/registerUI.ts` and `src/bootstrap/registerPipelines.ts`.
+
+---
+
+### P7-T36 — Teardown error line through `redact`
+
+| Field | Value |
+|---|---|
+| **ID** | `P7-T36` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T36.md`. |
+| **Depends on** | `P7-T16` |
+| **Blocks** | `P7-T24` |
+| **Retires** | none |
+| **Implements** | `docs/09` §7 "Logger redaction runs unconditionally on every message" |
+| **Estimate** | 0.25 d |
+| **Human gate** | none |
+
+**Goal.** The add-on's teardown reporter writes its line through `redact`, so a key-shaped value in a thrown
+teardown error never reaches `Zotero.debug`.
+
+> **DECIDED 2026-11-17 (owner, `plan/00` §6 item 395(d)):** adopt the draft.
+
+**Read first.** `onError` in `src/addon.ts`; `redact` in `src/core/errors.ts`; `docs/09` §2.1.
+
+**Files.**
+- modify `src/core/errors.ts` (`teardownErrorLine`; caller: `onError` in `src/addon.ts`)
+- modify `src/addon.ts`; modify `test/unit/core/errors.test.ts`
+
+**Do.**
+1. `teardownErrorLine(addonName, message, error)` builds the line and passes all of it through `redact`.
+2. A unit test plants a key-shaped synthetic value, built at run time, in a thrown teardown error's message and
+   stack; a source-reading test pins `onError` to the helper.
+
+**Done when.**
+- [ ] The planted value is absent from the line.
+- [ ] Mutation sweep per `plan/08` §0.2 item 24.
+
+**Verify with.**
+```bash
+npm run typecheck && npm run test:unit -- errors
+```
+
+**Notes.** Added 2026-11-17 (`plan/00` §6 item 398) for the owner's answer to item 395(d). The unit test reads
+`src/addon.ts` rather than importing it, because importing it builds the add-on (coordinator, under item 313).
+Caller: `onError`, handed to `createScope` in the `Addon` constructor; constructed in `src/index.ts`.
+
+---
+
+### P7-T37 — Redaction audit reads the plugin database
+
+| Field | Value |
+|---|---|
+| **ID** | `P7-T37` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T37.md`. |
+| **Depends on** | `P7-T16` |
+| **Blocks** | `P7-T24` |
+| **Retires** | none |
+| **Implements** | part of `NFR-16` |
+| **Estimate** | 0.25 d |
+| **Human gate** | none |
+
+**Goal.** After the audit's three jobs, every text cell of every table of the plugin's own database is searched for
+the 30 planted values, and none is found.
+
+> **DECIDED 2026-11-17 (owner, `plan/00` §6 item 395(f)):** adopt the draft.
+
+**Read first.** `test/integration/redactionAudit.spec.ts`; `pluginDatabaseHasData` in
+`src/bootstrap/registerUI.ts` (the `sqlite_master` pattern); `src/bootstrap/migrations.ts`.
+
+**Files.**
+- modify `test/integration/redactionAudit.spec.ts` (`searchPluginDatabase`; caller: the spec's one test)
+
+**Do.**
+1. List the tables from `sqlite_master`, the columns from `table_info`; search every text cell in the spec and
+   every blob cell in SQL; log the counts, never a cell.
+2. A control search for a summarized item's key must find it, so a search that reads nothing fails.
+
+**Done when.**
+- [ ] Three consecutive clean integration runs find none of the values and the control's key.
+
+**Verify with.**
+```bash
+npm run test:integration -- --exit-on-finish
+```
+
+**Notes.** Added 2026-11-17 (`plan/00` §6 item 398) for the owner's answer to item 395(f). Test code only: no
+production caller and nothing constructed.
+
+---
+
+### P7-T38 — `npm audit fix` as its own reviewed change
+
+| Field | Value |
+|---|---|
+| **ID** | `P7-T38` |
+| **State** | `TODO` |
+| **Depends on** | `P7-T16` |
+| **Blocks** | `P7-T26` |
+| **Retires** | none |
+| **Implements** | `docs/09` §7 "`npm audit` runs in CI; new high-severity advisories block release" |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** The development tree's advisories that `npm audit fix` resolves without `--force` are fixed in one
+reviewed change before the release candidate, with every check and three integration runs passing on it.
+
+> **DECIDED 2026-11-17 (owner, `plan/00` §6 item 395(g)):** adopt; its own reviewed change before `P7-T26`.
+
+**Read first.** `docs/spikes/phase-7-security-review.md` (the dependency audit); `package.json`,
+`package-lock.json`; `.github/workflows/ci.yml`'s audit step.
+
+**Files.**
+- modify `package-lock.json` (and `package.json` only if `npm audit fix` changes it)
+
+**Do.**
+1. Record `npm audit` and `npm audit --omit=dev` before.
+2. Run `npm audit fix`, never `--force`; record what it changed and what it could not fix.
+3. Run every check, the build (typings hashes before and after) and three integration runs.
+
+**Do NOT.**
+- Do **not** pass `--force`, and do **not** raise a major version by hand here.
+- Do **not** combine this change with any other.
+
+**Done when.**
+- [ ] The before and after audits, the lockfile diff and the checks are in the report.
+
+**Verify with.**
+```bash
+npm audit && npm run typecheck && npm run lint:check && npm run test && npm run build
+```
+
+**Notes.** Added 2026-11-17 (`plan/00` §6 item 398) for the owner's answer to item 395(g). Priced 0.5 d by the
+coordinator: the fix is one command, but its check is a full run and three integration runs, and a transitive bump
+can break the scaffold. Not built in batch D, as the brief says. No caller and nothing constructed.
+
 ---
 
 ## 3. Estimate reconciliation
 
-Where the 28.50 d sit against `plan/05` §4.1's work areas (now §5.1):
+Where the 32.00 d sit *(28.50 d when first written; 32.00 since 2026-11-17, item 398)* against `plan/05` §4.1's work areas (now §5.1):
 
 | Work area | Cards | Days |
 |---|---|---|
-| W7-1 Localization completion | `P7-T02`, `P7-T03`, `P7-T04` | 3.0 |
+| W7-1 Localization completion | `P7-T02`, `P7-T03`, `P7-T04` | 3.25 |
 | W7-2 Korean review by a native speaker | `P7-T05`, `P7-T20` | 1.25 |
 | W7-3 Accessibility pass | `P7-T06`, `P7-T07` | 2.25 |
 | W7-4 Preferences consolidation | `P7-T08`, `P7-T09`, `P7-T10`, `P7-T11` | 5.5 |
@@ -2103,7 +2381,8 @@ Where the 28.50 d sit against `plan/05` §4.1's work areas (now §5.1):
 | Not a work area: documents first, NCBI, the sign-off | `P7-T01`, `P7-T28`, `P7-T29` | 1.25 |
 | Not a work area: the owner's answer to §0.4 line 20 (added 2026-11-16, item 381) | `P7-T32` | 0.75 |
 | Not a work area: the owner's answer to item 393 (added 2026-11-17, item 393(d)) | `P7-T33` | 0.5 |
-| | **Total** | **29.75** |
+| Not a work area: the owner's answers to item 395 (added 2026-11-17, item 398) | `P7-T34`, `P7-T35`, `P7-T36`, `P7-T37`, `P7-T38` | 2.0 |
+| | **Total** | **32.00** |
 
 **Where the sum is likely low.** (1) `P7-T03` and `P7-T06`: a sweep is priced on the windows that
 exist today; Phases 5 and 6 add windows not yet built, and their findings are counted only as

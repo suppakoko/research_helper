@@ -100,15 +100,15 @@ action shows its destination first.
 |---|---|---|
 | Search & import | The databases you tick: `eutils.ncbi.nlm.nih.gov` (PubMed), `www.ebi.ac.uk` (Europe PMC), `api.crossref.org`, `api.semanticscholar.org`, `export.arxiv.org`, `api.biorxiv.org` (bioRxiv and medRxiv), and `pmc.ncbi.nlm.nih.gov` to convert PubMed identifiers | Your search words, the date range and the result limit. Your NCBI or Semantic Scholar key, if set, goes to its own service only. |
 | Find related papers, recommend | The same databases, and `pmc.ncbi.nlm.nih.gov` to convert identifiers | The paper's public identifiers (DOI, PubMed or arXiv ID), or its title when it has none; for recommendations, search words made from the collection and some of its papers' identifiers and author names |
-| Summarize | Your AI provider: `openrouter.ai`, `api.openai.com`, `generativelanguage.googleapis.com` (Gemini) or `api.anthropic.com` | Per paper: its title, authors, year, venue, item type, DOI, Zotero item key, **its Zotero tags**, the abstract and, by default, the full text extracted from its PDF or from Europe PMC's open-access text |
+| Summarize | Your AI provider: `openrouter.ai`, `api.openai.com`, `generativelanguage.googleapis.com` (Gemini) or `api.anthropic.com` | Per paper: its title, authors, year, venue, item type, DOI, Zotero item key, the abstract and, by default, the full text extracted from its PDF or from Europe PMC's open-access text |
 | Generate a trends report | Your AI provider | The summaries already made, the papers' titles, years and venues, and **the collection's name** |
 | Recommend new papers | Your AI provider | One line per paper in the collection (item key, title, year, venue, subject terms) and counts; not abstracts and not the collection's name |
 | Generate an audio report | Your AI provider, then Google's `generativelanguage.googleapis.com` | The report's text to write a spoken script, then the script to Google's text-to-speech, which can say the collection's name and cited authors aloud |
 | Use the plugin at all | Zotero contacts `raw.githubusercontent.com` and `github.com` | Zotero's own update check and download for the plugin |
 
 Every literature-database request carries a `User-Agent` naming the plugin and its maintainer's
-contact address, as those services ask; Crossref also gets your email if you typed one. Notes,
-PDF annotations and other papers' content are never sent. If you set a custom base URL for a
+contact address, as those services ask; Crossref also gets your email if you typed one. Notes, your
+tags, PDF annotations and other papers' content are never sent. If you set a custom base URL for a
 provider in the settings, requests for that provider go to that address instead.
 
 **Privacy modes.** The **Privacy** section's mode (Balanced by default) decides what may be sent

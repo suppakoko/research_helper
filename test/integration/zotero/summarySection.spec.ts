@@ -43,6 +43,12 @@
  * an item with no text is skipped with no call (FR-21), which a fake
  * `generate` never noticed.
  *
+ * **Changed 2026-11-17 (owner, `plan/00` §6 items 389(f), 392(a);
+ * `P7-T03` step 5).** The banner no longer draws the failure's text, even
+ * redacted: step 6 now asserts that neither the planted key, the provider's
+ * text nor a redaction mark is drawn, and that the code line holds machine
+ * values only.
+ *
  * **Unmeasured platform behaviour this spec relies on** (first run: the
  * build/Zotero owner's): `ZoteroPane.selectItem` driving the library item
  * pane; the item pane not being collapsed in the runner's profile;
@@ -867,14 +873,27 @@ describe("P3-T28 item-pane AI summary section", function () {
           () => isShown(sectionPart(shown, "error")),
           "the error state",
         );
-        const message = sectionPart(shown, "errorText")?.textContent ?? "";
+        // Machine values only (owner, items 389(f), 392(a); P7-T03 step 5):
+        // neither the provider's text nor its redacted form is drawn.
+        const banner = sectionPart(shown, "error")?.textContent ?? "";
+        const code = sectionPart(shown, "errorCode")?.textContent ?? "";
+        log(
+          `failure banner: code line "${code}", text id ${String(
+            sectionPart(shown, "errorText")?.getAttribute("data-l10n-id"),
+          )}`,
+        );
+        assert.isFalse(banner.includes(PLANTED), "the key is not drawn");
         assert.isFalse(
-          message.includes(PLANTED),
-          "the key-shaped string is redacted",
+          banner.includes("from provider"),
+          "the provider's text is not drawn",
+        );
+        assert.isFalse(
+          banner.includes("[redacted:"),
+          "no redacted free text is drawn",
         );
         assert.isTrue(
-          message.includes("[redacted:"),
-          "the redaction mark is shown",
+          /^(?:[A-Z][A-Z0-9_]*(?: · HTTP \d{3})?)?$/u.test(code),
+          "the code line holds machine values only",
         );
         assert.isTrue(isShown(sectionPart(shown, "retry")), "Retry is offered");
 

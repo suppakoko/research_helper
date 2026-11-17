@@ -422,6 +422,8 @@ So out of the box `RELEVANCE_SCREEN` runs on the same model as `PAPER_SUMMARY_*`
 | `{{ABSTRACT}}` | string | Normalized `abstractNote`. **Untrusted.** |
 | `{{JSON_SCHEMA}}` | string | Serialized `PaperSummary` schema |
 
+> **Changed 2026-11-17 (owner, `plan/00` §6 item 395(a), "태그는 안 보냄"; `plan/10` `P7-T34`; `docs/09` §3.2 row 3a).** `{{TAGS}}` is `not supplied` (`TAGS_NOT_SUPPLIED` in `src/pipeline/summarize/summarizeItem.ts`) unless the privacy policy allows collection and tag names — full mode with its opt-in (`allowedInputScope`'s `collectionAndTagNames`) — and no v1.0 setting sets that opt-in, so every v1.0 summary request sends `not supplied`, tagged item or not. Only with the opt-in is the row above's rule applied: the tags joined by `, `, or `none`. This holds for §5 and for `CHUNK_REDUCE`, which take the same variables, and supersedes item (2) of the as-built note below for `{{TAGS}}`. The prompt files are unchanged. Because every variable is part of the summary cache key, the value changes for **every** item, tagged or not (an untagged item's was `none`), so each summary made before this change is made again, and paid for, on its next run; measured by `summarizeItem.test.ts`'s cache test.
+
 ### System prompt
 
 ```text

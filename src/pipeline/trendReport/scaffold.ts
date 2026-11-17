@@ -89,7 +89,11 @@ import {
 // A type import: critique.ts imports this module, so a value import would
 // make a cycle. The constant below is held to critique.ts's by its type.
 import type { CRITIQUE_TEXT_UNCHECKED_WARNING } from "./critique";
-import { doiUrl, printedDoiAddress } from "./exportMarkdown";
+import {
+  doiUrl,
+  needsSemanticScholarAttribution,
+  printedDoiAddress,
+} from "./exportMarkdown";
 import {
   fillLabel,
   reportLabels,
@@ -839,6 +843,11 @@ function bibliographyBody(
   const blocks = entries.map(
     (entry) => `[${String(entry.index)}] ${entryText(entry.text, entry.doi)}`,
   );
+  // Under the numbered entries, before the retracted list's heading
+  // (`P7-T35`; owner, `plan/00` §6 item 395(c)).
+  if (needsSemanticScholarAttribution(entries)) {
+    blocks.push(labels.semanticScholarAttribution);
+  }
   if (retracted.length > 0) {
     blocks.push(
       `### ${labels.retractedHeading}`,

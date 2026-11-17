@@ -4604,17 +4604,18 @@ describe("P7-T10 — the stored-data markup and strings", () => {
     );
   });
 
-  it("ships the sixteen ids in en-US, on the main-window surface, and only as drafts in ko-KR (G-41)", () => {
+  it("ships the sixteen ids in en-US, on the main-window surface, and live in ko-KR (G-41, item 397)", () => {
     const declared = new Set<string>(MAIN_WINDOW_MESSAGE_IDS);
     for (const id of P7T10_IDS) {
       expect(declared.has(id), id).toBe(true);
       expect(FTL, id).toMatch(new RegExp(`^${id} =`, "m"));
-      expect(KO_FTL, id).not.toMatch(new RegExp(`^${id} =`, "m"));
-      expect(KO_FTL, id).toMatch(new RegExp(`^# ${id} =`, "m"));
-      expect(KO_PENDING_REVIEW as readonly string[], id).toContain(id);
-      expect(KO_PRESENT as readonly string[], id).not.toContain(id);
+      // Approved by the owner on 2026-11-17 (G-41, plan/00 §6 item 397): live, not a draft.
+      expect(KO_FTL, id).toMatch(new RegExp(`^${id} =`, "m"));
+      expect(KO_FTL, id).not.toMatch(new RegExp(`^# ${id} =`, "m"));
+      expect(KO_PRESENT as readonly string[], id).toContain(id);
+      expect(KO_PENDING_REVIEW as readonly string[], id).not.toContain(id);
     }
-    expect(KO_FTL).toContain(
+    expect(KO_FTL).not.toContain(
       "# Draft (coordinator, 2026-11-17, not adopted; G-41, P7-T10):",
     );
   });
@@ -4966,7 +4967,7 @@ describe("P7-T11 — the removal's markup and strings", () => {
     expect(SCRIPT).toContain('removeContent: "rh-remove-content"');
   });
 
-  it("ships the four ids in en-US, on the main-window surface, and only as drafts in ko-KR (G-41)", () => {
+  it("ships the four ids in en-US, on the main-window surface, and live in ko-KR (G-41, item 397)", () => {
     const declared = new Set<string>(MAIN_WINDOW_MESSAGE_IDS);
     for (const id of [
       PREFERENCES_L10N.removeContent,
@@ -4976,11 +4977,13 @@ describe("P7-T11 — the removal's markup and strings", () => {
     ]) {
       expect(declared.has(id), id).toBe(true);
       expect(FTL, id).toMatch(new RegExp(`^${id} =`, "m"));
-      expect(KO_FTL, id).not.toMatch(new RegExp(`^${id} =`, "m"));
-      expect(KO_FTL, id).toMatch(new RegExp(`^# ${id} =`, "m"));
-      expect(KO_PENDING_REVIEW as readonly string[], id).toContain(id);
+      // Approved by the owner on 2026-11-17 (G-41, plan/00 §6 item 397): live, not a draft.
+      expect(KO_FTL, id).toMatch(new RegExp(`^${id} =`, "m"));
+      expect(KO_FTL, id).not.toMatch(new RegExp(`^# ${id} =`, "m"));
+      expect(KO_PRESENT as readonly string[], id).toContain(id);
+      expect(KO_PENDING_REVIEW as readonly string[], id).not.toContain(id);
     }
-    expect(KO_FTL).toContain(
+    expect(KO_FTL).not.toContain(
       "# Draft (coordinator, 2026-11-17, not adopted; G-41, P7-T11):",
     );
   });

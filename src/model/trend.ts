@@ -318,6 +318,14 @@ export interface BibliographyEntry {
    */
   readonly text: string;
   readonly doi: Doi | undefined;
+  /**
+   * `true` when the item's record came from Semantic Scholar: its `extra` names `semanticscholar` on
+   * the `rh-sources` line, or carries an `rh-s2-corpus-id` line. A report whose bibliography holds
+   * one prints Semantic Scholar's attribution under its references (`docs/09` §7, §5.3; owner,
+   * 2026-11-17, `plan/00` §6 item 395(c)). Absent on a report stored before 2026-11-17, and read
+   * as `false`.
+   */
+  readonly semanticScholar?: boolean;
 }
 
 /** One entry of the unnumbered "Retracted — not used in this report" list. */

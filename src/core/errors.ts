@@ -193,6 +193,32 @@ export function redactUrl(url: string): string {
 }
 
 /**
+ * The debug-output line for a failure the add-on's teardown scope reports
+ * (`src/addon.ts`'s `onError`, handed to `createScope`): the scope's message,
+ * then the error's message and stack, the whole line passed through
+ * {@link redact} (owner, 2026-11-17, `plan/00` §6 item 395(d), `P7-T36`;
+ * `docs/09` §2.1). A teardown error can carry a request's text — a failed
+ * provider call's message, a header echoed into a stack — and this line goes
+ * to `Zotero.debug`, which the user can paste into a bug report.
+ *
+ * @param addonName - the add-on's name, which prefixes every line it writes
+ * @param message - what the scope was doing
+ * @param error - what it caught; not necessarily an `Error`
+ * @returns the line, with every credential-shaped run redacted
+ */
+export function teardownErrorLine(
+  addonName: string,
+  message: string,
+  error: unknown,
+): string {
+  const detail =
+    error instanceof Error
+      ? `${error.message}\n${error.stack ?? "(no stack)"}`
+      : String(error);
+  return redact(`[${addonName}] ${message}: ${detail}`);
+}
+
+/**
  * A parameter map with every credential-named entry **removed**, so a request
  * body's loggable form can be rendered from the original values.
  *
