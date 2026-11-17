@@ -1474,6 +1474,9 @@ Run on **Windows, macOS, and Linux** for a minor or major release; Windows plus 
   a message and no stack trace, but **only the keyword search shows `rh-error-offline`**: the report window shows its
   generic failure line, the related window its error panel with the code `SOURCE` and each list "failed (OFFLINE)",
   and the summarize window a "— failed" row. Open at `plan/00` §6 item 393; this line is not met until it is settled.
+  *Decided 2026-11-17 (owner, `plan/00` §6 item 393(d)):* `plan/10` `P7-T33` shows `rh-error-offline` in the report, related and
+  summarize windows too, and `offline.spec.ts` asserts the offline text in each; `docs/07` §10.5's probe, pause,
+  breaker and badge are a later-release candidate. The line is checked again on the release candidate.
 
 ### 8.8 Resources and stability
 

@@ -6,7 +6,7 @@
 > §8 item 7). Every card is `TODO`. Like `plan/09`, this file has had **no independent review** yet;
 > the author's report is `plan/reports/P7-decomposition.md`, and §0.4 lists the lines the owner still
 > has to answer. *Updated 2026-11-16, later (`plan/00` §6 item 381): the owner answered §0.4's lines 18–23; no
-> line is open now, and line 20 added `P7-T32` (0.75 d), so the file holds 32 cards summing to 29.25 d.* The card sum replaced `docs/11`'s scaled 21–29 d on 2026-11-16 at the five places
+> line is open now, and line 20 added `P7-T32` (0.75 d), so the file holds 32 cards summing to 29.25 d.* *Updated 2026-11-17 (`plan/00` §6 item 393(d)): the owner answered item 393, and `P7-T33` (0.5 d) was added, so the file holds 33 cards summing to 29.75 d.* The card sum replaced `docs/11`'s scaled 21–29 d on 2026-11-16 at the five places
 > `plan/README.md` §7 names (`docs/11` §1–§2, `plan/00` §1, `plan/05` §4, now a pointer here).
 >
 > **What this file is.** The task-card decomposition of `docs/11-implementation-roadmap.md` §1
@@ -78,14 +78,14 @@ documents, `plan/reports/` and the tree:
 mitigation by `P7-T31`; R-15 was already retired on 2026-09-16 (`P0-T27`) and `P7-T30` re-confirms it
 on a real release; R-1 moves to ongoing handling with `P7-T22`'s job.
 
-**Effort.** **29.25 developer-days over 32 cards** (§1), so the band these cards imply is
-**29.25–41 d** (29.25 × 1.4 = 40.95 → 41). Against the scaled 21–29 d `docs/11` published before this
-file, the low end is **+39 %** (29.25 ÷ 21 = 1.393) and 1 % above the scaled top (29.25 ÷ 29 = 1.009)
+**Effort.** **29.75 developer-days over 33 cards** (§1), so the band these cards imply is
+**29.75–42 d** (29.75 × 1.4 = 41.65 → 42). Against the scaled 21–29 d `docs/11` published before this
+file, the low end is **+42 %** (29.75 ÷ 21 = 1.417) and 3 % above the scaled top (29.75 ÷ 29 = 1.026)
 — above the ~30 % `plan/README.md` §7 calls a signal to re-estimate the phase in `docs/11`, which was
-done. Against the old 10–14 d band the low end is **+109 %** (29.25 ÷ 14 = 2.09). **Propagated
+done. Against the old 10–14 d band the low end is **+113 %** (29.75 ÷ 14 = 2.125). **Propagated
 2026-11-16** to `docs/11` §1–§2, `plan/00` §1 and `plan/05` §4. *Updated 2026-11-16, later (`plan/00` §6
 item 381): this read 28.50 d over 31 cards, 28.50–40 d, +36 %, 2 % below the scaled top and +104 %, before
-`P7-T32` (0.75 d) was added for §0.4 line 20; propagated the same day to the same five sites.* §3 says where the days went and where
+`P7-T32` (0.75 d) was added for §0.4 line 20; propagated the same day to the same five sites.* *Updated 2026-11-17 (`plan/00` §6 item 393(d)): this read 29.25 d over 32 cards, 29.25–41 d, +39 %, 1 % above the scaled top and +109 %, before `P7-T33` (0.5 d) was added for the owner's answer to item 393; propagated the same day to the same five sites.* §3 says where the days went and where
 the sum is still likely low.
 
 ### Phase definition of done
@@ -255,11 +255,14 @@ them (`plan/04` §0.2 item 10) may now be executed as the answer says. Every ans
 | `P7-T30` | Publish v1.0.0 and verify the upgrade from v0.9.0 | 0.5 | **Yes** |
 | `P7-T31` | Forum post and community-list submissions | 0.25 | **Yes** |
 | `P7-T32` | Gemini in balanced mode: warn and confirm, not refuse | 0.75 | none |
-| | **Total** | **29.25** | 10 gates |
+| `P7-T33` | Offline message in report, related and summarize windows | 0.5 | none |
+| | **Total** | **29.75** | 10 gates |
 
 *Updated 2026-11-16, later (`plan/00` §6 item 381): `P7-T32` added for §0.4 line 20; the total read 28.50. It is
 a new entry point that blocks `P7-T16`, and it does not lie on the critical path below (it ends at 0.75 d, before
 `P7-T16`'s other inputs; recompute with the script after `npm run index:derive`).*
+
+*Updated 2026-11-17 (`plan/00` §6 item 393(d)): `P7-T33` added for the owner's answer to item 393; the total read 29.25. It depends on `P7-T12` and `P7-T18` and blocks `P7-T03`; it ends at 2.75 d (1.25 + 1.0 + 0.5), before `P7-T03`'s other inputs, so it does not lie on the critical path below, which stays 14.5 d (recomputed by script the same day).*
 
 **Entry points** (no `Depends on`): `P7-T01`, `P7-T04`, `P7-T12`, `P7-T21`, `P7-T22`, `P7-T28`, and `P7-T32`
 (added 2026-11-16, `plan/00` §6 item 381). They
@@ -415,7 +418,7 @@ npm run l10n:check && npm run test:unit -- checkL10n && npm run lint:check
 |---|---|
 | **ID** | `P7-T03` |
 | **State** | `TODO` |
-| **Depends on** | `P7-T08`, `P7-T09`, `P7-T10`, `P7-T11`, `P7-T12`, `P7-T13` |
+| **Depends on** | `P7-T08`, `P7-T09`, `P7-T10`, `P7-T11`, `P7-T12`, `P7-T13`, `P7-T33` |
 | **Blocks** | `P7-T05`, `P7-T06` |
 | **Retires** | none |
 | **Implements** | `NFR-11`, part of `FR-55` |
@@ -475,6 +478,8 @@ section. Callers of `format.ts`: the dialogs, panes and view models it is wired 
 > already in this card's Files; no estimate change is claimed here, and the executing agent re-prices if it is not
 > small.
 
+
+*Updated 2026-11-17 (`plan/00` §6 item 393(d)): depends on `P7-T33`, which changes `src/ui/viewModels/reportViewModel.ts`, `src/ui/viewModels/relatedViewModel.ts` and `src/ui/dialogs/summarizeDialog.ts`, files this sweep also edits.*
 ---
 
 ### P7-T04 — Retire the spike command; keep its fixture in the tests
@@ -702,7 +707,7 @@ release checklist.
 | Field | Value |
 |---|---|
 | **ID** | `P7-T08` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T08.md`. Korean for 25 ids awaits `G-41`. |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T08.md`. Korean for 25 ids awaits `G-41`. *Updated 2026-11-17: the owner approved the 25 and they are live (`plan/00` §6 item 394).* |
 | **Depends on** | `P7-T01` |
 | **Blocks** | `P7-T03`, `P7-T09`, `P7-T17` |
 | **Retires** | none |
@@ -764,7 +769,7 @@ npm run typecheck && npm run lint:check && npm run test:unit -- preferencesPane 
 | Field | Value |
 |---|---|
 | **ID** | `P7-T09` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T09.md`. Korean for 12 ids awaits `G-41`. |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T09.md`. Korean for 12 ids awaits `G-41`. *Updated 2026-11-17: the owner approved the 12 and they are live (`plan/00` §6 item 394).* |
 | **Depends on** | `P7-T01`, `P7-T08` |
 | **Blocks** | `P7-T03`, `P7-T10`, `P7-T13` |
 | **Retires** | none |
@@ -819,7 +824,7 @@ npm run typecheck && npm run lint:check && npm run test:unit -- preferencesPane 
 | Field | Value |
 |---|---|
 | **ID** | `P7-T10` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T10.md`. Korean for 16 ids awaits `G-41`. |
 | **Depends on** | `P7-T09` |
 | **Blocks** | `P7-T03`, `P7-T11`, `P7-T16` |
 | **Retires** | none |
@@ -880,7 +885,7 @@ the pane's host, `onUninstall`.
 | Field | Value |
 |---|---|
 | **ID** | `P7-T11` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T11.md`. Korean for 4 ids awaits `G-41`. |
 | **Depends on** | `P7-T01`, `P7-T10` |
 | **Blocks** | `P7-T03`, `P7-T19` |
 | **Retires** | none |
@@ -954,7 +959,7 @@ host in `registerUI.ts`.
 | **ID** | `P7-T12` |
 | **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T12.md`. Korean for 23 ids awaits `G-41` (`plan/00` §6 item 389(b)). *Updated 2026-11-17: the owner approved the 23 and they are live (item 389(g)).* |
 | **Depends on** | none |
-| **Blocks** | `P7-T03`, `P7-T18` |
+| **Blocks** | `P7-T03`, `P7-T18`, `P7-T33` |
 | **Retires** | none |
 | **Implements** | `NFR-14` |
 | **Estimate** | 1.25 d |
@@ -1012,7 +1017,7 @@ npm run typecheck && npm run lint:check && npm run test:unit -- errorMessages ke
 | Field | Value |
 |---|---|
 | **ID** | `P7-T13` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T13.md`. Korean for 7 ids awaits `G-41`. |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T13.md`. Korean for 7 ids awaits `G-41`. *Updated 2026-11-17: the owner approved the 7 and they are live (`plan/00` §6 item 394).* |
 | **Depends on** | `P7-T01`, `P7-T09` |
 | **Blocks** | `P7-T03`, `P7-T14`, `P7-T15`, `P7-T19` |
 | **Retires** | none |
@@ -1173,7 +1178,7 @@ Then the owner's run of the written procedure.
 | Field | Value |
 |---|---|
 | **ID** | `P7-T16` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T16.md`. |
 | **Depends on** | `P7-T10`, `P7-T14`, `P7-T21`, `P7-T32` |
 | **Blocks** | `P7-T24`, `P7-T26` |
 | **Retires** | none |
@@ -1234,7 +1239,7 @@ npm audit --omit=dev; npm run build && npm run test:unit
 | Field | Value |
 |---|---|
 | **ID** | `P7-T17` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T17.md`. Korean for 6 ids awaits `G-41`. |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T17.md`. Korean for 6 ids awaits `G-41`. *Updated 2026-11-17: the owner approved the 6 and they are live (`plan/00` §6 item 394).* |
 | **Depends on** | `P7-T08` |
 | **Blocks** | `P7-T19`, `P7-T24` |
 | **Retires** | none |
@@ -1291,9 +1296,9 @@ npm run typecheck && npm run lint:check && npm run test:unit -- policyNotes pref
 | Field | Value |
 |---|---|
 | **ID** | `P7-T18` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T18.md`. `Do` step 1 is not met: owner question `plan/00` §6 item 393. |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T18.md`. `Do` step 1 is not met: owner question `plan/00` §6 item 393. *Updated 2026-11-17: the owner answered item 393 (393(d)); `P7-T33` builds the message.* |
 | **Depends on** | `P7-T12` |
-| **Blocks** | `P7-T24` |
+| **Blocks** | `P7-T24`, `P7-T33` |
 | **Retires** | none |
 | **Implements** | `NFR-9` |
 | **Estimate** | 1.0 d |
@@ -1338,7 +1343,7 @@ npm run test:integration -- offline
 | Field | Value |
 |---|---|
 | **ID** | `P7-T19` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T19.md`. |
 | **Depends on** | `P7-T11`, `P7-T13`, `P7-T17` |
 | **Blocks** | `P7-T20`, `P7-T23`, `P7-T26` |
 | **Retires** | none |
@@ -2003,6 +2008,81 @@ security review walks §7's "warned elsewhere" line against the final rule.
 
 ---
 
+### P7-T33 — Offline message in report, related and summarize windows
+
+| Field | Value |
+|---|---|
+| **ID** | `P7-T33` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T33.md`. |
+| **Depends on** | `P7-T12`, `P7-T18` |
+| **Blocks** | `P7-T03` |
+| **Retires** | none |
+| **Implements** | part of `NFR-9` |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** When a run fails because Zotero is offline, the report, related and summarize windows show
+`rh-error-offline`, the message the keyword search already shows, with no new string and no stack
+trace.
+
+> **DECIDED 2026-11-17 (owner, `plan/00` §6 item 393):** "세 창에도 같은 안내" — item 393(c)'s draft
+> answer. The three windows show the existing `rh-error-offline` message when a run fails offline.
+> `docs/07` §10.5's connectivity probe, offline pause, circuit breaker and badge become a
+> later-release candidate with no card (dated notes in `docs/07` §10.5, `docs/10` NFR-9 and
+> `docs/13` §8.7).
+
+**Read first.**
+- `plan/00` §6 item 393; `plan/reports/P7-T18.md`; `docs/07` §10.5 and its notes of 2026-11-17;
+  `docs/10` NFR-9
+- `failureView` and `drawFailure` in `src/ui/viewModels/relatedViewModel.ts`; `TrendReportStop` in
+  `src/ui/viewModels/reportViewModel.ts`; `publishReportWindowCommands` and
+  `createSummarizeSession` in `src/bootstrap/registerUI.ts`; `OfflineError` in `src/core/errors.ts`
+
+**Files.**
+- modify `src/ui/viewModels/relatedViewModel.ts` (`failedOffline`; `failureView` takes the lists'
+  states; caller: `drawFailure` in the same file)
+- modify `src/ui/viewModels/reportViewModel.ts` (`stopForFailure`; caller: `finishRun` and
+  `runJob`'s catch in `publishReportWindowCommands`)
+- modify `src/ui/dialogs/summarizeDialog.ts` (`SUMMARIZE_OFFLINE_L10N`, `isOfflineFailure`, the
+  model's `offline` line; caller: `createSummarizeSession`)
+- modify `src/bootstrap/registerUI.ts` (constructs the report window's commands and the summarize
+  session), `addon/content/summarize.{xhtml,js}` (the `rh-summarize-offline` line)
+- modify `test/unit/ui/relatedViewModel.test.ts`, `test/unit/ui/reportViewModel.test.ts`; create
+  `test/unit/ui/summarizeDialog.test.ts`; modify `test/integration/offline.spec.ts`
+
+**Do.**
+1. Related: a run that ends `OFFLINE`, or ends `SOURCE` with at least one failed list and every
+   failed list `OFFLINE`, draws `rh-error-offline` as the error panel's headline, keeps the code in
+   the disclosure and offers Retry.
+2. Report: a run that ends `failed` with code `OFFLINE` and no stop of its own gets
+   `rh-error-offline` as its stop reason, under the window's own outcome line.
+3. Summarize: when a paper or the run fails with code `OFFLINE`, the window shows
+   `rh-error-offline` once per run.
+4. Only the error's `code` is read, never a message or a `detail` (`plan/00` §6 item 389(f)).
+5. Tighten `offline.spec.ts`'s three "a message" assertions to the offline text.
+
+**Do NOT.**
+- Do **not** add a string: `rh-error-offline` ships in both bundles.
+- Do **not** build the probe, the pause, the breaker or the badge.
+
+**Done when.**
+- [ ] Unit tests show each window's offline reading, and that other failures keep their own text.
+- [ ] `offline.spec.ts` asserts the offline text in all three windows (three runs).
+- [ ] Mutation sweep per `plan/08` §0.2 item 24.
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test:unit -- relatedViewModel reportViewModel summarizeDialog && npm run test:integration -- offline
+```
+
+**Notes.** Added 2026-11-17 (`plan/00` §6 item 393(d)) for the owner's answer. Priced 0.5 d: three
+small readings of an existing error code and one existing string, with the integration spec already
+written by `P7-T18`. Callers: `drawFailure` (related), `finishRun` and `runJob`'s catch in
+`publishReportWindowCommands` (report), `createSummarizeSession` (summarize); constructed in
+`src/bootstrap/registerUI.ts`. It blocks `P7-T03` because that sweep edits the same three files.
+
+---
+
 ## 3. Estimate reconciliation
 
 Where the 28.50 d sit against `plan/05` §4.1's work areas (now §5.1):
@@ -2022,7 +2102,8 @@ Where the 28.50 d sit against `plan/05` §4.1's work areas (now §5.1):
 | W7-11 Distribution | `P7-T23`, `P7-T31` | 0.75 |
 | Not a work area: documents first, NCBI, the sign-off | `P7-T01`, `P7-T28`, `P7-T29` | 1.25 |
 | Not a work area: the owner's answer to §0.4 line 20 (added 2026-11-16, item 381) | `P7-T32` | 0.75 |
-| | **Total** | **29.25** |
+| Not a work area: the owner's answer to item 393 (added 2026-11-17, item 393(d)) | `P7-T33` | 0.5 |
+| | **Total** | **29.75** |
 
 **Where the sum is likely low.** (1) `P7-T03` and `P7-T06`: a sweep is priced on the windows that
 exist today; Phases 5 and 6 add windows not yet built, and their findings are counted only as

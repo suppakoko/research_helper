@@ -205,6 +205,7 @@ import type { ScreeningEstimateRequest } from "../ui/viewModels/searchImportView
 import {
   LLM_CREDENTIALS,
   PREFERENCES_API_PROPERTY,
+  PREFERENCES_L10N,
   PREFERENCES_PANE_DESCRIPTION,
   createPreferencesHost,
   preferencePaneOptions,
@@ -212,9 +213,26 @@ import {
   type ModelSuggestions,
   type PreferencesHostApi,
   type AdvancedPort,
+  type ContentRemovalPort,
+  type ContentSummary,
+  type DataResetPort,
   type DiagnosticsPort,
   type SettingsPort,
 } from "../ui/prefs/preferencesPane";
+import {
+  clearData,
+  countData,
+  deleteAllPluginData,
+  reportAudioKeys,
+  resetPreferences,
+  type DataResetPorts,
+} from "../core/dataReset";
+import {
+  findAllPluginContent,
+  pluginContentLibraryIDs,
+  trashPluginContent,
+  type PluginContent,
+} from "../zotero/notes";
 import {
   createCancellationTokenSource,
   type CancellationTokenSource,
@@ -248,6 +266,7 @@ import { openZoteroProgressWindow } from "../zotero/progressWindow";
 import {
   REMOVE_NOTES_L10N,
   buildSummarizeWindowModel,
+  isOfflineFailure,
   confirmSummarizeRun,
   openSummarizeWindow,
   pauseQuestionLine,
@@ -277,7 +296,7 @@ import {
   readCollectionPrivacySettings,
   writeCollectionPrivacySettings,
 } from "../pipeline/shared/privacyPolicy";
-import { ConfigurationError } from "../core/errors";
+import { ConfigurationError, ResearchHelperError } from "../core/errors";
 import type { FluentLine } from "../ui/dialogs/costConfirmDialog";
 import {
   createProvenanceIndex,
@@ -286,6 +305,7 @@ import {
 } from "../core/provenance";
 import {
   createCacheBlobStore,
+  createReportMarkdownFiles,
   openPluginDatabase,
   pluginDatabasePath,
   revealPluginDatabase,
@@ -345,6 +365,7 @@ import {
   isMainWindowLine,
   pausedJobQuestion,
   reduceReportRun,
+  stopForFailure,
   reportPauseQuestion,
   askOnce,
   interfaceReportLanguage,
@@ -1519,6 +1540,140 @@ export function preferencesAdvancedPort(
 }
 
 /**
+ * The ports `src/core/dataReset.ts` runs over: the plugin's own open
+ * connection, its cache and the report Markdown files; `undefined` when the
+ * plugin database is not open.
+ */
+async function openDataResetPorts(
+  graph: Pick<ServiceGraph, "cache" | "database">,
+): Promise<DataResetPorts | undefined> {
+  const open = await graph.database.ready;
+  return open === undefined
+    ? undefined
+    : {
+        connection: open.connection,
+        cache: graph.cache,
+        reportFiles: createReportMarkdownFiles(),
+      };
+}
+
+/**
+ * `P7-T11`: "Remove all Research Helper content" (`plan/00` §6 item 380,
+ * decision 2). `find` reads the audio keys the stored reports name, then
+ * every user and group library (`findAllPluginContent`), then the database's
+ * counts, and writes nothing; `remove` moves what was found to Zotero's
+ * trash, each item checked again (`trashPluginContent`), then deletes the
+ * stored data, keeping the rows of jobs that have not ended, as the pane's
+ * "Delete all plugin data" does. A library the user cannot edit is counted
+ * apart and named, never written. Library names and folders reach the
+ * confirmation only; nothing here logs one. Never run from `uninstall()`.
+ */
+export function preferencesContentRemovalPort(
+  graph: Pick<ServiceGraph, "cache" | "database">,
+): ContentRemovalPort {
+  return {
+    find: async () => {
+      const ports = await openDataResetPorts(graph);
+      if (ports === undefined) return undefined;
+      const audio = await reportAudioKeys(ports.connection);
+      const content = await findAllPluginContent(
+        pluginContentLibraryIDs(),
+        audio,
+      );
+      const counts = await countData(ports, "all");
+      let generated = 0;
+      let provenance = 0;
+      let audioCount = 0;
+      const libraries: string[] = [];
+      const skipped: string[] = [];
+      const folders = new Set<string>();
+      for (const library of content.libraries) {
+        const held =
+          library.generatedNoteIDs.length +
+          library.provenanceNoteIDs.length +
+          library.audioAttachmentIDs.length;
+        if (held === 0) continue;
+        if (!library.editable) {
+          skipped.push(library.name);
+          continue;
+        }
+        libraries.push(library.name);
+        generated += library.generatedNoteIDs.length;
+        provenance += library.provenanceNoteIDs.length;
+        audioCount += library.audioAttachmentIDs.length;
+        for (const folder of library.linkedFolders) folders.add(folder);
+      }
+      const summary: ContentSummary = {
+        generated,
+        provenance,
+        audio: audioCount,
+        records: counts.rows + counts.entries,
+        libraries,
+        skipped,
+        linkedFolders: [...folders],
+      };
+      return { summary, plan: content };
+    },
+    remove: async (plan) => {
+      const ports = await openDataResetPorts(graph);
+      if (ports === undefined) return undefined;
+      const moved = await trashPluginContent(plan as PluginContent);
+      const deleted = await deleteAllPluginData(ports, {
+        keepActiveJobs: true,
+      });
+      return { moved, records: deleted.rows + deleted.entries };
+    },
+  };
+}
+
+/**
+ * `P7-T10`: the pane's stored-data actions, over the plugin's own open
+ * connection and its cache (`src/core/dataReset.ts`), and "Reset to defaults"
+ * over the preference store. The confirmation is Zotero's modal prompt over
+ * the preferences window, as `removeGeneratedNotesCommand`'s is. Nothing
+ * here logs a path, a value or a count beyond what the host logs.
+ */
+export function preferencesDataResetPort(
+  graph: Pick<ServiceGraph, "cache" | "database" | "prefs">,
+): DataResetPort {
+  const ports = () => openDataResetPorts(graph);
+  return {
+    count: async (kind) => {
+      const bound = await ports();
+      return bound === undefined ? undefined : countData(bound, kind);
+    },
+    clear: async (kind) => {
+      const bound = await ports();
+      return bound === undefined ? undefined : clearData(bound, kind);
+    },
+    resetPreferences: () => resetPreferences(graph.prefs, PREFS),
+    confirm: async (line, parent) => {
+      const l10n = new Localization([MAIN_WINDOW_FTL]);
+      const title =
+        (await formatValue(l10n, PREFERENCES_L10N.dataConfirmTitle)) ??
+        "Research Helper";
+      // A FluentLine names one id of a union, so its arguments cannot be
+      // typed per message here; the host built them for that id.
+      const message = await (
+        formatValue as unknown as (
+          formatter: Parameters<typeof formatValue>[0],
+          id: string,
+          args?: FluentLine["args"],
+        ) => Promise<string | undefined>
+      )(l10n, line.id, line.args);
+      // No message, no question: a confirmation that cannot say what it
+      // removes is not asked.
+      if (message === undefined) return false;
+      return Services.prompt.confirm(
+        parent as mozIDOMWindowProxy,
+        title,
+        message,
+      );
+    },
+  };
+}
+
+/**
  * Preferences whose values the diagnostics text shows only as "set" or "not
  * set": every `secret: true` row (none ships; the schema forbids one with a
  * writer), the contact address (the user's email, which may appear only in
@@ -1623,6 +1778,8 @@ async function publishPreferencesHost(
     advanced: preferencesAdvancedPort(graph),
     policyNotes: POLICY_NOTES,
     diagnostics: preferencesDiagnosticsPort(graph, ring),
+    dataReset: preferencesDataResetPort(graph),
+    contentRemoval: preferencesContentRemovalPort(graph),
     clock: graph.clock,
     logger: graph.logger.child({ surface: "preferences" }),
   });
@@ -2310,12 +2467,15 @@ function createSummarizeSession(
       );
       let notice: FluentLine | undefined;
       let eta: number | undefined;
+      // `P7-T33` (`plan/00` §6 item 393): a paper or the run failed offline.
+      let offline = false;
       const draw = (): void => {
         sink.render(
           buildSummarizeWindowModel(view, {
             running: true,
             etaSeconds: eta,
             notice,
+            offline,
           }),
         );
       };
@@ -2334,6 +2494,12 @@ function createSummarizeSession(
           return result.answer;
         },
         ask: (question) => askPausedRun(graph, sink, question),
+        itemFailed: (_itemKey, error) => {
+          if (!offline && isOfflineFailure(error)) {
+            offline = true;
+            draw();
+          }
+        },
       };
       let outcome: SummarizeWindowOutcome;
       let stoppedAt: number | undefined;
@@ -2410,6 +2576,9 @@ function createSummarizeSession(
             stoppedAt = output.stoppedAt;
             summaries = output.summaries;
             view = output.view;
+            if (output.outcome === "failed" && isOfflineFailure(output.error)) {
+              offline = true;
+            }
             job.progress.reporter.done(
               output.outcome === "succeeded"
                 ? "succeeded"
@@ -2429,6 +2598,7 @@ function createSummarizeSession(
           : error instanceof ConfigurationError
             ? "unavailable"
             : "failed";
+        if (outcome === "failed" && isOfflineFailure(error)) offline = true;
         logger.warn("the summarize run stopped", {
           reason: error instanceof Error ? error.name : typeof error,
         });
@@ -2442,6 +2612,7 @@ function createSummarizeSession(
           {
             running: false,
             notice,
+            offline,
             outcome: { kind: outcome, stoppedAt },
             exportAvailable: !view.notesWritable && summaries.length > 0,
           },
@@ -2946,7 +3117,8 @@ function createReportWindowSession(
     dispatch({
       kind: "finished",
       outcome: output.outcome,
-      stop: output.stop,
+      // `P7-T33`: a run that failed offline says so (`plan/00` §6 item 393).
+      stop: stopForFailure(output.outcome, output.stop, output.error?.code),
       markdown: showing === undefined ? undefined : finalText(showing.report),
       note: showing === undefined ? undefined : noteOf(showing),
       ...(delivered.length > 1 && {
@@ -3062,16 +3234,23 @@ function createReportWindowSession(
       logger.warn("the report run stopped", {
         reason: error instanceof Error ? error.name : typeof error,
       });
+      const outcome =
+        running.token.reason?.kind === "shutdown"
+          ? "interrupted"
+          : running.token.isCancellationRequested
+            ? "cancelled"
+            : error instanceof ConfigurationError
+              ? "unavailable"
+              : "failed";
       dispatch({
         kind: "finished",
-        outcome:
-          running.token.reason?.kind === "shutdown"
-            ? "interrupted"
-            : running.token.isCancellationRequested
-              ? "cancelled"
-              : error instanceof ConfigurationError
-                ? "unavailable"
-                : "failed",
+        outcome,
+        // `P7-T33`: an error thrown offline says so (`plan/00` §6 item 393).
+        stop: stopForFailure(
+          outcome,
+          undefined,
+          error instanceof ResearchHelperError ? error.code : undefined,
+        ),
       });
     } finally {
       if (source === running) source = undefined;

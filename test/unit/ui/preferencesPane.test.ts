@@ -31,8 +31,18 @@ import {
   type SecretId,
   type SecretStore,
 } from "../../../src/core/secretStore";
-import { MAIN_WINDOW_MESSAGE_IDS } from "../../../src/i18n/keys";
+import {
+  KO_PENDING_REVIEW,
+  KO_PRESENT,
+  MAIN_WINDOW_MESSAGE_IDS,
+} from "../../../src/i18n/keys";
 import { DEFAULT_BASE_URLS } from "../../../src/llm/shared/baseUrl";
+import {
+  DATA_KINDS,
+  type DataCounts,
+  type DataKind,
+} from "../../../src/core/dataReset";
+import type { FluentLine } from "../../../src/ui/dialogs/costConfirmDialog";
 import type { ProviderId } from "../../../src/model/ids";
 import { PREF_KEYS, qualifiedPrefKey } from "../../../src/prefs/keys";
 import { PREFS } from "../../../src/prefs/schema";
@@ -42,8 +52,16 @@ import {
   PANE_BOUND_SETTINGS,
   PANE_MENU_VALUES,
   type AdvancedPort,
+  type DataResetPort,
   type DiagnosticsPort,
   type SettingsPort,
+  DATA_CONFIRM_L10N,
+  contentConfirmLine,
+  dataConfirmLine,
+  removedCount,
+  type ContentRemovalPort,
+  type ContentSummary,
+  isDataKind,
   cacheUsage,
   policyLines,
   NCBI_TEST_PMID,
@@ -3272,16 +3290,19 @@ describe("P7-T08 — the pane's Search, Report & audio and Privacy sections", ()
     );
   });
 
-  it("ships every P7-T08 id in en-US, declared on the main-window surface, and only as a commented draft in ko-KR", () => {
+  it("ships every P7-T08 id in en-US, declared on the main-window surface, and live in ko-KR (G-41, item 394)", () => {
     expect(P7T08_IDS).toHaveLength(25);
     const declared = new Set<string>(MAIN_WINDOW_MESSAGE_IDS);
     for (const id of P7T08_IDS) {
       expect(declared.has(id), id).toBe(true);
       expect(FTL, id).toMatch(new RegExp(`^${id} =`, "m"));
-      expect(KO_FTL, id).not.toMatch(new RegExp(`^${id} =`, "m"));
-      expect(KO_FTL, id).toMatch(new RegExp(`^# ${id} =`, "m"));
+      // Approved by the owner on 2026-11-17 (G-41, plan/00 §6 item 394): live, not a draft.
+      expect(KO_FTL, id).toMatch(new RegExp(`^${id} =`, "m"));
+      expect(KO_FTL, id).not.toMatch(new RegExp(`^# ${id} =`, "m"));
+      expect(KO_PRESENT as readonly string[], id).toContain(id);
+      expect(KO_PENDING_REVIEW as readonly string[], id).not.toContain(id);
     }
-    expect(KO_FTL).toContain(
+    expect(KO_FTL).not.toContain(
       "# Draft (coordinator, 2026-11-17, not adopted; G-41, P7-T08):",
     );
     // Every data-l10n-id in the three groupboxes is a PREFERENCES_L10N id.
@@ -3681,16 +3702,19 @@ describe("P7-T09 — the Advanced section's markup and strings", () => {
     expect(box).toContain('id="rh-data-location-show"');
   });
 
-  it("ships every P7-T09 id in en-US, on the main-window surface, and only as a commented draft in ko-KR", () => {
+  it("ships every P7-T09 id in en-US, on the main-window surface, and live in ko-KR (G-41, item 394)", () => {
     expect(P7T09_IDS).toHaveLength(12);
     const declared = new Set<string>(MAIN_WINDOW_MESSAGE_IDS);
     for (const id of P7T09_IDS) {
       expect(declared.has(id), id).toBe(true);
       expect(FTL, id).toMatch(new RegExp(`^${id} =`, "m"));
-      expect(KO_FTL, id).not.toMatch(new RegExp(`^${id} =`, "m"));
-      expect(KO_FTL, id).toMatch(new RegExp(`^# ${id} =`, "m"));
+      // Approved by the owner on 2026-11-17 (G-41, plan/00 §6 item 394): live, not a draft.
+      expect(KO_FTL, id).toMatch(new RegExp(`^${id} =`, "m"));
+      expect(KO_FTL, id).not.toMatch(new RegExp(`^# ${id} =`, "m"));
+      expect(KO_PRESENT as readonly string[], id).toContain(id);
+      expect(KO_PENDING_REVIEW as readonly string[], id).not.toContain(id);
     }
-    expect(KO_FTL).toContain(
+    expect(KO_FTL).not.toContain(
       "# Draft (coordinator, 2026-11-17, not adopted; G-41, P7-T09):",
     );
     const known = new Set<string>(Object.values(PREFERENCES_L10N));
@@ -4114,7 +4138,7 @@ describe("P7-T17 — the controller's provider-policy lines", () => {
     }
   });
 
-  it("ships the six ids in en-US, on the main-window surface, and only as drafts in ko-KR", () => {
+  it("ships the six ids in en-US, on the main-window surface, and live in ko-KR (G-41, item 394)", () => {
     const ids = [
       PREFERENCES_L10N.retentionTitle,
       PREFERENCES_L10N.retentionOpenai,
@@ -4127,10 +4151,13 @@ describe("P7-T17 — the controller's provider-policy lines", () => {
     for (const id of ids) {
       expect(declared.has(id), id).toBe(true);
       expect(FTL, id).toMatch(new RegExp(`^${id} =`, "m"));
-      expect(KO_FTL, id).not.toMatch(new RegExp(`^${id} =`, "m"));
-      expect(KO_FTL, id).toMatch(new RegExp(`^# ${id} =`, "m"));
+      // Approved by the owner on 2026-11-17 (G-41, plan/00 §6 item 394): live, not a draft.
+      expect(KO_FTL, id).toMatch(new RegExp(`^${id} =`, "m"));
+      expect(KO_FTL, id).not.toMatch(new RegExp(`^# ${id} =`, "m"));
+      expect(KO_PRESENT as readonly string[], id).toContain(id);
+      expect(KO_PENDING_REVIEW as readonly string[], id).not.toContain(id);
     }
-    expect(KO_FTL).toContain(
+    expect(KO_FTL).not.toContain(
       "# Draft (coordinator, 2026-11-17, not adopted; G-41, P7-T17):",
     );
   });
@@ -4205,7 +4232,7 @@ describe("P7-T13 — the diagnostics markup and strings", () => {
     expect(box).toMatch(/id="rh-diagnostics-status"[^>]*role="status"/);
   });
 
-  it("ships the seven ids in en-US, on the main-window surface, and only as drafts in ko-KR; the note says no key and no paper content", () => {
+  it("ships the seven ids in en-US, on the main-window surface, and live in ko-KR (G-41, item 394); the note says no key and no paper content", () => {
     const ids = [
       PREFERENCES_L10N.diagnosticsTitle,
       PREFERENCES_L10N.diagnosticsNote,
@@ -4219,10 +4246,13 @@ describe("P7-T13 — the diagnostics markup and strings", () => {
     for (const id of ids) {
       expect(declared.has(id), id).toBe(true);
       expect(FTL, id).toMatch(new RegExp(`^${id} =`, "m"));
-      expect(KO_FTL, id).not.toMatch(new RegExp(`^${id} =`, "m"));
-      expect(KO_FTL, id).toMatch(new RegExp(`^# ${id} =`, "m"));
+      // Approved by the owner on 2026-11-17 (G-41, plan/00 §6 item 394): live, not a draft.
+      expect(KO_FTL, id).toMatch(new RegExp(`^${id} =`, "m"));
+      expect(KO_FTL, id).not.toMatch(new RegExp(`^# ${id} =`, "m"));
+      expect(KO_PRESENT as readonly string[], id).toContain(id);
+      expect(KO_PENDING_REVIEW as readonly string[], id).not.toContain(id);
     }
-    expect(KO_FTL).toContain(
+    expect(KO_FTL).not.toContain(
       "# Draft (coordinator, 2026-11-17, not adopted; G-41, P7-T13):",
     );
     expect(FTL).toMatch(
@@ -4439,5 +4469,691 @@ describe("P7-T13 — the controller's diagnostics actions", () => {
     h.byId("rh-diagnostics-copy").fire("command");
     await flush();
     expect(port.copies).toEqual([DIAGNOSTICS_TEXT]);
+  });
+});
+
+/* ------------------------------------- P7-T10: the stored-data actions */
+
+/** The whole en-US entry for `id`, selectors and all, up to the next entry. */
+function ftlEntry(id: string): string {
+  const at = FTL.search(new RegExp(`^${id} =`, "m"));
+  expect(at, id).toBeGreaterThan(-1);
+  const rest = FTL.slice(at + id.length);
+  const next = rest.search(/\n(?:[a-z#]|\n)/);
+  return rest.slice(0, next === -1 ? undefined : next);
+}
+
+const P7T10_IDS = [
+  PREFERENCES_L10N.dataTitle,
+  PREFERENCES_L10N.dataNote,
+  PREFERENCES_L10N.clearResponses,
+  PREFERENCES_L10N.clearSummaries,
+  PREFERENCES_L10N.clearJobs,
+  PREFERENCES_L10N.clearEmbeddings,
+  PREFERENCES_L10N.deleteAllData,
+  PREFERENCES_L10N.resetDefaults,
+  PREFERENCES_L10N.dataConfirmTitle,
+  PREFERENCES_L10N.confirmResponses,
+  PREFERENCES_L10N.confirmSummaries,
+  PREFERENCES_L10N.confirmJobs,
+  PREFERENCES_L10N.confirmEmbeddings,
+  PREFERENCES_L10N.confirmDeleteAll,
+  PREFERENCES_L10N.confirmReset,
+  PREFERENCES_L10N.dataStatus,
+];
+
+interface MemoryDataResetPort extends DataResetPort {
+  readonly counted: DataKind[];
+  readonly cleared: DataKind[];
+  readonly asked: { line: FluentLine; parent: unknown }[];
+  resets: number;
+}
+
+const COUNTS: DataCounts = { rows: 3, entries: 4, bytes: 2 * 1024 * 1024 };
+
+function dataResetPort(
+  options: {
+    counts?: DataCounts | undefined;
+    agree?: boolean;
+    clearFails?: boolean;
+    open?: boolean;
+  } = {},
+): MemoryDataResetPort {
+  const open = options.open ?? true;
+  const port: MemoryDataResetPort = {
+    counted: [],
+    cleared: [],
+    asked: [],
+    resets: 0,
+    count: (kind) => {
+      port.counted.push(kind);
+      return Promise.resolve(
+        open ? ("counts" in options ? options.counts : COUNTS) : undefined,
+      );
+    },
+    clear: (kind) => {
+      port.cleared.push(kind);
+      if (options.clearFails === true) {
+        return Promise.reject(new Error("SQLITE_BUSY at C:\\Users\\someone"));
+      }
+      return Promise.resolve(open ? COUNTS : undefined);
+    },
+    resetPreferences: () => {
+      port.resets += 1;
+      return 42;
+    },
+    confirm: (line, parent) => {
+      port.asked.push({ line, parent });
+      return Promise.resolve(options.agree ?? true);
+    },
+  };
+  return port;
+}
+
+function dataHost(port?: DataResetPort) {
+  const sink = recordingSink();
+  const clock = createManualClock(1_760_000_000_000);
+  const host = createPreferencesHost({
+    secrets: memoryStore(),
+    request: () => Promise.reject(new Error("no request in this test")),
+    getBackendPref: () => OS_KEYSTORE_PREF_VALUE,
+    providerPrefs: {
+      getActiveProvider: () => "openrouter",
+      getBaseUrl: () => "",
+      setBaseUrl: () => undefined,
+    },
+    ...(port !== undefined && { dataReset: port }),
+    clock,
+    logger: createLogger({ sink, clock, level: "debug" }),
+  });
+  return { host, sink };
+}
+
+describe("P7-T10 — the stored-data markup and strings", () => {
+  it("draws the five clear buttons, the reset button and a hidden status line in rh-prefs-advanced", () => {
+    const box = groupbox("rh-prefs-advanced");
+    for (const id of [
+      "rh-data-title",
+      "rh-clear-responses",
+      "rh-clear-summaries",
+      "rh-clear-jobs",
+      "rh-clear-embeddings",
+      "rh-delete-all-data",
+      "rh-reset-defaults",
+    ]) {
+      expect(box, id).toContain(`id="${id}"`);
+    }
+    expect(box).toMatch(
+      /id="rh-data-status"[^>]*role="status"[^>]*hidden="true"/,
+    );
+  });
+
+  it("gives each button the kind it clears, one per DATA_KINDS member", () => {
+    const pairs = [
+      ...SCRIPT.matchAll(/"(rh-(?:clear|delete)-[a-z-]+)": "([a-z-]+)"/g),
+    ].map((m) => [m[1], m[2]]);
+    expect(Object.fromEntries(pairs)).toStrictEqual({
+      "rh-clear-responses": "cached-responses",
+      "rh-clear-summaries": "summaries",
+      "rh-clear-jobs": "job-history",
+      "rh-clear-embeddings": "embeddings",
+      "rh-delete-all-data": "all",
+    });
+    expect(pairs.map(([, kind]) => kind).sort()).toStrictEqual(
+      [...DATA_KINDS].sort(),
+    );
+  });
+
+  it("ships the sixteen ids in en-US, on the main-window surface, and only as drafts in ko-KR (G-41)", () => {
+    const declared = new Set<string>(MAIN_WINDOW_MESSAGE_IDS);
+    for (const id of P7T10_IDS) {
+      expect(declared.has(id), id).toBe(true);
+      expect(FTL, id).toMatch(new RegExp(`^${id} =`, "m"));
+      expect(KO_FTL, id).not.toMatch(new RegExp(`^${id} =`, "m"));
+      expect(KO_FTL, id).toMatch(new RegExp(`^# ${id} =`, "m"));
+      expect(KO_PENDING_REVIEW as readonly string[], id).toContain(id);
+      expect(KO_PRESENT as readonly string[], id).not.toContain(id);
+    }
+    expect(KO_FTL).toContain(
+      "# Draft (coordinator, 2026-11-17, not adopted; G-41, P7-T10):",
+    );
+  });
+
+  it("says the Zotero notes stay before stored summaries are cleared, and that items, notes and keys stay before everything is deleted", () => {
+    expect(ftlEntry(PREFERENCES_L10N.confirmSummaries)).toContain(
+      "The notes in your Zotero library stay.",
+    );
+    const all = ftlEntry(PREFERENCES_L10N.confirmDeleteAll);
+    expect(all).toContain(
+      "Your Zotero items and notes stay, and so do your API keys.",
+    );
+    expect(all).toContain("This cannot be undone.");
+    expect(ftlEntry(PREFERENCES_L10N.confirmJobs)).toContain(
+      "queued, running or paused stay",
+    );
+    expect(ftlEntry(PREFERENCES_L10N.confirmReset)).toContain(
+      "Your API keys and stored data stay.",
+    );
+  });
+});
+
+describe("P7-T10 — dataConfirmLine names what would be removed", () => {
+  it("gives each kind its own message, with rows, entries and megabytes", () => {
+    for (const kind of DATA_KINDS) {
+      expect(dataConfirmLine(kind, COUNTS), kind).toStrictEqual({
+        id: DATA_CONFIRM_L10N[kind],
+        args: { rows: 3, entries: 4, megabytes: 2 },
+      });
+    }
+    expect(new Set(Object.values(DATA_CONFIRM_L10N)).size).toBe(
+      DATA_KINDS.length,
+    );
+  });
+
+  it("reads only the five kinds as kinds", () => {
+    for (const kind of DATA_KINDS) expect(isDataKind(kind)).toBe(true);
+    for (const other of ["", "keys", "notes", "ALL", undefined, 1]) {
+      expect(isDataKind(other), String(other)).toBe(false);
+    }
+  });
+});
+
+describe("P7-T10 — removedCount reports the figure the confirmation named", () => {
+  const removed: DataCounts = { rows: 12, entries: 20, bytes: 5 };
+
+  it("counts cached responses in entries, the three tables in rows, and delete-all in both", () => {
+    expect(removedCount("cached-responses", removed)).toBe(20);
+    expect(removedCount("summaries", removed)).toBe(12);
+    expect(removedCount("job-history", removed)).toBe(12);
+    expect(removedCount("embeddings", removed)).toBe(12);
+    expect(removedCount("all", removed)).toBe(32);
+  });
+
+  it("matches the variable each confirmation's count selects on", () => {
+    // The confirmation for cached responses selects on $entries; the three
+    // table clears on $rows; delete-all names both.
+    for (const kind of DATA_KINDS) {
+      const args = dataConfirmLine(kind, removed).args as {
+        rows: number;
+        entries: number;
+      };
+      const named =
+        kind === "cached-responses"
+          ? args.entries
+          : kind === "all"
+            ? args.rows + args.entries
+            : args.rows;
+      expect(removedCount(kind, removed), kind).toBe(named);
+    }
+  });
+
+  it("the host's status for each kind reports that count", async () => {
+    const expected: Record<string, number> = {
+      "cached-responses": 4,
+      summaries: 3,
+      "job-history": 3,
+      embeddings: 3,
+      all: 7,
+    };
+    for (const kind of DATA_KINDS) {
+      const { host } = dataHost(dataResetPort());
+      const result = await host.clearData(kind, {});
+      expect(result.status, kind).toStrictEqual({
+        id: PREFERENCES_L10N.dataStatus,
+        args: { outcome: "cleared", removed: expected[kind] },
+      });
+    }
+  });
+});
+
+describe("P7-T10 — the host's clearData and resetToDefaults", () => {
+  it("counts, asks over the parent with the count, then clears, and says how many it removed", async () => {
+    const port = dataResetPort();
+    const { host, sink } = dataHost(port);
+    const parent = { window: true };
+    const result = await host.clearData("summaries", parent);
+    expect(port.counted).toStrictEqual(["summaries"]);
+    expect(port.asked).toStrictEqual([
+      { line: dataConfirmLine("summaries", COUNTS), parent },
+    ]);
+    expect(port.cleared).toStrictEqual(["summaries"]);
+    expect(result).toStrictEqual({
+      outcome: "cleared",
+      status: {
+        id: PREFERENCES_L10N.dataStatus,
+        args: { outcome: "cleared", removed: 3 },
+      },
+    });
+    expect(sink.lines.join("\n")).toContain("stored data action");
+  });
+
+  it("removes nothing when the user declines", async () => {
+    const port = dataResetPort({ agree: false });
+    const { host } = dataHost(port);
+    const result = await host.clearData("all", {});
+    expect(result.outcome).toBe("declined");
+    expect(port.cleared).toStrictEqual([]);
+  });
+
+  it("asks nothing when there is nothing to remove", async () => {
+    const port = dataResetPort({ counts: { rows: 0, entries: 0, bytes: 0 } });
+    const { host } = dataHost(port);
+    const result = await host.clearData("embeddings", {});
+    expect(result.outcome).toBe("nothing");
+    expect(port.asked).toStrictEqual([]);
+    expect(port.cleared).toStrictEqual([]);
+  });
+
+  it("refuses a kind it does not know, without counting", async () => {
+    const port = dataResetPort();
+    const { host } = dataHost(port);
+    for (const kind of ["keys", "notes", ""]) {
+      expect((await host.clearData(kind, {})).outcome, kind).toBe(
+        "unavailable",
+      );
+    }
+    expect(port.counted).toStrictEqual([]);
+  });
+
+  it("says unavailable with no port, or with the database closed", async () => {
+    expect((await dataHost().host.clearData("all", {})).outcome).toBe(
+      "unavailable",
+    );
+    expect((await dataHost().host.resetToDefaults({})).outcome).toBe(
+      "unavailable",
+    );
+    const port = dataResetPort({ open: false });
+    expect((await dataHost(port).host.clearData("all", {})).outcome).toBe(
+      "unavailable",
+    );
+    expect(port.asked).toStrictEqual([]);
+  });
+
+  it("on a failure says failed, and logs the error's name, never its message", async () => {
+    const port = dataResetPort({ clearFails: true });
+    const { host, sink } = dataHost(port);
+    const result = await host.clearData("job-history", {});
+    expect(result.outcome).toBe("failed");
+    const log = sink.lines.join("\n");
+    expect(log).toContain("stored data action failed");
+    expect(log).not.toContain("SQLITE_BUSY");
+    expect(log).not.toContain("someone");
+  });
+
+  it("reset asks first, then clears the preferences, and says reset", async () => {
+    const port = dataResetPort();
+    const { host } = dataHost(port);
+    const parent = {};
+    const result = await host.resetToDefaults(parent);
+    expect(port.asked).toStrictEqual([
+      { line: { id: PREFERENCES_L10N.confirmReset }, parent },
+    ]);
+    expect(port.resets).toBe(1);
+    expect(result).toStrictEqual({
+      outcome: "reset",
+      status: {
+        id: PREFERENCES_L10N.dataStatus,
+        args: { outcome: "reset", removed: 42 },
+      },
+    });
+    expect(port.cleared).toStrictEqual([]);
+  });
+
+  it("reset declined changes nothing", async () => {
+    const port = dataResetPort({ agree: false });
+    const { host } = dataHost(port);
+    expect((await host.resetToDefaults({})).outcome).toBe("declined");
+    expect(port.resets).toBe(0);
+  });
+});
+
+interface DataController {
+  init(root: unknown): Promise<void>;
+  clearStoredData(kind: string): Promise<void>;
+  resetToDefaults(): Promise<void>;
+}
+
+describe("P7-T10 — the controller's stored-data actions", () => {
+  function dataPane(port: DataResetPort) {
+    const { host: real } = dataHost(port);
+    const stats: unknown[] = [];
+    const h = paneHarness({
+      host: {
+        ...fakeHost({}),
+        clearData: (kind: string, parent: unknown) =>
+          real.clearData(kind, parent),
+        resetToDefaults: (parent: unknown) => real.resetToDefaults(parent),
+        cacheStats: () => {
+          stats.push(1);
+          return Promise.resolve(undefined);
+        },
+      },
+    });
+    return { h, c: h.controller as unknown as DataController, stats };
+  }
+
+  it("hides the status line until an action ran, then shows the host's outcome, and reads the cache lines again after a clear", async () => {
+    const port = dataResetPort();
+    const { h, c, stats } = dataPane(port);
+    await c.init(h.root);
+    expect(h.byId("rh-data-status").hidden).toBe(true);
+    expect(h.byId("rh-clear-summaries").disabled).toBe(false);
+    const before = stats.length;
+    await c.clearStoredData("summaries");
+    expect(port.cleared).toStrictEqual(["summaries"]);
+    // The confirmation is modal over the preferences window.
+    expect(port.asked[0]?.parent).toBeDefined();
+    expect(h.byId("rh-data-status").hidden).toBe(false);
+    expect(h.l10nCalls).toContainEqual({
+      id: PREFERENCES_L10N.dataStatus,
+      element: "rh-data-status",
+      args: { outcome: "cleared", removed: 3 },
+    });
+    expect(stats.length).toBeGreaterThan(before);
+  });
+
+  it("shows declined when the user says no, and re-enables the buttons", async () => {
+    const port = dataResetPort({ agree: false });
+    const { h, c } = dataPane(port);
+    await c.init(h.root);
+    await c.clearStoredData("all");
+    expect(h.l10nCalls).toContainEqual({
+      id: PREFERENCES_L10N.dataStatus,
+      element: "rh-data-status",
+      args: { outcome: "declined", removed: 0 },
+    });
+    expect(h.byId("rh-delete-all-data").disabled).toBe(false);
+    expect(h.byId("rh-reset-defaults").disabled).toBe(false);
+  });
+
+  it("reset shows reset", async () => {
+    const port = dataResetPort();
+    const { h, c } = dataPane(port);
+    await c.init(h.root);
+    await c.resetToDefaults();
+    expect(port.resets).toBe(1);
+    expect(h.l10nCalls).toContainEqual({
+      id: PREFERENCES_L10N.dataStatus,
+      element: "rh-data-status",
+      args: { outcome: "reset", removed: 42 },
+    });
+  });
+
+  it("with a host that has no stored-data methods, disables the buttons", async () => {
+    const h = paneHarness({ host: fakeHost({}) });
+    await (h.controller as unknown as DataController).init(h.root);
+    for (const id of [
+      "rh-clear-responses",
+      "rh-delete-all-data",
+      "rh-reset-defaults",
+    ]) {
+      expect(h.byId(id).disabled, id).toBe(true);
+    }
+  });
+});
+
+/* ----------------------- P7-T11: "Remove all Research Helper content" */
+
+const SUMMARY: ContentSummary = {
+  generated: 5,
+  provenance: 2,
+  audio: 1,
+  records: 30,
+  libraries: ["My Library", "Lab group"],
+  skipped: ["Read-only group"],
+  linkedFolders: ["C:\\Synthetic\\Audio"],
+};
+
+interface MemoryContentPort extends ContentRemovalPort {
+  finds: number;
+  removed: unknown[];
+}
+
+function contentPort(
+  options: { summary?: ContentSummary | undefined; fails?: boolean } = {},
+): MemoryContentPort {
+  const plan = { synthetic: true };
+  const port: MemoryContentPort = {
+    finds: 0,
+    removed: [],
+    find: () => {
+      port.finds += 1;
+      const summary = "summary" in options ? options.summary : SUMMARY;
+      return Promise.resolve(
+        summary === undefined ? undefined : { summary, plan },
+      );
+    },
+    remove: (given) => {
+      port.removed.push(given);
+      if (options.fails === true) {
+        return Promise.reject(
+          new Error("trash failed in C:\\Synthetic\\Lab group"),
+        );
+      }
+      return Promise.resolve({ moved: 8, records: 30 });
+    },
+  };
+  return port;
+}
+
+function contentHost(content?: ContentRemovalPort, reset?: DataResetPort) {
+  const sink = recordingSink();
+  const clock = createManualClock(1_760_000_000_000);
+  const host = createPreferencesHost({
+    secrets: memoryStore(),
+    request: () => Promise.reject(new Error("no request in this test")),
+    getBackendPref: () => OS_KEYSTORE_PREF_VALUE,
+    providerPrefs: {
+      getActiveProvider: () => "openrouter",
+      getBaseUrl: () => "",
+      setBaseUrl: () => undefined,
+    },
+    ...(reset !== undefined && { dataReset: reset }),
+    ...(content !== undefined && { contentRemoval: content }),
+    clock,
+    logger: createLogger({ sink, clock, level: "debug" }),
+  });
+  return { host, sink };
+}
+
+describe("P7-T11 — the removal's markup and strings", () => {
+  it("draws the button and its note in rh-prefs-advanced, beside the stored-data actions", () => {
+    const box = groupbox("rh-prefs-advanced");
+    expect(box).toContain('id="rh-remove-content"');
+    expect(box).toContain(
+      'data-l10n-id="research-helper-prefs-remove-content-note"',
+    );
+    expect(SCRIPT).toContain('removeContent: "rh-remove-content"');
+  });
+
+  it("ships the four ids in en-US, on the main-window surface, and only as drafts in ko-KR (G-41)", () => {
+    const declared = new Set<string>(MAIN_WINDOW_MESSAGE_IDS);
+    for (const id of [
+      PREFERENCES_L10N.removeContent,
+      PREFERENCES_L10N.removeContentNote,
+      PREFERENCES_L10N.confirmRemoveContent,
+      PREFERENCES_L10N.removeContentStatus,
+    ]) {
+      expect(declared.has(id), id).toBe(true);
+      expect(FTL, id).toMatch(new RegExp(`^${id} =`, "m"));
+      expect(KO_FTL, id).not.toMatch(new RegExp(`^${id} =`, "m"));
+      expect(KO_FTL, id).toMatch(new RegExp(`^# ${id} =`, "m"));
+      expect(KO_PENDING_REVIEW as readonly string[], id).toContain(id);
+    }
+    expect(KO_FTL).toContain(
+      "# Draft (coordinator, 2026-11-17, not adopted; G-41, P7-T11):",
+    );
+  });
+
+  it("says the items go to the trash and can be restored, names linked folders and skipped libraries, and that imported items and the user's notes stay", () => {
+    const text = ftlEntry(PREFERENCES_L10N.confirmRemoveContent);
+    expect(text).toContain("to the Zotero trash, where you can restore it");
+    for (const placeable of [
+      "{ $generated }",
+      "{ $provenance }",
+      "{ $audio }",
+      "{ $records }",
+      "{ $libraries }",
+      "{ $folders }",
+      "{ $skipped }",
+    ]) {
+      expect(text, placeable).toContain(placeable);
+    }
+    expect(text).toContain("Linked audio files stay on disk in");
+    expect(text).toContain("Not changed, because you cannot edit them");
+    expect(text).toContain(
+      "Imported items, their tags and your own notes stay.",
+    );
+  });
+});
+
+describe("P7-T11 — contentConfirmLine", () => {
+  it("carries the four counts, the libraries, the folders and the skipped libraries", () => {
+    expect(contentConfirmLine(SUMMARY)).toStrictEqual({
+      id: PREFERENCES_L10N.confirmRemoveContent,
+      args: {
+        generated: 5,
+        provenance: 2,
+        audio: 1,
+        records: 30,
+        libraries: "My Library, Lab group",
+        libraryCount: 2,
+        folders: "C:\\Synthetic\\Audio",
+        folderCount: 1,
+        skipped: "Read-only group",
+        skippedCount: 1,
+      },
+    });
+  });
+});
+
+describe("P7-T11 — the host's removeAllContent", () => {
+  it("finds, asks over the parent with the summary, then removes exactly the plan it found", async () => {
+    const content = contentPort();
+    const reset = dataResetPort();
+    const { host, sink } = contentHost(content, reset);
+    const parent = { window: true };
+    const result = await host.removeAllContent(parent);
+    expect(reset.asked).toStrictEqual([
+      { line: contentConfirmLine(SUMMARY), parent },
+    ]);
+    expect(content.removed).toStrictEqual([{ synthetic: true }]);
+    expect(result).toStrictEqual({
+      outcome: "removed",
+      status: {
+        id: PREFERENCES_L10N.removeContentStatus,
+        args: { outcome: "removed", moved: 8, records: 30 },
+      },
+    });
+    // Counts only: no library name and no folder reaches the log.
+    const log = sink.lines.join("\n");
+    expect(log).toContain("plugin content removal");
+    expect(log).not.toContain("Lab group");
+    expect(log).not.toContain("My Library");
+    expect(log).not.toContain("Synthetic");
+    // No stored-data clear runs on its own: the port's remove does both halves.
+    expect(reset.cleared).toStrictEqual([]);
+  });
+
+  it("removes nothing when the user declines", async () => {
+    const content = contentPort();
+    const { host } = contentHost(content, dataResetPort({ agree: false }));
+    expect((await host.removeAllContent({})).outcome).toBe("declined");
+    expect(content.removed).toStrictEqual([]);
+  });
+
+  it("asks nothing when nothing was found", async () => {
+    const content = contentPort({
+      summary: {
+        ...SUMMARY,
+        generated: 0,
+        provenance: 0,
+        audio: 0,
+        records: 0,
+      },
+    });
+    const reset = dataResetPort();
+    const { host } = contentHost(content, reset);
+    expect((await host.removeAllContent({})).outcome).toBe("nothing");
+    expect(reset.asked).toStrictEqual([]);
+    expect(content.removed).toStrictEqual([]);
+  });
+
+  it("asks when only stored records are left", async () => {
+    const content = contentPort({
+      summary: {
+        ...SUMMARY,
+        generated: 0,
+        provenance: 0,
+        audio: 0,
+        records: 1,
+      },
+    });
+    const reset = dataResetPort();
+    const { host } = contentHost(content, reset);
+    expect((await host.removeAllContent({})).outcome).toBe("removed");
+    expect(reset.asked).toHaveLength(1);
+  });
+
+  it("says unavailable with no port, no confirmation port, or the database closed", async () => {
+    expect((await contentHost().host.removeAllContent({})).outcome).toBe(
+      "unavailable",
+    );
+    expect(
+      (await contentHost(contentPort()).host.removeAllContent({})).outcome,
+    ).toBe("unavailable");
+    expect(
+      (
+        await contentHost(
+          contentPort({ summary: undefined }),
+          dataResetPort(),
+        ).host.removeAllContent({})
+      ).outcome,
+    ).toBe("unavailable");
+  });
+
+  it("on a failure says failed and logs the error's name only", async () => {
+    const { host, sink } = contentHost(
+      contentPort({ fails: true }),
+      dataResetPort(),
+    );
+    expect((await host.removeAllContent({})).outcome).toBe("failed");
+    const log = sink.lines.join("\n");
+    expect(log).toContain("plugin content removal failed");
+    expect(log).not.toContain("Lab group");
+    expect(log).not.toContain("Synthetic");
+  });
+});
+
+describe("P7-T11 — the controller's removal button", () => {
+  it("shows the host's removal outcome on the status line, with its own message", async () => {
+    const content = contentPort();
+    const reset = dataResetPort();
+    const { host: real } = contentHost(content, reset);
+    const h = paneHarness({
+      host: {
+        ...fakeHost({}),
+        removeAllContent: (parent: unknown) => real.removeAllContent(parent),
+        cacheStats: () => Promise.resolve(undefined),
+      },
+    });
+    const c = h.controller as unknown as DataController & {
+      removeAllContent(): Promise<void>;
+    };
+    await c.init(h.root);
+    expect(h.byId("rh-remove-content").disabled).toBe(false);
+    await c.removeAllContent();
+    expect(content.removed).toHaveLength(1);
+    expect(h.l10nCalls).toContainEqual({
+      id: PREFERENCES_L10N.removeContentStatus,
+      element: "rh-data-status",
+      args: { outcome: "removed", moved: 8, records: 30 },
+    });
+  });
+
+  it("is disabled with a host that has no removal", async () => {
+    const h = paneHarness({ host: fakeHost({}) });
+    await (h.controller as unknown as DataController).init(h.root);
+    expect(h.byId("rh-remove-content").disabled).toBe(true);
   });
 });

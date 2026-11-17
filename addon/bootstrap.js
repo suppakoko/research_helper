@@ -130,10 +130,12 @@ async function shutdown({ id, version, resourceURI, rootURI }, reason) {
 }
 
 /**
- * Removes every stored API key (docs/09 §2.5, P3-T02), and nothing else.
- * Items, collections and notes the plugin created are ordinary Zotero data and
- * must survive uninstall untouched: that is FR-56's second acceptance
- * criterion. Preferences are removed by Zotero itself.
+ * Removes every stored API key (docs/09 §2.5, P3-T02), every row of the
+ * plugin database with its cache blobs and report files, and every plugin
+ * preference (docs/09 §7, P7-T10): onUninstall's sweep, in
+ * src/bootstrap/uninstall.ts. Items, collections and notes the plugin created
+ * are ordinary Zotero data and must survive uninstall untouched: that is
+ * FR-56's second acceptance criterion.
  *
  * Only for ADDON_UNINSTALL. Gecko also calls the old version's uninstall()
  * with ADDON_UPGRADE or ADDON_DOWNGRADE when the plugin is updated, and
@@ -148,7 +150,8 @@ async function shutdown({ id, version, resourceURI, rootURI }, reason) {
  * load creates is deleted again afterwards.
  *
  * Never throws: a failure is written to Debug Output, and the removal of the
- * plugin itself goes ahead. The line carries a count or an error, never a key.
+ * plugin itself goes ahead. The line carries counts, the names of the steps
+ * that failed, or an error's name: never a key, a path or a message.
  */
 async function uninstall(data, reason) {
   if (reason !== ADDON_UNINSTALL) {
@@ -166,11 +169,18 @@ async function uninstall(data, reason) {
         ctx,
       );
     }
-    const removed = await Zotero.__addonInstance__.hooks.onUninstall();
-    Zotero.debug(`[__addonRef__] uninstall removed ${removed} stored key(s)`);
+    const r = await Zotero.__addonInstance__.hooks.onUninstall();
+    Zotero.debug(
+      `[__addonRef__] uninstall removed ${r.keys} stored key(s), ` +
+        `${r.rows} stored row(s), ${r.entries} cache entr(ies), ` +
+        `${r.files} report file(s), ${r.prefs} preference(s)` +
+        (r.failed.length > 0 ? `; failed: ${r.failed.join(", ")}` : ""),
+    );
   } catch (error) {
     Zotero.debug(
-      `[__addonRef__] uninstall could not remove stored keys: ${error}`,
+      `[__addonRef__] uninstall could not run its sweep: ${
+        error && error.name ? error.name : typeof error
+      }`,
     );
   } finally {
     if (loadedHere) {

@@ -184,6 +184,16 @@ export function pluginDatabasePath(): string {
 }
 
 /**
+ * `P7-T10`: whether {@link pluginDatabasePath}'s file is there. Uninstall asks
+ * first, because {@link openPluginDatabase} would create an empty file.
+ * Caller: `uninstallPluginData` in `src/bootstrap/uninstall.ts`. The path is
+ * never logged.
+ */
+export async function pluginDatabaseExists(): Promise<boolean> {
+  return IOUtils.exists(pluginDatabasePath());
+}
+
+/**
  * `P7-T09`: the preference pane's "Show in folder" — Zotero's own
  * `Zotero.File.reveal` on {@link pluginDatabasePath}, which shows the file in
  * the system's file manager. Caller: `preferencesAdvancedPort` in

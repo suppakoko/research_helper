@@ -1,4 +1,5 @@
 import { registerUI, registerWindowUI } from "./bootstrap/registerUI";
+import type { UninstallReport } from "./core/dataReset";
 
 /**
  * Lifecycle dispatcher (`P0-T07`). Hooks only dispatch — real work lives in
@@ -97,20 +98,23 @@ async function onShutdown(): Promise<void> {
 }
 
 /**
- * `docs/09` §2.5: on uninstall, remove every stored key (`P3-T02` step 3).
- * Called only by `uninstall()` in `addon/bootstrap.js`, and only for
- * `ADDON_UNINSTALL`, never for an upgrade or a downgrade. `onShutdown` does not
- * call it: shutdown runs on every app close.
+ * `docs/09` §2.5 and §7: on uninstall, remove every stored key (`P3-T02`
+ * step 3), every row of the plugin database with its cache blobs and report
+ * files, and every plugin preference (`P7-T10` step 5). No Zotero item or note
+ * is touched. Called only by `uninstall()` in `addon/bootstrap.js`, and only
+ * for `ADDON_UNINSTALL`, never for an upgrade or a downgrade. `onShutdown` does
+ * not call it: shutdown runs on every app close.
  *
- * The keychain module is imported here, on first call, rather than at the top
- * of this file. Its module body calls the Gecko `Components` global, so a
- * static import would break every plain-Node test that imports this file.
+ * `src/bootstrap/uninstall.ts` is imported here, on first call, rather than at
+ * the top of this file. The keychain module it imports calls the Gecko
+ * `Components` global in its module body, so a static import would break every
+ * plain-Node test that imports this file.
  *
- * @returns the number of stored ids removed
+ * @returns counts of what was removed, and the steps that failed
  */
-async function onUninstall(): Promise<number> {
-  const { clearAllSecretsOnUninstall } = await import("./zotero/keychain");
-  return clearAllSecretsOnUninstall();
+async function onUninstall(): Promise<UninstallReport> {
+  const { uninstallSweep } = await import("./bootstrap/uninstall");
+  return uninstallSweep();
 }
 
 /**

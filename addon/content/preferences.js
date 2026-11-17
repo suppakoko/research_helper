@@ -192,6 +192,22 @@ var RHPreferences = {
     diagnosticsCopy: "rh-diagnostics-copy",
     diagnosticsText: "rh-diagnostics-text",
     diagnosticsStatus: "rh-diagnostics-status",
+    /**
+     * P7-T10: the stored-data buttons, each with the kind it asks the host
+     * to clear (DATA_KINDS in src/core/dataReset.ts), the reset button and
+     * the status line.
+     */
+    dataActions: {
+      "rh-clear-responses": "cached-responses",
+      "rh-clear-summaries": "summaries",
+      "rh-clear-jobs": "job-history",
+      "rh-clear-embeddings": "embeddings",
+      "rh-delete-all-data": "all",
+    },
+    resetDefaults: "rh-reset-defaults",
+    /** P7-T11: "Remove all Research Helper content". */
+    removeContent: "rh-remove-content",
+    dataStatus: "rh-data-status",
   },
 
   /** Zotero's folder picker, as `addon/content/reportWindow.js` loads it. */
@@ -265,6 +281,8 @@ var RHPreferences = {
     dataLocationUnavailable: "research-helper-prefs-data-location-unavailable",
     retentionTitle: "research-helper-prefs-retention-title",
     diagnosticsStatus: "research-helper-prefs-diagnostics-status",
+    dataStatus: "research-helper-prefs-data-status",
+    removeContentStatus: "research-helper-prefs-remove-content-status",
   },
 
   /**
@@ -1279,6 +1297,154 @@ var RHPreferences = {
       });
     }
     this.wireDiagnostics();
+    this.wireStoredData();
+  },
+
+  /**
+   * P7-T10: the stored-data buttons. The host counts, asks over this window,
+   * and only then removes; this file shows its answer. A button is disabled
+   * while any of them runs, so two confirmations never stack.
+   */
+  wireStoredData() {
+    this.paintDataStatus(undefined);
+    for (const id of Object.keys(this.spec.dataActions)) {
+      const button = this.el(id);
+      if (!button) continue;
+      button.disabled = !this.can("clearData");
+      const kind = this.spec.dataActions[id];
+      button.addEventListener("command", () => {
+        this.settle(this.clearStoredData(kind));
+      });
+    }
+    const reset = this.el(this.spec.resetDefaults);
+    if (reset) {
+      reset.disabled = !this.can("resetToDefaults");
+      reset.addEventListener("command", () => {
+        this.settle(this.resetToDefaults());
+      });
+    }
+    const remove = this.el(this.spec.removeContent);
+    if (remove) {
+      remove.disabled = !this.can("removeAllContent");
+      remove.addEventListener("command", () => {
+        this.settle(this.removeAllContent());
+      });
+    }
+  },
+
+  /** Set while a stored-data action runs. */
+  dataBusy: false,
+
+  /**
+   * The window the host's confirmation is modal over: this preferences
+   * window, or nothing outside one (the unit test).
+   */
+  parentWindow() {
+    return typeof window === "undefined" ? undefined : window;
+  },
+
+  /** @param {string} kind - one of the spec's dataActions values */
+  async clearStoredData(kind) {
+    if (!this.can("clearData")) return;
+    await this.runStoredDataAction(() =>
+      this.host.clearData(kind, this.parentWindow()),
+    );
+  },
+
+  /** P7-T11: the host finds, asks, trashes and deletes; this shows its answer. */
+  async removeAllContent() {
+    if (!this.can("removeAllContent")) return;
+    await this.runStoredDataAction(() =>
+      this.host.removeAllContent(this.parentWindow()),
+    );
+  },
+
+  async resetToDefaults() {
+    if (!this.can("resetToDefaults")) return;
+    await this.runStoredDataAction(() =>
+      this.host.resetToDefaults(this.parentWindow()),
+    );
+  },
+
+  /**
+   * Run one stored-data action, show its outcome, then read again what it
+   * may have changed: the cache lines, and after a reset every painted
+   * setting.
+   *
+   * @param {() => Promise<{outcome: string, status: {args?: object}}>} action
+   */
+  async runStoredDataAction(action) {
+    if (this.dataBusy) return;
+    this.dataBusy = true;
+    this.setDataButtonsDisabled(true);
+    let result;
+    try {
+      result = await action();
+    } catch (error) {
+      this.report("storedData", error);
+      result = {
+        outcome: "failed",
+        status: { args: { outcome: "failed", removed: 0 } },
+      };
+    } finally {
+      this.dataBusy = false;
+      this.setDataButtonsDisabled(false);
+    }
+    this.paintDataStatus(result);
+    if (
+      result &&
+      (result.outcome === "cleared" || result.outcome === "removed")
+    ) {
+      await this.refreshCacheUsage();
+    }
+    if (result && result.outcome === "reset") {
+      await this.refresh();
+      await this.paintSettings();
+      await this.paintAdvanced();
+    }
+  },
+
+  /** @param {boolean} disabled */
+  setDataButtonsDisabled(disabled) {
+    for (const id of Object.keys(this.spec.dataActions)) {
+      const button = this.el(id);
+      if (button) button.disabled = disabled || !this.can("clearData");
+    }
+    const reset = this.el(this.spec.resetDefaults);
+    if (reset) reset.disabled = disabled || !this.can("resetToDefaults");
+    const remove = this.el(this.spec.removeContent);
+    if (remove) remove.disabled = disabled || !this.can("removeAllContent");
+  },
+
+  /**
+   * The host's status line, always through this file's own id; hidden before
+   * the first action.
+   *
+   * @param {{outcome: string, status: {args?: object}}|undefined} result
+   */
+  paintDataStatus(result) {
+    const line = this.el(this.spec.dataStatus);
+    if (!line) return;
+    if (!result) {
+      line.hidden = true;
+      return;
+    }
+    const args = (result.status && result.status.args) || {};
+    const count = (value) => (typeof value === "number" ? value : 0);
+    line.hidden = false;
+    // P7-T11's answer has its own message; any other is P7-T10's.
+    if (result.status && result.status.id === this.l10n.removeContentStatus) {
+      this.localize(line, this.l10n.removeContentStatus, {
+        outcome: String(result.outcome),
+        moved: count(args.moved),
+        records: count(args.records),
+      });
+      return;
+    }
+    this.localize(line, this.l10n.dataStatus, {
+      outcome: String(result.outcome),
+      removed: count(args.removed),
+    });
   },
 
   /**

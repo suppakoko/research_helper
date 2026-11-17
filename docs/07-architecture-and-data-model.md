@@ -6343,6 +6343,12 @@ The plugin should be *useful* offline, not merely non-crashing.
 >    related and summarize windows show a generic failure (`plan/00` §6 item 393).
 >
 > The lines above this note are the design, not the build; item 393 asks the owner which of them v1.0 needs.
+>
+> *Decided 2026-11-17 (owner, `plan/00` §6 item 393(d); "세 창에도 같은 안내"):* v1.0 ships the measured behaviour above, and point 4
+> is closed by `plan/10` `P7-T33`: the report, related and summarize windows show `rh-error-offline` when a run fails
+> because Zotero is offline, as the keyword search does. The connectivity probe, the scheduler's offline hold, the
+> per-host circuit breaker with its `paused` / "offline" state, and the offline badge are a **later-release
+> candidate**, with no card.
 
 ---
 

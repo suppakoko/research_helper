@@ -1260,3 +1260,95 @@ research-helper-prefs-diagnostics-status =
         [failed] Diagnostics could not be saved or copied.
        *[unavailable] Diagnostics cannot be put together now.
     }
+
+## The Advanced section's stored data (P7-T10; docs/09 §3.7). No action here
+## touches a Zotero item, a note or an API key. $rows, $entries and $megabytes
+## are what the action would remove; $removed is what it did. Korean pending
+## review (G-41).
+
+research-helper-prefs-data-title = Stored data
+research-helper-prefs-data-note = These remove what Research Helper keeps in its own database. Your Zotero items and notes stay, and so do your API keys.
+research-helper-prefs-clear-responses =
+    .label = Clear cached responses…
+research-helper-prefs-clear-summaries =
+    .label = Clear stored summaries…
+research-helper-prefs-clear-jobs =
+    .label = Clear job history…
+research-helper-prefs-clear-embeddings =
+    .label = Clear embeddings…
+research-helper-prefs-delete-all-data =
+    .label = Delete all plugin data…
+research-helper-prefs-reset-defaults =
+    .label = Reset settings to defaults…
+research-helper-prefs-data-confirm-title = Research Helper
+research-helper-prefs-confirm-clear-responses =
+    { $entries ->
+        [one] Remove 1 cached response ({ NUMBER($megabytes, maximumFractionDigits: 1) } MB)? It is fetched again the next time it is needed.
+       *[other] Remove { $entries } cached responses ({ NUMBER($megabytes, maximumFractionDigits: 1) } MB)? They are fetched again the next time they are needed.
+    }
+research-helper-prefs-confirm-clear-summaries =
+    { $rows ->
+        [one] Remove 1 stored summary from Research Helper's database? The notes in your Zotero library stay.
+       *[other] Remove { $rows } stored summaries from Research Helper's database? The notes in your Zotero library stay.
+    }
+research-helper-prefs-confirm-clear-jobs =
+    { $rows ->
+        [one] Remove the history of 1 finished job? Jobs that are queued, running or paused stay.
+       *[other] Remove the history of { $rows } finished jobs? Jobs that are queued, running or paused stay.
+    }
+research-helper-prefs-confirm-clear-embeddings =
+    { $rows ->
+        [one] Remove 1 stored embedding? It is computed again the next time it is needed.
+       *[other] Remove { $rows } stored embeddings? They are computed again the next time they are needed.
+    }
+research-helper-prefs-confirm-delete-all =
+    Delete all of Research Helper's stored data: { $rows ->
+        [one] 1 stored record
+       *[other] { $rows } stored records
+    } and { $entries ->
+        [one] 1 cached entry
+       *[other] { $entries } cached entries
+    } ({ NUMBER($megabytes, maximumFractionDigits: 1) } MB)? Your Zotero items and notes stay, and so do your API keys. This cannot be undone.
+research-helper-prefs-confirm-reset = Restore every Research Helper setting to its default? Your API keys and stored data stay.
+research-helper-prefs-data-status =
+    { $outcome ->
+        [cleared] { $removed ->
+            [one] Removed 1 stored record.
+           *[other] Removed { $removed } stored records.
+        }
+        [reset] Settings restored to their defaults.
+        [nothing] There was nothing to remove.
+        [declined] Nothing was changed.
+        [failed] It could not be done.
+       *[unavailable] Research Helper's database is not open now.
+    }
+
+## "Remove all Research Helper content" (P7-T11; plan/00 §6 item 380,
+## decision 2; docs/10 §5 Q14). $libraries, $folders and $skipped are names
+## joined by the host; each $…Count says how many there are. Korean pending
+## review (G-41).
+
+research-helper-prefs-remove-content =
+    .label = Remove all Research Helper content…
+research-helper-prefs-remove-content-note = Moves the notes and audio attachments Research Helper created to the Zotero trash, where you can restore them, and deletes its stored data. Imported items and your own notes stay.
+research-helper-prefs-confirm-remove-content =
+    Move everything Research Helper created to the Zotero trash, where you can restore it, and delete its stored data?
+    Generated notes: { $generated }. Search provenance notes: { $provenance }. Audio attachments: { $audio }. Stored records: { $records }.{ $libraryCount ->
+        [0] {""}
+       *[other] {" "}In: { $libraries }.
+    }{ $folderCount ->
+        [0] {""}
+       *[other] {" "}Linked audio files stay on disk in: { $folders }.
+    }{ $skippedCount ->
+        [0] {""}
+       *[other] {" "}Not changed, because you cannot edit them: { $skipped }.
+    }
+    Imported items, their tags and your own notes stay.
+research-helper-prefs-remove-content-status =
+    { $outcome ->
+        [removed] Items moved to the Zotero trash: { $moved }. Stored records deleted: { $records }.
+        [nothing] Research Helper has created nothing to remove.
+        [declined] Nothing was changed.
+        [failed] It could not be done.
+       *[unavailable] Research Helper's database is not open now.
+    }

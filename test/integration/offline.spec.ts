@@ -945,15 +945,25 @@ describe("P7-T18: the plugin with Zotero offline (NFR-9, FR-23)", function () {
       );
       const failedRows = cut.rows.filter((row) => row.status === "failed");
       assert.strictEqual(failedRows.length, 1, "one row failed");
-      // Finding, measured 2026-11-17 (`plan/00` §6 item 393): the row says
-      // "— failed" and the window names no reason, so `rh-error-offline`
-      // is not shown.
+      // `P7-T33` (`plan/00` §6 item 393, owner, 2026-11-17): the row says
+      // "— failed", and the window says once that Zotero is offline, with the
+      // keyword search's message. Measured before the fix: no reason at all.
       const lastRow = win.document.querySelector(
         "#rh-summarize-rows p:last-child",
       );
+      await waitUntil(
+        () => textOf(win, "rh-summarize-offline").includes(OFFLINE_TEXT),
+        `the offline line (the window reads "${textOf(win, "rh-summarize-offline")}")`,
+      );
       log(
         `the failed row reads "${(lastRow?.textContent ?? "").trim()}"; ` +
-          `notice "${textOf(win, "rh-summarize-notice")}"`,
+          `notice "${textOf(win, "rh-summarize-notice")}"; ` +
+          `offline line "${textOf(win, "rh-summarize-offline")}"`,
+      );
+      assert.strictEqual(
+        win.document.querySelectorAll("#rh-summarize-offline").length,
+        1,
+        "the offline line is drawn once",
       );
       assertNoStackTrace(win, "the summarize window after the cut");
       const notes = items.reduce(
@@ -1139,10 +1149,11 @@ describe("P7-T18: the plugin with Zotero offline (NFR-9, FR-23)", function () {
       for (const failure of model.offlineFailures) {
         assert.strictEqual(failure, "OfflineError/rh-error-offline");
       }
-      // Finding, measured 2026-11-17 (`plan/00` §6 item 393): the window
-      // ends on its generic failure line, not on `rh-error-offline`. What
-      // NFR-9 rules out is held here: a message, and no stack trace.
+      // `P7-T33` (`plan/00` §6 item 393, owner, 2026-11-17): under its
+      // generic failure line, the window gives `rh-error-offline` as the stop
+      // reason. Measured before the fix: the generic line alone.
       assert.isAbove(outcome.length, 0, "the report window shows a message");
+      assert.include(reason, OFFLINE_TEXT, "the stop reason says offline");
       assertNoStackTrace(win, "the report window offline");
     } finally {
       win.close();
@@ -1224,15 +1235,19 @@ describe("P7-T18: the plugin with Zotero offline (NFR-9, FR-23)", function () {
           `warnings ${panelReport(win, "rh-search-warnings")}`,
       );
       assertNoStackTrace(win, "the related window offline");
-      // Finding, measured 2026-11-17 (`plan/00` §6 item 393): the window
-      // shows its error panel with the code, and each list "failed
-      // (OFFLINE)", not `rh-error-offline`. What NFR-9 rules out is held
-      // here: a message, and no stack trace.
+      // `P7-T33` (`plan/00` §6 item 393, owner, 2026-11-17): the error
+      // panel's headline is `rh-error-offline`, with the code in the
+      // disclosure and each list "failed (OFFLINE)". Measured before the fix:
+      // "Could not reach any database."
       assert.strictEqual(controller.state.panel, "error");
-      assert.isAbove(
-        textOf(win, "rh-state-error-headline").length,
-        0,
-        "the related window shows a message",
+      assert.include(
+        textOf(win, "rh-state-error-headline"),
+        OFFLINE_TEXT,
+        "the related window says offline",
+      );
+      log(
+        `related seed lines: missing ${String((win.document.getElementById("rh-related-seed-missing") as HTMLElement | null)?.hidden === false)}, ` +
+          `title "${textOf(win, "rh-related-seed-title")}"`,
       );
     } finally {
       await closeSearch(win);

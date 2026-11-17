@@ -962,6 +962,185 @@ export async function removeGeneratedNotes(
 }
 
 // ---------------------------------------------------------------------------
+// 6a. "Remove all Research Helper content" (`P7-T11`; `docs/10` §5 Q14, NFR-20)
+// ---------------------------------------------------------------------------
+
+/** How many items {@link trashPluginContent} moves per `trashTx`. */
+export const PLUGIN_CONTENT_TRASH_BATCH = 100;
+
+/** An audio attachment a stored report names (`TrendReport.audioAttachmentKeys`). */
+export interface AudioAttachmentRef {
+  readonly libraryID: number;
+  readonly key: string;
+}
+
+/** One library's plugin content, as {@link findAllPluginContent} found it. */
+export interface LibraryPluginContent {
+  readonly libraryID: number;
+  /** The library's name, for the confirmation only; never logged. */
+  readonly name: string;
+  readonly editable: boolean;
+  /** (a) Notes with a tag in {@link GENERATED_TAG_NAMESPACE}. */
+  readonly generatedNoteIDs: readonly number[];
+  /** (b) Notes with the bare tag whose title starts with {@link PROVENANCE_NOTE_TITLE_PREFIX}. */
+  readonly provenanceNoteIDs: readonly number[];
+  /** (c) Attachments a stored report names. */
+  readonly audioAttachmentIDs: readonly number[];
+  /**
+   * The folders of the linked audio files among (c), which stay on disk.
+   * Shown in the confirmation only; **never logged**.
+   */
+  readonly linkedFolders: readonly string[];
+}
+
+/** {@link findAllPluginContent}'s answer. */
+export interface PluginContent {
+  readonly libraries: readonly LibraryPluginContent[];
+}
+
+/**
+ * Every user and group library (no feed): the libraries `P7-T11` reads.
+ * Caller: `preferencesContentRemovalPort` in `src/bootstrap/registerUI.ts`.
+ */
+export function pluginContentLibraryIDs(): number[] {
+  const libraries: unknown = Zotero.Libraries.getAll();
+  if (!Array.isArray(libraries)) return [];
+  return (libraries as { libraryID?: unknown; libraryType?: unknown }[])
+    .filter(
+      (library) =>
+        typeof library.libraryID === "number" &&
+        (library.libraryType === "user" || library.libraryType === "group"),
+    )
+    .map((library) => library.libraryID as number);
+}
+
+/** Whether `note` is a search provenance note: (b). */
+function isProvenanceNote(note: Zotero.Item): boolean {
+  return (
+    note.isNote() &&
+    hasTag(note, RESEARCH_HELPER_TAG) &&
+    note.getNoteTitle().startsWith(PROVENANCE_NOTE_TITLE_PREFIX)
+  );
+}
+
+/** The folder of a linked file attachment, or `undefined` for any other. */
+function linkedFolderOf(attachment: Zotero.Item): string | undefined {
+  if (
+    attachment.attachmentLinkMode !== Zotero.Attachments.LINK_MODE_LINKED_FILE
+  ) {
+    return undefined;
+  }
+  const path: unknown = attachment.getFilePath();
+  return typeof path === "string" && path !== ""
+    ? (PathUtils.parent(path) ?? undefined)
+    : undefined;
+}
+
+/**
+ * `P7-T11` step 1: what "Remove all Research Helper content" would move, read
+ * without writing — in each library, (a) the notes not in the trash with a tag
+ * in {@link GENERATED_TAG_NAMESPACE}, (b) the notes not in the trash with the
+ * bare {@link RESEARCH_HELPER_TAG} whose title starts with
+ * {@link PROVENANCE_NOTE_TITLE_PREFIX}, and (c) the attachments not in the
+ * trash whose keys a stored report lists. Nothing else is read as plugin
+ * content: an imported item, a user's note and a note that merely mentions
+ * `research_helper/` in its text carry none of these marks.
+ *
+ * Caller: `preferencesContentRemovalPort` in `src/bootstrap/registerUI.ts`.
+ *
+ * @param libraryIDs - {@link pluginContentLibraryIDs}
+ * @param audio - the attachments the stored reports name
+ */
+export async function findAllPluginContent(
+  libraryIDs: readonly number[],
+  audio: readonly AudioAttachmentRef[],
+): Promise<PluginContent> {
+  const libraries: LibraryPluginContent[] = [];
+  for (const libraryID of libraryIDs) {
+    const library: unknown = Zotero.Libraries.get(libraryID);
+    if (!isObject(library)) continue;
+    // The one search: both marks contain the bare tag's text. Each hit is
+    // then checked on its own tags, never on its text.
+    const search = new Zotero.Search({ libraryID });
+    search.addCondition("deleted", "false", "");
+    search.addCondition("itemType", "is", "note");
+    search.addCondition("tag", "contains", RESEARCH_HELPER_TAG);
+    const notes = await Zotero.Items.getAsync(await search.search());
+    const generated: number[] = [];
+    const provenance: number[] = [];
+    for (const note of notes) {
+      if (!note.isNote() || note.deleted) continue;
+      if (hasGeneratedTag(note)) generated.push(note.id);
+      else if (isProvenanceNote(note)) provenance.push(note.id);
+    }
+    const attachments: number[] = [];
+    const folders = new Set<string>();
+    for (const ref of audio) {
+      if (ref.libraryID !== libraryID) continue;
+      const item: unknown = Zotero.Items.getByLibraryAndKey(libraryID, ref.key);
+      if (!isObject(item)) continue;
+      const attachment = item as Zotero.Item;
+      if (!attachment.isAttachment() || attachment.deleted) continue;
+      if (attachments.includes(attachment.id)) continue;
+      attachments.push(attachment.id);
+      const folder = linkedFolderOf(attachment);
+      if (folder !== undefined) folders.add(folder);
+    }
+    libraries.push({
+      libraryID,
+      name: String((library as { name?: unknown }).name ?? ""),
+      editable: isLibraryEditable(libraryID),
+      generatedNoteIDs: generated,
+      provenanceNoteIDs: provenance,
+      audioAttachmentIDs: attachments,
+      linkedFolders: [...folders],
+    });
+  }
+  return { libraries };
+}
+
+/**
+ * `P7-T11` step 3: move the confirmed content of the editable libraries to
+ * Zotero's trash, in batches of {@link PLUGIN_CONTENT_TRASH_BATCH}; nothing
+ * is erased, and the trash is not emptied. Every id is checked again first,
+ * as {@link trashGeneratedNotes} does: a note must still carry its mark, an
+ * attachment must still be one a report named, and none may be in the trash
+ * already or in a library the user cannot edit.
+ *
+ * @param content - {@link findAllPluginContent}'s answer, after the user agreed
+ * @returns how many items were moved
+ */
+export async function trashPluginContent(
+  content: PluginContent,
+): Promise<number> {
+  const confirmed: number[] = [];
+  for (const library of content.libraries) {
+    if (!library.editable || !isLibraryEditable(library.libraryID)) continue;
+    const audio = new Set(library.audioAttachmentIDs);
+    const still = (id: number): boolean => {
+      const item = itemById(id);
+      if (item === undefined || item.deleted) return false;
+      if (item.libraryID !== library.libraryID) return false;
+      if (audio.has(id)) return item.isAttachment();
+      return item.isNote() && (hasGeneratedTag(item) || isProvenanceNote(item));
+    };
+    for (const id of [
+      ...library.generatedNoteIDs,
+      ...library.provenanceNoteIDs,
+      ...library.audioAttachmentIDs,
+    ]) {
+      if (!confirmed.includes(id) && still(id)) confirmed.push(id);
+    }
+  }
+  for (let at = 0; at < confirmed.length; at += PLUGIN_CONTENT_TRASH_BATCH) {
+    await Zotero.Items.trashTx(
+      confirmed.slice(at, at + PLUGIN_CONTENT_TRASH_BATCH),
+    );
+  }
+  return confirmed.length;
+}
+
+// ---------------------------------------------------------------------------
 // 7. Reading a collection for a summary run (`P3-T29`)
 // ---------------------------------------------------------------------------
 

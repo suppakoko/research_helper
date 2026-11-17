@@ -601,6 +601,28 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   "research-helper-prefs-diagnostics-save",
   "research-helper-prefs-diagnostics-copy",
   "research-helper-prefs-diagnostics-status",
+  // P7-T10: the pane's stored-data actions (docs/09 §3.7).
+  "research-helper-prefs-data-title",
+  "research-helper-prefs-data-note",
+  "research-helper-prefs-clear-responses",
+  "research-helper-prefs-clear-summaries",
+  "research-helper-prefs-clear-jobs",
+  "research-helper-prefs-clear-embeddings",
+  "research-helper-prefs-delete-all-data",
+  "research-helper-prefs-reset-defaults",
+  "research-helper-prefs-data-confirm-title",
+  "research-helper-prefs-confirm-clear-responses",
+  "research-helper-prefs-confirm-clear-summaries",
+  "research-helper-prefs-confirm-clear-jobs",
+  "research-helper-prefs-confirm-clear-embeddings",
+  "research-helper-prefs-confirm-delete-all",
+  "research-helper-prefs-confirm-reset",
+  "research-helper-prefs-data-status",
+  // P7-T11: "Remove all Research Helper content" (plan/00 §6 item 380).
+  "research-helper-prefs-remove-content",
+  "research-helper-prefs-remove-content-note",
+  "research-helper-prefs-confirm-remove-content",
+  "research-helper-prefs-remove-content-status",
 ] as const satisfies readonly FluentMessageId[];
 
 export type MainWindowMessageId = (typeof MAIN_WINDOW_MESSAGE_IDS)[number];
@@ -1506,65 +1528,38 @@ export const KO_PENDING_REVIEW = [
   // Shipped 2026-11-17 with no live Korean, then left this list the same day: the owner
   // approved the coordinator's Korean for it and for P7-T12's 22 rewritten error messages
   // in chat (`G-41`, plan/00 §6 item 389(b)), so it is on KO_PRESENT.
-  // --- P7-T08's pane sections: Search, Report & audio, Privacy (mainWindow) ---
-  // Added 2026-11-17. Each is a commented draft in the ko-KR bundle, "not adopted",
-  // until the owner reviews it (`G-41`).
-  "research-helper-prefs-search",
-  "research-helper-prefs-default-years",
-  "research-helper-prefs-max-results",
-  "research-helper-prefs-hide-existing",
-  "research-helper-prefs-report",
-  "research-helper-prefs-report-language",
-  "research-helper-prefs-language-option",
-  "research-helper-prefs-tts-language",
-  "research-helper-prefs-tts-language-option",
-  "research-helper-prefs-tts-voice",
-  "research-helper-prefs-tts-voice-note",
-  "research-helper-prefs-tts-minutes",
-  "research-helper-prefs-tts-folder",
-  "research-helper-prefs-tts-folder-choose",
-  "research-helper-prefs-tts-folder-clear",
-  "research-helper-prefs-tts-folder-unset",
-  "research-helper-prefs-tts-folder-note",
-  "research-helper-prefs-tts-folder-refused",
-  "research-helper-prefs-privacy",
-  "research-helper-prefs-privacy-mode",
-  "research-helper-prefs-privacy-option",
-  "research-helper-prefs-privacy-explain",
-  "research-helper-prefs-fulltext-mode",
-  "research-helper-prefs-fulltext-option",
-  "research-helper-prefs-fulltext-note",
-  // --- P7-T09's Advanced section (mainWindow) ---
-  // Added 2026-11-17, as P7-T08's above (`G-41`).
-  "research-helper-prefs-advanced",
-  "research-helper-prefs-concurrency",
-  "research-helper-prefs-timeout",
-  "research-helper-prefs-cache-size",
-  "research-helper-prefs-cache-usage-row",
-  "research-helper-prefs-cache-usage-total",
-  "research-helper-prefs-cache-usage-unavailable",
-  "research-helper-prefs-debug",
-  "research-helper-prefs-debug-note",
-  "research-helper-prefs-data-location",
-  "research-helper-prefs-data-location-show",
-  "research-helper-prefs-data-location-unavailable",
-  // --- P7-T17's provider-policy lines (mainWindow) ---
-  // Added 2026-11-17, as P7-T08's above (`G-41`).
-  "research-helper-prefs-retention-title",
-  "research-helper-prefs-retention-openai",
-  "research-helper-prefs-retention-anthropic",
-  "research-helper-prefs-retention-gemini-paid",
-  "research-helper-prefs-retention-gemini-free",
-  "research-helper-prefs-retention-openrouter",
-  // --- P7-T13's diagnostics (mainWindow) ---
-  // Added 2026-11-17, as P7-T08's above (`G-41`).
-  "research-helper-prefs-diagnostics-title",
-  "research-helper-prefs-diagnostics-note",
-  "research-helper-prefs-diagnostics-preview",
-  "research-helper-prefs-diagnostics-text",
-  "research-helper-prefs-diagnostics-save",
-  "research-helper-prefs-diagnostics-copy",
-  "research-helper-prefs-diagnostics-status",
+  // --- P7-T08's, P7-T09's, P7-T17's and P7-T13's preference-pane strings (mainWindow) ---
+  // All 50 were added 2026-11-17 as commented drafts and left this list the same day: the
+  // owner approved the coordinator's Korean in chat (`G-41`, plan/00 §6 item 394), so all
+  // are on KO_PRESENT.
+  // --- P7-T10's stored-data strings (mainWindow) ---
+  // Added 2026-11-17. The ko-KR bundle carries each as a commented draft under the
+  // marker "# Draft (coordinator, 2026-11-17, not adopted; G-41, P7-T10):"; nothing was
+  // machine-translated. CI's l10n step allows each until the owner decides (G-41).
+  "research-helper-prefs-data-title",
+  "research-helper-prefs-data-note",
+  "research-helper-prefs-clear-responses",
+  "research-helper-prefs-clear-summaries",
+  "research-helper-prefs-clear-jobs",
+  "research-helper-prefs-clear-embeddings",
+  "research-helper-prefs-delete-all-data",
+  "research-helper-prefs-reset-defaults",
+  "research-helper-prefs-data-confirm-title",
+  "research-helper-prefs-confirm-clear-responses",
+  "research-helper-prefs-confirm-clear-summaries",
+  "research-helper-prefs-confirm-clear-jobs",
+  "research-helper-prefs-confirm-clear-embeddings",
+  "research-helper-prefs-confirm-delete-all",
+  "research-helper-prefs-confirm-reset",
+  "research-helper-prefs-data-status",
+  // --- P7-T11's content-removal strings (mainWindow) ---
+  // Added 2026-11-17, as P7-T10's are: commented drafts in ko-KR under the marker
+  // "# Draft (coordinator, 2026-11-17, not adopted; G-41, P7-T11):", nothing
+  // machine-translated, allowed in CI's l10n step until the owner decides (G-41).
+  "research-helper-prefs-remove-content",
+  "research-helper-prefs-remove-content-note",
+  "research-helper-prefs-confirm-remove-content",
+  "research-helper-prefs-remove-content-status",
 ] as const satisfies readonly FluentMessageId[];
 
 /**
@@ -2177,6 +2172,59 @@ export const KO_PRESENT = [
   // owner on 2026-11-17 (`G-41`, plan/00 §6 item 389), inserted byte for byte from the
   // drafts recorded in plan/reports/ko-review-389.ftl.
   "rh-error-policy",
+  // P7-T08's 25, P7-T09's 12, P7-T17's 6 and P7-T13's 7 preference-pane strings: Korean
+  // drafted by the coordinator and reviewed by the owner on 2026-11-17 (`G-41`, plan/00 §6
+  // item 394), inserted byte for byte from the drafts recorded in plan/reports/ko-review-p7b.ftl.
+  "research-helper-prefs-search",
+  "research-helper-prefs-default-years",
+  "research-helper-prefs-max-results",
+  "research-helper-prefs-hide-existing",
+  "research-helper-prefs-report",
+  "research-helper-prefs-report-language",
+  "research-helper-prefs-language-option",
+  "research-helper-prefs-tts-language",
+  "research-helper-prefs-tts-language-option",
+  "research-helper-prefs-tts-voice",
+  "research-helper-prefs-tts-voice-note",
+  "research-helper-prefs-tts-minutes",
+  "research-helper-prefs-tts-folder",
+  "research-helper-prefs-tts-folder-choose",
+  "research-helper-prefs-tts-folder-clear",
+  "research-helper-prefs-tts-folder-unset",
+  "research-helper-prefs-tts-folder-note",
+  "research-helper-prefs-tts-folder-refused",
+  "research-helper-prefs-privacy",
+  "research-helper-prefs-privacy-mode",
+  "research-helper-prefs-privacy-option",
+  "research-helper-prefs-privacy-explain",
+  "research-helper-prefs-fulltext-mode",
+  "research-helper-prefs-fulltext-option",
+  "research-helper-prefs-fulltext-note",
+  "research-helper-prefs-advanced",
+  "research-helper-prefs-concurrency",
+  "research-helper-prefs-timeout",
+  "research-helper-prefs-cache-size",
+  "research-helper-prefs-cache-usage-row",
+  "research-helper-prefs-cache-usage-total",
+  "research-helper-prefs-cache-usage-unavailable",
+  "research-helper-prefs-debug",
+  "research-helper-prefs-debug-note",
+  "research-helper-prefs-data-location",
+  "research-helper-prefs-data-location-show",
+  "research-helper-prefs-data-location-unavailable",
+  "research-helper-prefs-retention-title",
+  "research-helper-prefs-retention-openai",
+  "research-helper-prefs-retention-anthropic",
+  "research-helper-prefs-retention-gemini-paid",
+  "research-helper-prefs-retention-gemini-free",
+  "research-helper-prefs-retention-openrouter",
+  "research-helper-prefs-diagnostics-title",
+  "research-helper-prefs-diagnostics-note",
+  "research-helper-prefs-diagnostics-preview",
+  "research-helper-prefs-diagnostics-text",
+  "research-helper-prefs-diagnostics-save",
+  "research-helper-prefs-diagnostics-copy",
+  "research-helper-prefs-diagnostics-status",
 ] as const satisfies readonly FluentMessageId[];
 
 /* ---------------------------------------------------------------- arguments */
@@ -2596,6 +2644,38 @@ export interface FluentMessageArgsMap {
   "research-helper-prefs-retention-openrouter": { date: string };
   // P7-T13: the diagnostics status line's outcome.
   "research-helper-prefs-diagnostics-status": { outcome: string };
+  // P7-T10: the stored-data confirmations and status line
+  "research-helper-prefs-confirm-clear-responses": {
+    entries: number;
+    megabytes: number;
+  };
+  "research-helper-prefs-confirm-clear-summaries": { rows: number };
+  "research-helper-prefs-confirm-clear-jobs": { rows: number };
+  "research-helper-prefs-confirm-clear-embeddings": { rows: number };
+  "research-helper-prefs-confirm-delete-all": {
+    rows: number;
+    entries: number;
+    megabytes: number;
+  };
+  "research-helper-prefs-data-status": { outcome: string; removed: number };
+  // P7-T11: the content removal's confirmation and status line
+  "research-helper-prefs-confirm-remove-content": {
+    generated: number;
+    provenance: number;
+    audio: number;
+    records: number;
+    libraries: string;
+    libraryCount: number;
+    folders: string;
+    folderCount: number;
+    skipped: string;
+    skippedCount: number;
+  };
+  "research-helper-prefs-remove-content-status": {
+    outcome: string;
+    moved: number;
+    records: number;
+  };
 }
 
 /**
@@ -2821,6 +2901,16 @@ export const ARGUMENT_MESSAGE_IDS = [
   "research-helper-prefs-retention-openrouter",
   // mainWindow — the diagnostics status line (1, P7-T13)
   "research-helper-prefs-diagnostics-status",
+  // mainWindow — the stored-data confirmations and status line (6, P7-T10)
+  "research-helper-prefs-confirm-clear-responses",
+  "research-helper-prefs-confirm-clear-summaries",
+  "research-helper-prefs-confirm-clear-jobs",
+  "research-helper-prefs-confirm-clear-embeddings",
+  "research-helper-prefs-confirm-delete-all",
+  "research-helper-prefs-data-status",
+  // mainWindow — the content removal's confirmation and status line (2, P7-T11)
+  "research-helper-prefs-confirm-remove-content",
+  "research-helper-prefs-remove-content-status",
 ] as const satisfies readonly (keyof FluentMessageArgsMap)[];
 
 /**

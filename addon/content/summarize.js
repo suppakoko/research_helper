@@ -43,6 +43,7 @@ var RHSummarizeWindow = {
     rows: "rh-summarize-rows",
     counts: "rh-summarize-counts",
     outcome: "rh-summarize-outcome",
+    offline: "rh-summarize-offline",
     exportStatus: "rh-summarize-export-status",
     exportButton: "rh-summarize-export",
     start: "rh-summarize-start",
@@ -183,6 +184,8 @@ var RHSummarizeWindow = {
     this.place(this.el(this.spec.notice), model.notice);
     this.place(this.el(this.spec.counts), model.counts);
     this.place(this.el(this.spec.outcome), model.outcome);
+    // P7-T33: the offline line (plan/00 §6 item 393).
+    this.place(this.el(this.spec.offline), model.offline);
     this.renderRows(model.rows || []);
     const running = model.running === true;
     this.setDisabled(this.spec.resummarize, running || this.state.running);

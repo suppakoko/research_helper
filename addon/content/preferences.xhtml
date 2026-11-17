@@ -795,7 +795,7 @@
        ("debug" checked, "warn" unchecked) and nothing else — there is no
        `debug` preference and `logRequestBodies` is not in the pane
        (docs/07 §8.5, Diagnostics). The clear actions are P7-T10's;
-       diagnostics are P7-T13's. -->
+       diagnostics are P7-T13's; the stored-data block is P7-T10's. -->
   <groupbox id="rh-prefs-advanced" aria-labelledby="rh-prefs-advanced-title">
     <label>
       <html:h2
@@ -904,5 +904,56 @@
       role="status"
       hidden="true"
     />
+    <!-- P7-T10: stored data (docs/09 §3.7). Each button asks first, naming
+         what it would remove; the host shows the confirmation and does the
+         work, then the cache lines above are read again. None touches a
+         Zotero item, a note or an API key. -->
+    <html:h3
+      id="rh-data-title"
+      data-l10n-id="research-helper-prefs-data-title"
+    />
+    <html:p class="rh-hint" data-l10n-id="research-helper-prefs-data-note" />
+    <hbox align="center" wrap="true">
+      <button
+        id="rh-clear-responses"
+        data-l10n-id="research-helper-prefs-clear-responses"
+      />
+      <button
+        id="rh-clear-summaries"
+        data-l10n-id="research-helper-prefs-clear-summaries"
+      />
+      <button
+        id="rh-clear-jobs"
+        data-l10n-id="research-helper-prefs-clear-jobs"
+      />
+      <button
+        id="rh-clear-embeddings"
+        data-l10n-id="research-helper-prefs-clear-embeddings"
+      />
+    </hbox>
+    <hbox align="center" wrap="true">
+      <button
+        id="rh-delete-all-data"
+        data-l10n-id="research-helper-prefs-delete-all-data"
+      />
+      <button
+        id="rh-reset-defaults"
+        data-l10n-id="research-helper-prefs-reset-defaults"
+      />
+    </hbox>
+    <!-- P7-T11 (plan/00 §6 item 380, decision 2): the one command that moves
+         Zotero items, and only to the trash. The host counts each kind,
+         asks, re-checks each item, then deletes the stored data. -->
+    <hbox align="center">
+      <button
+        id="rh-remove-content"
+        data-l10n-id="research-helper-prefs-remove-content"
+      />
+    </hbox>
+    <html:p
+      class="rh-hint"
+      data-l10n-id="research-helper-prefs-remove-content-note"
+    />
+    <html:p id="rh-data-status" class="rh-hint" role="status" hidden="true" />
   </groupbox>
 </vbox>

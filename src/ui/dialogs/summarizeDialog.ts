@@ -106,6 +106,13 @@ export const SUMMARIZE_DIALOG_L10N = {
   wallClock: L10N_JOB_WALL_CLOCK_BUDGET,
 } as const satisfies Record<string, MainWindowMessageId>;
 
+/**
+ * `P7-T33` (`plan/00` §6 item 393): the keyword search's offline message, which the
+ * window shows once per run. An error id, so it is kept off {@link SUMMARIZE_DIALOG_L10N}.
+ */
+export const SUMMARIZE_OFFLINE_L10N =
+  "rh-error-offline" as const satisfies MainWindowMessageId;
+
 /** The removal command's prompt (FR-20), shown by the host with `Services.prompt`. */
 export const REMOVE_NOTES_L10N = {
   title: "research-helper-remove-notes-title",
@@ -142,6 +149,11 @@ export interface SummarizeWindowModel {
   readonly rows: readonly FluentLine[];
   readonly counts: FluentLine | undefined;
   readonly outcome: FluentLine | undefined;
+  /**
+   * `rh-error-offline`, once, when a paper or the run failed because Zotero is
+   * offline (`P7-T33`; `plan/00` §6 item 393, owner, 2026-11-17).
+   */
+  readonly offline: FluentLine | undefined;
   /** A run is in progress: Start and the options are disabled, Cancel enabled. */
   readonly running: boolean;
   /** Notes can be written; otherwise the option is disabled and explained. */
@@ -167,6 +179,26 @@ export interface SummarizeModelExtras {
       }
     | undefined;
   readonly exportAvailable?: boolean;
+  /** A paper or the run failed because Zotero is offline ({@link isOfflineFailure}). */
+  readonly offline?: boolean;
+}
+
+/**
+ * Whether a failure is Zotero being offline (`P7-T33`): an `OfflineError`, or a
+ * serialized error, whose `code` is `OFFLINE` (`src/core/errors.ts`). Only the
+ * code is read, never a message or a detail.
+ *
+ * Caller: `createSummarizeSession` in `src/bootstrap/registerUI.ts`, for each
+ * paper's failure and for the run's.
+ *
+ * @param error - what a paper or the run failed with
+ */
+export function isOfflineFailure(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { readonly code?: unknown }).code === "OFFLINE"
+  );
 }
 
 /**
@@ -249,6 +281,8 @@ export function buildSummarizeWindowModel(
               notes: c.notesWritten,
             },
           },
+    offline:
+      extras.offline === true ? { id: SUMMARIZE_OFFLINE_L10N } : undefined,
     running: extras.running,
     notesWritable: view.notesWritable,
     exportAvailable: extras.exportAvailable === true,

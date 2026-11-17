@@ -352,6 +352,31 @@ export const IDLE_REPORT_RUN: ReportRunState = Object.freeze({
   shown: undefined,
 }) as ReportRunState;
 
+/**
+ * The stop line of a run that failed because Zotero is offline (`plan/10`
+ * `P7-T33`; `plan/00` §6 item 393, owner, 2026-11-17): `rh-error-offline`, the
+ * message the keyword search shows, under the window's own "could not be
+ * generated" outcome line. Any other ending keeps the stop the run gave.
+ *
+ * Caller: `finishRun` and `runJob`'s catch in `publishReportWindowCommands`
+ * (`src/bootstrap/registerUI.ts`).
+ *
+ * @param outcome - how the run ended
+ * @param stop - the run's own stop line, if any
+ * @param code - the failing error's `code` (`SerializedError.code`, or a thrown
+ *   `ResearchHelperError`'s), if any
+ */
+export function stopForFailure(
+  outcome: ReportRunOutcome,
+  stop: TrendReportStop | undefined,
+  code: string | undefined,
+): TrendReportStop | undefined {
+  if (stop !== undefined) return stop;
+  return outcome === "failed" && code === "OFFLINE"
+    ? { messageId: "rh-error-offline" }
+    : undefined;
+}
+
 /** One thing that happened to the run. */
 export type ReportRunEvent =
   | { readonly kind: "started" }

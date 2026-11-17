@@ -1220,21 +1220,28 @@ The practical user-facing advice, which belongs in the README and in the prefere
 
 Verify each before release. Items marked **[BLOCKER]** must not ship unresolved.
 
+> **Reviewed 2026-11-17 (`plan/10` `P7-T16`).** Every line below has a row in `docs/spikes/phase-7-security-review.md`, with its evidence and a verdict. The 9 `[BLOCKER]` lines: 4 met; 2 met with a gap noted (the plugin database, the debug output); 3 met in source, in the release workflow or on the working-tree build, and shown finally only by the release itself (`plan/10` `P7-T26`, `P7-T30`). Of all 56 lines, 35 are met, 3 met with a gap noted, 12 partly met, 1 not met and 5 release-time. The findings that need an owner's answer are `plan/00-task-index.md` §6 item 395. The short notes under the lines below say only what changed or what is open.
+
 ### Credential storage
 
 - [ ] **[BLOCKER]** No code path writes an API key to `Zotero.Prefs`. A unit test asserts that every `secret: true` pref entry has no writer.
+  *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* met: `test/unit/prefs/schema.test.ts`'s describe "D5: no credential can reach a preference" asserts that no `secret: true` entry exists at all.
 - [ ] **[BLOCKER]** No API key is written to the plugin SQLite database, in any form, encrypted or not.
+  *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* met, gap noted: keys live in the login manager only and every persisted record passes `redactRecord`, but no test scans the whole database after a real job (item 395(f)).
 - [ ] Keys are stored via `Zotero.OSKeyStore.encrypt()` → `Services.logins`, under origin `chrome://research-helper` and a dedicated realm.
 - [ ] The OS keystore is **probed at startup** with an encrypt/decrypt round-trip; failure escalates to a visible tier decision, never a silent fallback.
 - [ ] There is **no** plaintext fallback tier.
 - [ ] `uninstall()` clears every stored secret and every plugin pref. `shutdown()` does not.
+  *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* met in unit tests: `P7-T10`'s `uninstallSweep` also deletes the plugin database's rows, cache blobs and report files; an uninstall in a running Zotero is not measured (`P7-T25`).
 - [ ] A restored data-directory backup produces an explanatory empty-key state, not an error.
 
 ### Key hygiene
 
 - [ ] **[BLOCKER]** No key appears in `Zotero.debug` output at any log level. Verified by running a full summarize job with `debug.level` at maximum and grepping the debug output for known key prefixes.
+  *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* met, gap noted: `P7-T14`'s audit found none of 30 planted values in three runs, with two of the six keys exercised; Zotero 10.0.3's `Zotero.HTTP.request` drops a `key=` parameter from the URL it logs, never logs headers, and logs no body because the plugin passes `logBodyLength: 0` (read from Zotero's source, not captured at run time; item 395(e)).
 - [ ] `Secret` wrapper is used; `.expose()` has exactly one call site per provider and each is reviewed.
 - [ ] Logger redaction runs unconditionally on every message and context value, before emission.
+  *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* partly met: the scope's `onError` reporter in `src/addon.ts` calls `Zotero.debug` with a teardown error's message and stack, not through the logger (item 395(d)).
 - [ ] `Authorization`, `x-api-key`, and `x-goog-api-key` headers are never logged.
 - [ ] Gemini uses the `x-goog-api-key` **header**, never the `key` query parameter.
 - [ ] `Zotero.HTTP.request` is never called with `debug: true`. Enforced by lint.
@@ -1248,13 +1255,17 @@ Verify each before release. Items marked **[BLOCKER]** must not ship unresolved.
 
 - [ ] **[BLOCKER]** No content is sent to any provider without an explicit user action. No background, idle-time, or on-import processing.
   *Decided 2026-11-16 (owner, `plan/00` §6 item 381; `plan/10` §0.4 line 23): this blocker stands as written for v1.0.* The `autoSummarize` preference (`07-architecture-and-data-model.md` §8.5), which summarizes the selected item without a click when on, **ships `false` and is hidden from the preferences pane**: no control in the pane or elsewhere in the UI sets it (`plan/10` `P7-T08` step 2 builds none; `P7-T16` step 2 checks). An opt-in automatic summarizer is a later-release candidate, to be weighed against this line then.
+  *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* met: `autoSummarize` ships `false` (`schema.test.ts`), no pane control or other UI writes it (`preferencesPane.test.ts`, "has no autoSummarize control…"; `preferences.spec.ts`), and startup sends nothing (`phase1-dod.spec.ts`, NFR-10).
 - [ ] **[BLOCKER]** User notes and PDF annotations are not sent in any default configuration.
 - [ ] Collection and tag names are not sent by default.
+  *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* **not met as built**: `metadataVariables` (`src/pipeline/summarize/summarizeItem.ts`) sends the item's Zotero tags in every summary prompt, and the report and audio prompts carry the collection's name (item 395(a)).
 - [ ] The pre-flight dialog states destination, model, item count, content scope, privacy mode, and cost.
 - [ ] Per-collection privacy overrides exist, are visible at the point of action, and can only tighten a global setting.
+  *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* partly met: overrides are read and only tighten, but nothing in the UI writes one (item 395(b)).
 - [ ] OpenRouter requests set `provider.data_collection: "deny"` in every mode, and `zdr: true` in strict mode.
 - [ ] A guardrail-restriction 404 from OpenRouter produces an explanatory message, not a generic failure.
 - [ ] Models with `dataPolicy.trainsOnInputByDefault === "unknown"` are refused in strict mode and warned elsewhere.
+  *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* partly met: full mode allows such a model with no warning, as §3.5's table says; this line and §3.5 disagree.
 - [ ] Gemini free-tier detection defaults to **assuming free** when uncertain, and the free-tier warning is not suppressible.
 - [ ] The audio (TTS) feature discloses Google as a destination independently of the summarization provider.
 - [ ] An egress log records provider, item count, and content scope per job, locally.
@@ -1267,6 +1278,7 @@ Verify each before release. Items marked **[BLOCKER]** must not ship unresolved.
 - [ ] NCBI: ≤3/s without a key, ≤10/s with one; `tool` and `email` always sent; `email` is the **maintainer's** unless the project owner records the alternative in `02-literature-database-apis.md` §2.2; **the `tool`/`email` pair is registered with NCBI** (sending them is not by itself compliance).
 - [ ] Crossref: polite pool via `mailto` and a contact-bearing `User-Agent`; limiter reconfigured from `x-rate-limit-*` and `x-concurrency-limit` response headers, never from the published table alone (list endpoints are limited far below the headline figure).
 - [ ] Semantic Scholar: ≤1/s; attribution present in the README and in generated reports.
+  *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* partly met: the rate holds and the README carries the attribution (`P7-T19`); generated reports do not (item 395(c)).
 - [ ] arXiv: ≥3 s between requests, exactly one concurrent connection.
 - [ ] Europe PMC: automated full-text retrieval restricted to the OA subset; no bulk download of anything else.
 - [ ] bioRxiv/medRxiv: conservative self-imposed limit; per-record licence field respected.
@@ -1278,21 +1290,29 @@ Verify each before release. Items marked **[BLOCKER]** must not ship unresolved.
 ### Supply chain and distribution
 
 - [ ] **[BLOCKER]** `update_url` is HTTPS with a validating certificate.
+  *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* met in `addon/manifest.json`; the served file is checked by the release itself (`P7-T26`, `P7-T30`).
 - [ ] **[BLOCKER]** Every `update.json` entry has an `update_hash` that is a CI-generated sha256 or sha512 hash, never transcribed by hand.
+  *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* met by the release workflow: its step "Check the built manifests" recomputes `sha512:` over the one XPI and fails on a mismatch (`test/unit/scripts/releaseWorkflow.test.ts`); the served file is the release's (`P7-T26`).
   *Corrected 2026-11-16 (owner, `plan/00` §6 item 381; `plan/10` §0.4 line 19): this line read "has a `sha256:` `update_hash`, generated in CI". A CI-generated `sha512:` hash meets the blocker — the property it protects is a hash generated in CI, never by hand, that Zotero checks — so the scaffold's `sha512:` stands and no `sha256:` step is added (`plan/10` `P7-T21` step 3; `P7-T16` checks the built output against this wording). The note below is kept as the record of the question.*
   *Noted 2026-11-16 (`plan/00` §6 item 380): this line and the measured build disagree. `13-testing-build-and-release.md` §6.3 (corrected 2026-09-16, `P0-T27`) records that the scaffold writes `sha512:` and offers no algorithm option, and Zotero installs it. Whether this blocker is met by a CI-generated `sha512:` hash (the property it protects — a hash generated in CI, never by hand, that Zotero checks) or needs a `sha256:` step of the project's own is an open line for the owner (`plan/reports/P7-decomposition.md`); `plan/10` `P7-T16` records the answer here and `P7-T21` builds it. Until then the line stands as written.*
 - [ ] `update_link` pins an exact version path; no `latest` redirect.
 - [ ] Lockfile committed; releases built with `npm ci`; runtime dependencies pinned to exact versions.
 - [ ] `npm audit` runs in CI; new high-severity advisories block release.
+  *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* met for the runtime tree, 0 advisories on 2026-11-17; the development tree has 17 (4 high), not gated (item 395(g)).
 - [ ] Releases are built in CI from a tagged commit, with restricted tag/release permissions and review required on the release workflow.
 - [ ] **[BLOCKER]** No secret of any kind is embedded in the XPI — no default API key, no analytics token, no signing key.
+  *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* met for the working-tree build: a key- and token-shape search over the 25 files of the built XPI found none; the tag's XPI is `P7-T26`'s.
 - [ ] `SECURITY.md` exists with a contact address.
+  *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* `SECURITY.md` exists; its contact is a placeholder for the owner to fill, and its response times are a draft (item 395(h)).
 - [ ] A post-compromise plan exists and includes "rotate all configured API keys" as the first user instruction.
+  *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* met: `SECURITY.md`'s "If a release is compromised", step 1.
 
 ### Documentation and honesty
 
 - [ ] **[BLOCKER]** The residual-risk statement (§1.8) appears in the preferences pane, unabbreviated, including the sentence that other plugins can read the keys.
+  *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* met: `test/unit/ui/preferencesPane.test.ts`, "reproduces all five paragraphs word for word".
 - [ ] The first-run notice about peer review, confidential material, and participant data is shown once and is not skippable by default.
+  *Reviewed 2026-11-17 (`plan/10` `P7-T16`; `docs/spikes/phase-7-security-review.md`):* partly met: shown once and not skippable, but the shipped `research-helper-egress-first-job-notice` does not carry §4.3's peer-review, confidentiality and participant-data cautions (item 395(b)).
 - [ ] The plugin claims **no** protection it does not provide. No "military-grade encryption", no "your data is safe", no "we never see your data" phrasing that implies more than it means.
 - [ ] Provider retention figures in the UI cite the provider's own page and carry the date they were verified.
 - [ ] Every policy claim in user-facing text is traceable to a source in this document's §8.

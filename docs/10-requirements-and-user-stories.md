@@ -866,6 +866,7 @@ Plugin-managed state outside Zotero items (caches, fixtures of past runs, dismis
 
 **NFR-9 — Offline behaviour.** (M)
 With no network connectivity, the plugin shall: load and register its UI without error; show a clear "no network" message rather than a stack trace when a network action is invoked; and keep all previously created items, notes, and audio attachments fully usable. No feature may cause data loss when the network drops mid-job (FR-23).
+*Note 2026-11-17 (owner, `plan/00-task-index.md` §6 item 393(d)):* for v1.0 the "no network" message is `rh-error-offline`, which the keyword search shows and, since `plan/10` `P7-T33`, the report, related and summarize windows show too. `07-architecture-and-data-model.md` §10.5's connectivity probe, offline pause, circuit breaker and badge are a later-release candidate.
 
 **NFR-10 — Startup impact.** (M)
 The plugin shall add **≤ 200 ms** to Zotero startup, and shall defer all non-essential initialization (model list fetches, cache warming) until first use. No network request shall be issued at startup.

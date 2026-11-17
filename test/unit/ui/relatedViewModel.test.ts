@@ -43,6 +43,7 @@ import type {
 import {
   createRelatedViewModel,
   dotsOf,
+  failedOffline,
   failureView,
   initialRelatedViewState,
   RELATED_SCORE_DOTS,
@@ -2229,5 +2230,94 @@ describe("P5-T17: importing the ticked rows", () => {
     expect(w.host.linkToSeedDefault()).toBe(true);
     w.linkToSeed.mockReturnValue(false);
     expect(w.host.linkToSeedDefault()).toBe(false);
+  });
+});
+
+describe("P7-T33: a related run that failed offline (plan/00 §6 item 393)", () => {
+  it("draws rh-error-offline, with Retry and the code in the disclosure, when every failed list failed OFFLINE", async () => {
+    const state = await drawn(
+      failedOutput({}, [
+        status("pmra", "failed", { errorCode: "OFFLINE" }),
+        status("europepmc-citations", "failed", { errorCode: "OFFLINE" }),
+        status("s2-citations", "no-key"),
+      ]),
+    );
+    expect(state.panel).toBe("error");
+    expect(state.error).toStrictEqual({
+      headline: { id: "rh-error-offline", args: undefined },
+      lines: [],
+      details: ["SOURCE"],
+      retry: true,
+      openPreferences: false,
+    });
+    expect(JSON.stringify(state)).not.toContain("secret detail");
+  });
+
+  it("keeps the could-not-reach headline when one failed list failed for another reason", async () => {
+    const state = await drawn(
+      failedOutput({}, [
+        status("pmra", "failed", { errorCode: "OFFLINE" }),
+        status("europepmc-citations", "failed", {
+          errorCode: "UPSTREAM_SERVER",
+        }),
+      ]),
+    );
+    expect(state.error?.headline.id).toBe("research-helper-search-state-error");
+  });
+
+  it("counts a rate-limited list as failed", () => {
+    expect(
+      failedOffline(
+        {
+          code: "SOURCE",
+          messageKey: "rh-error-source",
+          detail: "",
+          retryable: true,
+        },
+        [
+          status("pmra", "failed", { errorCode: "OFFLINE" }),
+          status("s2-citations", "rate-limited", { errorCode: "RATE_LIMIT" }),
+        ],
+      ),
+    ).toBe(false);
+  });
+
+  it("reads no list that was not asked, and needs at least one failed list", () => {
+    const source = {
+      code: "SOURCE",
+      messageKey: "rh-error-source",
+      detail: "",
+      retryable: true,
+    };
+    expect(failedOffline(source, [])).toBe(false);
+    expect(failedOffline(source, [status("s2-citations", "no-key")])).toBe(
+      false,
+    );
+    expect(
+      failedOffline(source, [
+        status("s2-citations", "no-key"),
+        status("pmra", "failed", { errorCode: "OFFLINE" }),
+      ]),
+    ).toBe(true);
+  });
+
+  it("reads OFFLINE as offline and any other code as not", () => {
+    const of = (code: string) =>
+      failedOffline({ code, messageKey: "m", detail: "", retryable: true }, [
+        status("pmra", "failed", { errorCode: "OFFLINE" }),
+      ]);
+    expect(of("OFFLINE")).toBe(true);
+    expect(of("SOURCE")).toBe(true);
+    expect(of("STORAGE")).toBe(false);
+  });
+
+  it("without the lists' states, a SOURCE failure keeps its old headline", () => {
+    const view = failureView({
+      code: "SOURCE",
+      messageKey: "rh-error-source",
+      detail: "d",
+      retryable: true,
+    });
+    expect(view.headline.id).toBe("research-helper-search-state-error");
   });
 });

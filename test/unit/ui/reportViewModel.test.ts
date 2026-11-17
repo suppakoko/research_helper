@@ -21,6 +21,7 @@ import {
   L10N_MENU_COLLECTION_REPORT,
   L10N_MENU_COLLECTION_RERUN,
   L10N_MENU_COLLECTION_SEARCH_IMPORT,
+  MAIN_WINDOW_MESSAGE_IDS,
   REPORT_WINDOW_MESSAGE_IDS,
 } from "../../../src/i18n/keys";
 import {
@@ -62,6 +63,7 @@ import {
   reportPauseQuestion,
   resolveReportLanguage,
   settleReportNote,
+  stopForFailure,
   windowRunModel,
   type ReportConfirmDeps,
   type ReportModelExtras,
@@ -1512,5 +1514,56 @@ describe("P6-T17 — Generate Audio Report… on the collection menu", () => {
     entry?.onCommand?.(new Event("command"), contextOf([1, 2]).context);
     expect(calls).toHaveLength(1);
     expect(errors).toHaveLength(2);
+  });
+});
+
+describe("P7-T33: a report run that failed offline (plan/00 §6 item 393)", () => {
+  it("gives rh-error-offline as the stop of a failed run whose code is OFFLINE", () => {
+    expect(stopForFailure("failed", undefined, "OFFLINE")).toStrictEqual({
+      messageId: "rh-error-offline",
+    });
+  });
+
+  it("gives no stop for another code, no code, or another outcome", () => {
+    expect(stopForFailure("failed", undefined, "NETWORK")).toBeUndefined();
+    expect(stopForFailure("failed", undefined, undefined)).toBeUndefined();
+    for (const outcome of [
+      "succeeded",
+      "cancelled",
+      "declined",
+      "interrupted",
+      "unavailable",
+      "stopped",
+    ] as const) {
+      expect(
+        stopForFailure(outcome, undefined, "OFFLINE"),
+        outcome,
+      ).toBeUndefined();
+    }
+  });
+
+  it("keeps the run's own stop", () => {
+    const own = {
+      messageId: "research-helper-report-stopped-no-papers",
+    } as const;
+    expect(stopForFailure("failed", own, "OFFLINE")).toBe(own);
+    expect(stopForFailure("stopped", own, undefined)).toBe(own);
+  });
+
+  it("draws the offline line from the main bundle under the failed outcome", () => {
+    const state = run(started, {
+      kind: "finished",
+      outcome: "failed",
+      stop: stopForFailure("failed", undefined, "OFFLINE"),
+    });
+    const model = buildReportRunModel(state, EXTRAS);
+    expect(model.outcome).toEqual({
+      id: REPORT_RUN_L10N.outcome,
+      args: { outcome: "failed" },
+    });
+    expect(model.stop).toEqual({ bundle: "main", id: "rh-error-offline" });
+    expect(MAIN_WINDOW_MESSAGE_IDS as readonly string[]).toContain(
+      "rh-error-offline",
+    );
   });
 });

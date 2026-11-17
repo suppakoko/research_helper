@@ -91,6 +91,11 @@ import {
 } from "../../core/cache/cache";
 import type { Clock } from "../../core/clock";
 import {
+  DATA_KINDS,
+  type DataCounts,
+  type DataKind,
+} from "../../core/dataReset";
+import {
   AuthenticationError,
   AuthorizationError,
   RateLimitError,
@@ -104,6 +109,7 @@ import {
   type SecretStore,
 } from "../../core/secretStore";
 import type { MainWindowMessageId } from "../../i18n/keys";
+import type { FluentLine } from "../dialogs/costConfirmDialog";
 import type { ProviderId } from "../../model/ids";
 
 /* ------------------------------------------------------------ registration */
@@ -410,7 +416,187 @@ export const PREFERENCES_L10N = {
   diagnosticsSave: "research-helper-prefs-diagnostics-save",
   diagnosticsCopy: "research-helper-prefs-diagnostics-copy",
   diagnosticsStatus: "research-helper-prefs-diagnostics-status",
+  // P7-T10 (2026-11-17): the Advanced section's stored-data actions (docs/09
+  // §3.7). The Korean is a commented draft, not adopted, on KO_PENDING_REVIEW.
+  dataTitle: "research-helper-prefs-data-title",
+  dataNote: "research-helper-prefs-data-note",
+  clearResponses: "research-helper-prefs-clear-responses",
+  clearSummaries: "research-helper-prefs-clear-summaries",
+  clearJobs: "research-helper-prefs-clear-jobs",
+  clearEmbeddings: "research-helper-prefs-clear-embeddings",
+  deleteAllData: "research-helper-prefs-delete-all-data",
+  resetDefaults: "research-helper-prefs-reset-defaults",
+  dataConfirmTitle: "research-helper-prefs-data-confirm-title",
+  confirmResponses: "research-helper-prefs-confirm-clear-responses",
+  confirmSummaries: "research-helper-prefs-confirm-clear-summaries",
+  confirmJobs: "research-helper-prefs-confirm-clear-jobs",
+  confirmEmbeddings: "research-helper-prefs-confirm-clear-embeddings",
+  confirmDeleteAll: "research-helper-prefs-confirm-delete-all",
+  confirmReset: "research-helper-prefs-confirm-reset",
+  dataStatus: "research-helper-prefs-data-status",
+  // P7-T11 (2026-11-17): "Remove all Research Helper content" (plan/00 §6
+  // item 380, decision 2). Korean as P7-T10's: a draft on KO_PENDING_REVIEW.
+  removeContent: "research-helper-prefs-remove-content",
+  removeContentNote: "research-helper-prefs-remove-content-note",
+  confirmRemoveContent: "research-helper-prefs-confirm-remove-content",
+  removeContentStatus: "research-helper-prefs-remove-content-status",
 } as const satisfies Record<string, MainWindowMessageId>;
+
+/** `P7-T10`: each clear's confirmation message. */
+export const DATA_CONFIRM_L10N: Readonly<
+  Record<DataKind, MainWindowMessageId>
+> = {
+  "cached-responses": PREFERENCES_L10N.confirmResponses,
+  summaries: PREFERENCES_L10N.confirmSummaries,
+  "job-history": PREFERENCES_L10N.confirmJobs,
+  embeddings: PREFERENCES_L10N.confirmEmbeddings,
+  all: PREFERENCES_L10N.confirmDeleteAll,
+};
+
+/**
+ * `P7-T10` step 1: the confirmation for `kind`, naming what it would remove —
+ * rows, cache entries, and the entries' size in the cache cap's unit.
+ *
+ * @param kind - the action
+ * @param counts - `countData`'s figures (`src/core/dataReset.ts`)
+ */
+export function dataConfirmLine(
+  kind: DataKind,
+  counts: DataCounts,
+): FluentLine {
+  return {
+    id: DATA_CONFIRM_L10N[kind],
+    args: {
+      rows: counts.rows,
+      entries: counts.entries,
+      megabytes: counts.bytes / BYTES_PER_MB,
+    },
+  };
+}
+
+/**
+ * `P7-T10`: the count the status line reports after a clear — the figure its
+ * confirmation named, so the two agree. Cached responses are counted in cache
+ * entries; summaries, job history and embeddings in their table's rows (their
+ * cache namespace goes with them, uncounted, as the confirmation says nothing
+ * of it); "delete all" names both, so it reports both.
+ *
+ * Measured 2026-11-17 in the first recorded integration run, before this: the
+ * confirmation read "Remove 12 stored summaries…" and the status "Removed 32
+ * stored records", because the 20 cached summaries were added in.
+ *
+ * @param kind - the action
+ * @param removed - `clearData`'s figures (`src/core/dataReset.ts`)
+ */
+export function removedCount(kind: DataKind, removed: DataCounts): number {
+  if (kind === "cached-responses") return removed.entries;
+  if (kind === "all") return removed.rows + removed.entries;
+  return removed.rows;
+}
+
+/** `P7-T10`: how a clear or a reset ended. */
+export type DataActionOutcome =
+  "cleared" | "reset" | "nothing" | "declined" | "failed" | "unavailable";
+
+/** {@link PreferencesHostApi.clearData}'s and {@link PreferencesHostApi.resetToDefaults}'s answer. */
+export interface DataActionResult {
+  readonly outcome: DataActionOutcome;
+  /** The pane's status line: {@link PREFERENCES_L10N}`.dataStatus`. */
+  readonly status: FluentLine;
+}
+
+function dataResult(outcome: DataActionOutcome, removed = 0): DataActionResult {
+  return {
+    outcome,
+    status: { id: PREFERENCES_L10N.dataStatus, args: { outcome, removed } },
+  };
+}
+
+/**
+ * `P7-T11`: what "Remove all Research Helper content" would do, as counts and
+ * names for the confirmation. Built by `preferencesContentRemovalPort`
+ * (`src/bootstrap/registerUI.ts`) from `findAllPluginContent`
+ * (`src/zotero/notes.ts`) and `countData` (`src/core/dataReset.ts`). The
+ * names and folders are shown to the user and **never logged**.
+ */
+export interface ContentSummary {
+  /** (a) Generated notes in the libraries the user can edit. */
+  readonly generated: number;
+  /** (b) Search provenance notes, likewise. */
+  readonly provenance: number;
+  /** (c) Audio attachments a stored report names, likewise. */
+  readonly audio: number;
+  /** (d) Rows and cache entries in the plugin database. */
+  readonly records: number;
+  /** The editable libraries holding any of (a)–(c). */
+  readonly libraries: readonly string[];
+  /** Libraries holding any of (a)–(c) that the user cannot edit: skipped. */
+  readonly skipped: readonly string[];
+  /** The folders of linked audio files among (c), which stay on disk. */
+  readonly linkedFolders: readonly string[];
+}
+
+/**
+ * `P7-T11`: the find and the removal, bound by the composition root. `plan`
+ * is whatever `find` found, handed back unchanged to `remove`, which checks
+ * every item again before it moves it.
+ */
+export interface ContentRemovalPort {
+  /** Read only; `undefined` when the plugin database is not open. */
+  find(): Promise<{ summary: ContentSummary; plan: unknown } | undefined>;
+  /** Trash (a)–(c), then delete (d); `undefined` when the database closed. */
+  remove(
+    plan: unknown,
+  ): Promise<{ moved: number; records: number } | undefined>;
+}
+
+/** `P7-T11` step 2: the confirmation, with the four counts and the names. */
+export function contentConfirmLine(summary: ContentSummary): FluentLine {
+  return {
+    id: PREFERENCES_L10N.confirmRemoveContent,
+    args: {
+      generated: summary.generated,
+      provenance: summary.provenance,
+      audio: summary.audio,
+      records: summary.records,
+      libraries: summary.libraries.join(", "),
+      libraryCount: summary.libraries.length,
+      folders: summary.linkedFolders.join("; "),
+      folderCount: summary.linkedFolders.length,
+      skipped: summary.skipped.join(", "),
+      skippedCount: summary.skipped.length,
+    },
+  };
+}
+
+/** `P7-T11`: how the removal ended. */
+export type ContentRemovalOutcome =
+  "removed" | "nothing" | "declined" | "failed" | "unavailable";
+
+/** {@link PreferencesHostApi.removeAllContent}'s answer. */
+export interface ContentRemovalResult {
+  readonly outcome: ContentRemovalOutcome;
+  readonly status: FluentLine;
+}
+
+function contentResult(
+  outcome: ContentRemovalOutcome,
+  moved = 0,
+  records = 0,
+): ContentRemovalResult {
+  return {
+    outcome,
+    status: {
+      id: PREFERENCES_L10N.removeContentStatus,
+      args: { outcome, moved, records },
+    },
+  };
+}
+
+/** Whether `value` is one of {@link DATA_KINDS}. */
+export function isDataKind(value: unknown): value is DataKind {
+  return (DATA_KINDS as readonly unknown[]).includes(value);
+}
 
 /**
  * `P7-T17`: the messages a provider-policy line may use. A row naming any
@@ -1322,6 +1508,25 @@ export interface AdvancedPort {
 }
 
 /**
+ * `P7-T10`: the stored-data actions, bound by the composition root
+ * (`preferencesDataResetPort` in `src/bootstrap/registerUI.ts`) over the open
+ * plugin database, so this file opens no database and shows no dialog itself.
+ */
+export interface DataResetPort {
+  /** What `kind` would remove; `undefined` when the database is not open. */
+  count(kind: DataKind): Promise<DataCounts | undefined>;
+  /** Remove it; `undefined` when the database is not open. */
+  clear(kind: DataKind): Promise<DataCounts | undefined>;
+  /** "Reset to defaults" (`resetPreferences`); returns how many were cleared. */
+  resetPreferences(): number;
+  /**
+   * Ask the user, modally over `parent` (the preferences window), with
+   * `line` as the message. Resolves to whether they agreed.
+   */
+  confirm(line: FluentLine, parent: unknown): Promise<boolean>;
+}
+
+/**
  * What `addon/content/preferences.js` is allowed to do. Published on the plugin
  * instance at {@link PREFERENCES_API_PROPERTY}.
  *
@@ -1412,6 +1617,23 @@ export interface PreferencesHostApi {
   saveDiagnostics(path: string, text: string): Promise<boolean>;
   /** `P7-T13`: put `text` on the clipboard. Resolves to whether it was. */
   copyDiagnostics(text: string): Promise<boolean>;
+  /**
+   * `P7-T10`: count what `kind` would remove, ask over `parent` naming the
+   * count, and only then remove it. Nothing to remove asks nothing. No Zotero
+   * item, note or key is touched.
+   */
+  clearData(kind: string, parent?: unknown): Promise<DataActionResult>;
+  /**
+   * `P7-T10`: ask over `parent`, then restore every non-secret preference to
+   * its default, keys and stored data aside.
+   */
+  resetToDefaults(parent?: unknown): Promise<DataActionResult>;
+  /**
+   * `P7-T11`: find what the plugin created, ask over `parent` with the count
+   * of each kind, then move the notes and attachments to Zotero's trash and
+   * delete the stored data. Never erases an item or empties the trash.
+   */
+  removeAllContent(parent?: unknown): Promise<ContentRemovalResult>;
 }
 
 /**
@@ -1485,6 +1707,14 @@ export interface PreferencesHostDeps {
   readonly policyNotes?: readonly PanePolicyNote[];
   /** `P7-T13`: the diagnostics text, its save and its copy. */
   readonly diagnostics?: DiagnosticsPort;
+  /** `P7-T10`: the stored-data actions. Absent, each reports `unavailable`. */
+  readonly dataReset?: DataResetPort;
+  /**
+   * `P7-T11`: "Remove all Research Helper content". Asked through
+   * {@link DataResetPort.confirm}; absent, or without `dataReset`, it reports
+   * `unavailable`.
+   */
+  readonly contentRemoval?: ContentRemovalPort;
   readonly clock: Clock;
   /**
    * Redacting logger (`src/core/logger.ts`). The host logs ids, outcomes,
@@ -1535,6 +1765,8 @@ export function createPreferencesHost(
     advanced,
     policyNotes,
     diagnostics,
+    dataReset,
+    contentRemoval,
     clock,
     logger,
   } = deps;
@@ -2043,6 +2275,105 @@ export function createPreferencesHost(
     }
   }
 
+  async function clearData(
+    kind: string,
+    parent?: unknown,
+  ): Promise<DataActionResult> {
+    if (dataReset === undefined || !isDataKind(kind)) {
+      return dataResult("unavailable");
+    }
+    let outcome: DataActionOutcome;
+    let removed = 0;
+    try {
+      const counts = await dataReset.count(kind);
+      if (counts === undefined) {
+        outcome = "unavailable";
+      } else if (counts.rows + counts.entries === 0) {
+        outcome = "nothing";
+      } else if (
+        !(await dataReset.confirm(dataConfirmLine(kind, counts), parent))
+      ) {
+        outcome = "declined";
+      } else {
+        const result = await dataReset.clear(kind);
+        if (result === undefined) {
+          outcome = "unavailable";
+        } else {
+          removed = removedCount(kind, result);
+          outcome = "cleared";
+        }
+      }
+      // Counts and the kind only (docs/09 §2.1).
+      logger?.info("stored data action", { kind, outcome, removed });
+    } catch (error) {
+      outcome = "failed";
+      logger?.warn("stored data action failed", {
+        kind,
+        error: errorName(error),
+      });
+    }
+    return dataResult(outcome, removed);
+  }
+
+  async function resetToDefaults(parent?: unknown): Promise<DataActionResult> {
+    if (dataReset === undefined) return dataResult("unavailable");
+    try {
+      const agreed = await dataReset.confirm(
+        { id: PREFERENCES_L10N.confirmReset },
+        parent,
+      );
+      if (!agreed) return dataResult("declined");
+      const cleared = dataReset.resetPreferences();
+      logger?.info("preferences reset", { cleared });
+      return dataResult("reset", cleared);
+    } catch (error) {
+      logger?.warn("preferences reset failed", { error: errorName(error) });
+      return dataResult("failed");
+    }
+  }
+
+  async function removeAllContent(
+    parent?: unknown,
+  ): Promise<ContentRemovalResult> {
+    if (contentRemoval === undefined || dataReset === undefined) {
+      return contentResult("unavailable");
+    }
+    try {
+      const found = await contentRemoval.find();
+      if (found === undefined) return contentResult("unavailable");
+      const { summary } = found;
+      if (
+        summary.generated +
+          summary.provenance +
+          summary.audio +
+          summary.records ===
+        0
+      ) {
+        logger?.info("plugin content removal", { outcome: "nothing" });
+        return contentResult("nothing");
+      }
+      if (!(await dataReset.confirm(contentConfirmLine(summary), parent))) {
+        logger?.info("plugin content removal", { outcome: "declined" });
+        return contentResult("declined");
+      }
+      const done = await contentRemoval.remove(found.plan);
+      if (done === undefined) return contentResult("unavailable");
+      // Counts only: no library name, no folder (docs/09 §2.2).
+      logger?.info("plugin content removal", {
+        outcome: "removed",
+        moved: done.moved,
+        records: done.records,
+        skippedLibraries: summary.skipped.length,
+      });
+      return contentResult("removed", done.moved, done.records);
+    } catch (error) {
+      logger?.warn("plugin content removal failed", {
+        error: errorName(error),
+      });
+      return contentResult("failed");
+    }
+  }
+
   return {
     paneId: PREFERENCES_PANE_ID,
     readState,
@@ -2066,6 +2397,9 @@ export function createPreferencesHost(
     diagnosticsText,
     saveDiagnostics,
     copyDiagnostics,
+    clearData,
+    resetToDefaults,
+    removeAllContent,
   };
 }
 

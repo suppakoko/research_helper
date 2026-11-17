@@ -497,16 +497,58 @@ const CODES_WITH_NO_DATABASE: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Whether a run whose every list failed failed because Zotero is offline
+ * (`plan/10` `P7-T33`; `plan/00` §6 item 393, owner, 2026-11-17).
+ *
+ * Measured by `P7-T18`: offline, the related run ends `SOURCE` (no list
+ * answered) and each list's status carries `OFFLINE`. So the answer is yes when
+ * at least one list failed and every list that failed failed `OFFLINE`; a list
+ * that was not asked (no key, not indexed) does not count either way.
+ *
+ * @param error - the run's serialized error
+ * @param statuses - the lists' states, as the run ended them
+ */
+export function failedOffline(
+  error: SerializedError,
+  statuses: readonly RelatedGeneratorStatus[],
+): boolean {
+  if (error.code === "OFFLINE") return true;
+  if (error.code !== "SOURCE") return false;
+  const failed = statuses.filter(
+    (status) => status.state === "failed" || status.state === "rate-limited",
+  );
+  return (
+    failed.length > 0 &&
+    failed.every((status) => status.errorCode === "OFFLINE")
+  );
+}
+
+/**
  * A run's failure as the error panel. Every list's own state is on the status rows,
  * so the panel carries no lines of its own.
  *
+ * *`P7-T33` (2026-11-17):* given the lists' states, a run that failed because Zotero
+ * is offline ({@link failedOffline}) is drawn with `rh-error-offline`, the message
+ * the keyword search shows, and Retry; its machine code stays in the disclosure.
+ *
  * @param error - the pipeline's serialized error, already redacted
  * @param fallback - the headline for any other code; the recommend mode has its own
+ * @param statuses - the lists' states; absent, the offline reading uses `error` alone
  */
 export function failureView(
   error: SerializedError,
   fallback: MessageRef = message("research-helper-search-related-state-failed"),
+  statuses: readonly RelatedGeneratorStatus[] = [],
 ): ErrorView {
+  if (error.code === "SOURCE" && failedOffline(error, statuses)) {
+    return {
+      headline: message("rh-error-offline"),
+      lines: [],
+      details: errorDetails([error]),
+      retry: true,
+      openPreferences: false,
+    };
+  }
   const seed = SEED_ERROR_MESSAGE[error.messageKey];
   if (seed !== undefined) {
     return {
@@ -742,7 +784,7 @@ export function createRelatedViewModel(
     publish({
       ...idle,
       panel: "error",
-      error: failureView(error),
+      error: failureView(error, undefined, statuses),
       sources: statuses.map(statusLine),
       warnings,
     });

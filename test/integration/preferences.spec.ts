@@ -93,6 +93,7 @@ import {
   createZoteroPrefStore,
   findBranchPrefsContaining,
   getPref as getRawPref,
+  listBranchPrefs,
   prefHasUserValue,
   setPref as setRawPref,
   type PrefScalar,
@@ -1606,5 +1607,217 @@ describe("P7-T13 — the diagnostics text, from the live plugin", function () {
       () => !Services.wm.getEnumerator("zotero:pref").hasMoreElements(),
       "the window mediator to drop the preferences window",
     );
+  });
+});
+
+describe("P7-T10 — the stored-data actions, from the live plugin", function () {
+  const MARK = `p7t10-${randomHex(4)}`;
+  /** Every user value under the branch, put back after the reset. */
+  let snapshot: Map<string, PrefScalar> | undefined;
+
+  interface CommonDialog {
+    cancelDialog(): void;
+    acceptDialog(): void;
+  }
+  const observerService = Services.obs as unknown as {
+    addObserver(observer: unknown, topic: string): void;
+    removeObserver(observer: unknown, topic: string): void;
+  };
+
+  /**
+   * Run `action` while Zotero's confirmation is answered `accept` from its own
+   * window, as `searchDialog-flow.spec.ts` answers its prompt; resolves to the
+   * texts drawn. A guard cancels any dialog still open after ten seconds.
+   */
+  async function answering<T>(
+    accept: boolean,
+    action: () => Promise<T>,
+  ): Promise<{ result: T; drawn: string[] }> {
+    const drawn: string[] = [];
+    const observer = {
+      observe(subject: unknown): void {
+        const dialog = subject as Window;
+        drawn.push(
+          (
+            dialog.document.getElementById("infoBody")?.textContent ?? ""
+          ).trim(),
+        );
+        dialog.setTimeout(() => {
+          const root = dialog.document.getElementById(
+            "commonDialog",
+          ) as unknown as CommonDialog;
+          if (accept) root.acceptDialog();
+          else root.cancelDialog();
+        }, 0);
+      },
+    };
+    observerService.addObserver(observer, "common-dialog-loaded");
+    const guard = setTimeout(() => {
+      const windows = (
+        Services.wm as unknown as {
+          getEnumerator(type: null): {
+            hasMoreElements(): boolean;
+            getNext(): Window;
+          };
+        }
+      ).getEnumerator(null);
+      while (windows.hasMoreElements()) {
+        const root = windows
+          .getNext()
+          .document?.getElementById(
+            "commonDialog",
+          ) as unknown as CommonDialog | null;
+        root?.cancelDialog();
+      }
+    }, 10_000);
+    try {
+      return { result: await action(), drawn };
+    } finally {
+      clearTimeout(guard);
+      observerService.removeObserver(observer, "common-dialog-loaded");
+    }
+  }
+
+  before(async function () {
+    snapshot = new Map();
+    for (const key of listBranchPrefs()) {
+      if (prefHasUserValue(key)) {
+        const value = getRawPref(key);
+        if (value !== undefined) snapshot.set(key, value);
+      }
+    }
+  });
+
+  after(async function () {
+    if (snapshot === undefined) return;
+    for (const key of listBranchPrefs()) {
+      const value = snapshot.get(key);
+      if (value === undefined) {
+        if (prefHasUserValue(key)) clearRawPref(key);
+      } else {
+        setRawPref(key, value);
+      }
+    }
+  });
+
+  it("each clear asks with its count, removes only its kind after a yes and nothing after a no; reset restores the defaults and keeps the key rows", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    const instance = await initializedInstance();
+    const host = publishedHost(instance)!;
+    const graph = (instance.api as { services?: ServiceGraph }).services!;
+    const open = await graph.database.ready;
+    assert.isTrue(open !== undefined, "the plugin database is open");
+    const db = open!.connection;
+    const count = async (sql: string, params: string[]): Promise<number> =>
+      Number(await db.valueQueryAsync(sql, params));
+    const parent = Zotero.getMainWindow();
+
+    // Synthetic rows: two summaries, an ended and a running job, one cached
+    // response. None is a real paper, key or answer.
+    for (const n of [1, 2]) {
+      await db.queryAsync(
+        "INSERT INTO summary (id, work_key, prompt_version, provider_id, model_id, input_scope, json, generated_at) VALUES (?, ?, 'v', 'p', 'm', 'abstract', '{}', 1)",
+        [`${MARK}-s${String(n)}`, `${MARK}-w${String(n)}`],
+      );
+    }
+    for (const status of ["succeeded", "running"]) {
+      await db.queryAsync(
+        "INSERT INTO job (id, pipeline_id, status, priority, input_json, input_version, progress_json, usage_json, plugin_version, created_at, warnings_json, redaction_json) VALUES (?, 'summarize', ?, 'normal', '{}', 1, '{}', '{}', '0.0.0', 1, '[]', '{}')",
+        [`${MARK}-${status}`, status],
+      );
+    }
+    await graph.cache.set("source-response", `${MARK}-response`, "synthetic");
+    const mine = (table: string, column = "id") =>
+      count(`SELECT COUNT(*) FROM ${table} WHERE ${column} LIKE ?`, [
+        `${MARK}%`,
+      ]);
+    assert.strictEqual(await mine("summary"), 2);
+
+    // Summaries: a no removes nothing; a yes removes the rows; the prompt
+    // names the count and says the notes stay.
+    const declined = await answering(false, () =>
+      host.clearData("summaries", parent),
+    );
+    assert.strictEqual(declined.result.outcome, "declined");
+    assert.strictEqual(declined.drawn.length, 1, "one confirmation drawn");
+    assert.include(
+      declined.drawn[0] ?? "",
+      "The notes in your Zotero library stay.",
+    );
+    assert.strictEqual(await mine("summary"), 2, "a no removes nothing");
+    const cleared = await answering(true, () =>
+      host.clearData("summaries", parent),
+    );
+    log(
+      `[P7-T10] summaries: "${cleared.drawn[0] ?? ""}" -> ${JSON.stringify(cleared.result)}`,
+    );
+    assert.strictEqual(cleared.result.outcome, "cleared");
+    // The status reports the count the confirmation named (2026-11-17: before
+    // `removedCount`, "Remove 12 stored summaries" was followed by "Removed 32").
+    const namedAndRemoved = (run: {
+      drawn: string[];
+      result: { status?: { args?: Record<string, unknown> } };
+    }): [number, unknown] => [
+      Number(/\d+/.exec(run.drawn[0] ?? "")?.[0]),
+      run.result.status?.args?.removed,
+    ];
+    const [namedSummaries, removedSummaries] = namedAndRemoved(cleared);
+    assert.strictEqual(removedSummaries, namedSummaries, "summaries");
+    assert.strictEqual(await mine("summary"), 0);
+    assert.strictEqual(await mine("job"), 2, "the jobs are not touched");
+
+    // Job history: the ended job goes, the running one stays.
+    const jobs = await answering(true, () =>
+      host.clearData("job-history", parent),
+    );
+    log(
+      `[P7-T10] jobs: "${jobs.drawn[0] ?? ""}" -> ${JSON.stringify(jobs.result)}`,
+    );
+    assert.strictEqual(jobs.result.outcome, "cleared");
+    const [namedJobs, removedJobs] = namedAndRemoved(jobs);
+    assert.strictEqual(removedJobs, namedJobs, "job history");
+    assert.strictEqual(
+      await count("SELECT COUNT(*) FROM job WHERE id = ?", [
+        `${MARK}-succeeded`,
+      ]),
+      0,
+    );
+    assert.strictEqual(
+      await count("SELECT COUNT(*) FROM job WHERE id = ?", [`${MARK}-running`]),
+      1,
+      "a running job's row stays",
+    );
+    await db.queryAsync("DELETE FROM job WHERE id = ?", [`${MARK}-running`]);
+
+    // Cached responses: the entry goes.
+    const responses = await answering(true, () =>
+      host.clearData("cached-responses", parent),
+    );
+    log(
+      `[P7-T10] responses: "${responses.drawn[0] ?? ""}" -> ${JSON.stringify(responses.result)}`,
+    );
+    assert.strictEqual(responses.result.outcome, "cleared");
+    const [namedResponses, removedResponses] = namedAndRemoved(responses);
+    assert.strictEqual(removedResponses, namedResponses, "cached responses");
+    assert.isUndefined(
+      await graph.cache.get("source-response", `${MARK}-response`),
+    );
+
+    // Reset: a changed setting returns to its default; the key store row and a
+    // key row stay as they were.
+    const backend = getRawPref(PREF_KEYS.secretBackend);
+    const ncbiPresent = getRawPref(PREF_KEYS.ncbiKeyPresent);
+    setRawPref(PREF_KEYS.concurrency, 7);
+    const reset = await answering(true, () => host.resetToDefaults(parent));
+    log(
+      `[P7-T10] reset: "${reset.drawn[0] ?? ""}" -> ${JSON.stringify(reset.result)}`,
+    );
+    assert.strictEqual(reset.result.outcome, "reset");
+    assert.isFalse(
+      prefHasUserValue(PREF_KEYS.concurrency),
+      "concurrency is back to its default",
+    );
+    assert.strictEqual(getRawPref(PREF_KEYS.secretBackend), backend);
+    assert.strictEqual(getRawPref(PREF_KEYS.ncbiKeyPresent), ncbiPresent);
   });
 });
