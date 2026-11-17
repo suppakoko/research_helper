@@ -24,9 +24,11 @@ declare namespace _ZoteroTypes {
       "anthropic.baseUrl": string;
       "privacy.mode": string;
       "autoSummarize": boolean;
+      "summary.fullTextMode": string;
       "cache.maxSizeMB": number;
       "reportLanguage": string;
       "tts.voice": string;
+      "tts.language": string;
       "tts.model": string;
       "tts.targetMinutes": number;
       "tts.outputFormat": string;

@@ -884,7 +884,9 @@ All plugin dialogs shall be fully keyboard navigable (logical tab order, visible
 > **DECIDED 2026-11-16 (owner, `plan/00-task-index.md` §6 item 380, decision 1):** v1.0 runs the smoke test with **NVDA on Windows only**; VoiceOver on macOS is **recorded as waived**, with the reason, in the release checklist, and is run in a later release once a macOS machine exists (`plan/06` `G-09`, `G-33`).
 
 **NFR-14 — Error transparency.** (M)
-Every user-facing error shall state what failed, which service was involved, and one concrete next action. No bare "An error occurred". Provider error text is surfaced verbatim in a details disclosure.
+Every user-facing error shall state what failed, which service was involved, and one concrete next action. No bare "An error occurred". A details disclosure shows machine values only — the error code, HTTP status, host, timestamp and affected item count (`07-architecture-and-data-model.md` §10.2); the provider's own error text is never shown on screen and goes only to the debug log, after `redact`.
+
+> **Amended 2026-11-17 — DECIDED 2026-11-17 (owner, `plan/00-task-index.md` §6 item 389): "not on screen".** The last sentence read "Provider error text is surfaced verbatim in a details disclosure." It conflicted with `07-…` §10.2, which forbids a raw provider message on a user surface because such text can carry request ids or echoed content and `redact` does not catch every key inside free text. The owner chose §10.2's rule. "Copy diagnostics" (`plan/10` `P7-T13`) carries the same machine values and never the provider's text.
 
 **NFR-15 — Determinism for auditability.** (S)
 Where a provider supports it, the plugin shall send a fixed `temperature` (default low) and a `seed`, and shall record model ID, parameters, and prompt-template version in every generated note so output is reproducible-by-description even when not bit-identical.

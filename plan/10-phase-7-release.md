@@ -468,6 +468,13 @@ npm run typecheck && npm run lint:check && npm run test:unit -- i18n && npm run 
 **Notes.** Needs: every earlier card that adds UI (§0.3), and `P6-T17` for the report window's audio
 section. Callers of `format.ts`: the dialogs, panes and view models it is wired into.
 
+> **Added 2026-11-17 (`plan/00` §6 item 392(a)).** Step 5: the item pane's summary section shows `failureText` of a
+> failed run's `detail` (`runItemSummary`, `src/ui/dialogs/summarizeDialog.ts`; `src/ui/panes/summarySection.ts`),
+> free text outside Fluent and against item 389(f)'s "not on screen". Show the error's `messageKey` message and its
+> code instead, never `detail`; a test plants provider text in `detail` and asserts it is not drawn. Both files are
+> already in this card's Files; no estimate change is claimed here, and the executing agent re-prices if it is not
+> small.
+
 ---
 
 ### P7-T04 — Retire the spike command; keep its fixture in the tests
@@ -695,7 +702,7 @@ release checklist.
 | Field | Value |
 |---|---|
 | **ID** | `P7-T08` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T08.md`. Korean for 25 ids awaits `G-41`. |
 | **Depends on** | `P7-T01` |
 | **Blocks** | `P7-T03`, `P7-T09`, `P7-T17` |
 | **Retires** | none |
@@ -757,7 +764,7 @@ npm run typecheck && npm run lint:check && npm run test:unit -- preferencesPane 
 | Field | Value |
 |---|---|
 | **ID** | `P7-T09` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T09.md`. Korean for 12 ids awaits `G-41`. |
 | **Depends on** | `P7-T01`, `P7-T08` |
 | **Blocks** | `P7-T03`, `P7-T10`, `P7-T13` |
 | **Retires** | none |
@@ -945,7 +952,7 @@ host in `registerUI.ts`.
 | Field | Value |
 |---|---|
 | **ID** | `P7-T12` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T12.md`. Korean for 23 ids awaits `G-41` (`plan/00` §6 item 389(b)). |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T12.md`. Korean for 23 ids awaits `G-41` (`plan/00` §6 item 389(b)). *Updated 2026-11-17: the owner approved the 23 and they are live (item 389(g)).* |
 | **Depends on** | none |
 | **Blocks** | `P7-T03`, `P7-T18` |
 | **Retires** | none |
@@ -993,6 +1000,11 @@ npm run typecheck && npm run lint:check && npm run test:unit -- errorMessages ke
 
 **Notes.** Needs: `P6-T14` for the TTS error text. Callers: none new.
 
+> **DECIDED 2026-11-17 (owner, `plan/00` §6 item 389(f)): "not on screen".** The Goal's "with the provider's text
+> verbatim in a details disclosure" and step 4's "with the provider's text after `redact`" are superseded: a
+> disclosure shows machine values only (`docs/07` §10.2), and the provider's text goes only to the debug log, after
+> `redact`. `docs/10` NFR-14 was amended to match. The surfaces were checked the same day (item 392(a), (b)).
+
 ---
 
 ### P7-T13 — Log ring buffer and diagnostics: save and copy
@@ -1000,7 +1012,7 @@ npm run typecheck && npm run lint:check && npm run test:unit -- errorMessages ke
 | Field | Value |
 |---|---|
 | **ID** | `P7-T13` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T13.md`. Korean for 7 ids awaits `G-41`. |
 | **Depends on** | `P7-T01`, `P7-T09` |
 | **Blocks** | `P7-T03`, `P7-T14`, `P7-T15`, `P7-T19` |
 | **Retires** | none |
@@ -1058,7 +1070,7 @@ npm run typecheck && npm run lint:check && npm run test:unit -- diagnostics logg
 | Field | Value |
 |---|---|
 | **ID** | `P7-T14` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T14.md`. The audit found no planted key. |
 | **Depends on** | `P7-T13` |
 | **Blocks** | `P7-T16` |
 | **Retires** | none |
@@ -1222,7 +1234,7 @@ npm audit --omit=dev; npm run build && npm run test:unit
 | Field | Value |
 |---|---|
 | **ID** | `P7-T17` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T17.md`. Korean for 6 ids awaits `G-41`. |
 | **Depends on** | `P7-T08` |
 | **Blocks** | `P7-T19`, `P7-T24` |
 | **Retires** | none |
@@ -1279,7 +1291,7 @@ npm run typecheck && npm run lint:check && npm run test:unit -- policyNotes pref
 | Field | Value |
 |---|---|
 | **ID** | `P7-T18` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T18.md`. `Do` step 1 is not met: owner question `plan/00` §6 item 393. |
 | **Depends on** | `P7-T12` |
 | **Blocks** | `P7-T24` |
 | **Retires** | none |
@@ -1512,6 +1524,10 @@ npm run test:unit -- releaseWorkflow
 
 **Notes.** Needs: `P0-T14`. Callers: GitHub's scheduler.
 
+> **DECIDED 2026-11-17 (owner, `plan/00` §6 item 390(e)): advance warning only.** A failure of the weekly run is
+> notice for the next `strict_max_version`, not a release blocker; `compat.yml`'s header and issue body, `docs/13`
+> §5.3, §6.2 and §8.9 say so.
+
 ---
 
 ### P7-T23 — Forum announcement and community-list drafts
@@ -1608,6 +1624,10 @@ reason and decision, or "to be run in `P7-T25`".
 **Verify with.** `grep -c "NFR-" docs/release/v1.0-checklist.md` is at least 20.
 
 **Notes.** Needs: `P3-T31`, `P4-T25`, `P5-T30`, `P6-T19` for their rows (recorded as they stand).
+
+> **Added 2026-11-17 (`plan/00` §6 items 390(e), 392).** `docs/13` §8.9 gained a line recording the latest weekly
+> `zotero-beta` run, which is advance warning and not a blocker (owner); carry it as a recorded line, never as a gate.
+> `P7-T17`'s per-minor-release policy line and `P7-T18`'s offline result go in too (their reports).
 Callers: none.
 
 ---

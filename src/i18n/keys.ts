@@ -544,6 +544,63 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   "research-helper-report-paused-notice",
   // P5-T22: see L10N_RECOMMEND_PROFILE_UNUSABLE.
   "research-helper-recommend-profile-unusable",
+  // P7-T08: the pane's Search, Report & audio and Privacy sections (docs/08
+  // §7.3). See PREFERENCES_L10N in src/ui/prefs/preferencesPane.ts; the
+  // section's checkbox for `useTranslators` reuses P2-T18's id above.
+  "research-helper-prefs-search",
+  "research-helper-prefs-default-years",
+  "research-helper-prefs-max-results",
+  "research-helper-prefs-hide-existing",
+  "research-helper-prefs-report",
+  "research-helper-prefs-report-language",
+  "research-helper-prefs-language-option",
+  "research-helper-prefs-tts-language",
+  "research-helper-prefs-tts-language-option",
+  "research-helper-prefs-tts-voice",
+  "research-helper-prefs-tts-voice-note",
+  "research-helper-prefs-tts-minutes",
+  "research-helper-prefs-tts-folder",
+  "research-helper-prefs-tts-folder-choose",
+  "research-helper-prefs-tts-folder-clear",
+  "research-helper-prefs-tts-folder-unset",
+  "research-helper-prefs-tts-folder-note",
+  "research-helper-prefs-tts-folder-refused",
+  "research-helper-prefs-privacy",
+  "research-helper-prefs-privacy-mode",
+  "research-helper-prefs-privacy-option",
+  "research-helper-prefs-privacy-explain",
+  "research-helper-prefs-fulltext-mode",
+  "research-helper-prefs-fulltext-option",
+  "research-helper-prefs-fulltext-note",
+  // P7-T09: the pane's Advanced section, first half (docs/08 §7.3, item 4).
+  "research-helper-prefs-advanced",
+  "research-helper-prefs-concurrency",
+  "research-helper-prefs-timeout",
+  "research-helper-prefs-cache-size",
+  "research-helper-prefs-cache-usage-row",
+  "research-helper-prefs-cache-usage-total",
+  "research-helper-prefs-cache-usage-unavailable",
+  "research-helper-prefs-debug",
+  "research-helper-prefs-debug-note",
+  "research-helper-prefs-data-location",
+  "research-helper-prefs-data-location-show",
+  "research-helper-prefs-data-location-unavailable",
+  // P7-T17: the Privacy section's dated provider-policy lines (POLICY_NOTES
+  // in src/llm/shared/policyNotes.ts).
+  "research-helper-prefs-retention-title",
+  "research-helper-prefs-retention-openai",
+  "research-helper-prefs-retention-anthropic",
+  "research-helper-prefs-retention-gemini-paid",
+  "research-helper-prefs-retention-gemini-free",
+  "research-helper-prefs-retention-openrouter",
+  // P7-T13: the pane's diagnostics (docs/07 §10.4, "As built").
+  "research-helper-prefs-diagnostics-title",
+  "research-helper-prefs-diagnostics-note",
+  "research-helper-prefs-diagnostics-preview",
+  "research-helper-prefs-diagnostics-text",
+  "research-helper-prefs-diagnostics-save",
+  "research-helper-prefs-diagnostics-copy",
+  "research-helper-prefs-diagnostics-status",
 ] as const satisfies readonly FluentMessageId[];
 
 export type MainWindowMessageId = (typeof MAIN_WINDOW_MESSAGE_IDS)[number];
@@ -770,7 +827,8 @@ export const L10N_EGRESS_AUDIO_NOTICE = "research-helper-egress-audio-notice";
  * reason and the two ways out (`P6-T15` step 3; `docs/09` §3.5's Gemini row).
  * Shown for the `PolicyViolationError` `assertAudioAllowed` throws
  * (`isAudioTierRefusal`, `src/pipeline/audioReport/disclosure.ts`), because
- * `rh-error-policy` is still deferred; the audio surface is `P6-T17`'s.
+ * `rh-error-policy` was still deferred when it was built (it shipped with
+ * `P7-T12`, 2026-11-17); the audio surface is `P6-T17`'s.
  */
 export const L10N_AUDIO_TIER_REFUSED = "research-helper-audio-tier-refused";
 
@@ -1445,11 +1503,68 @@ export const KO_PENDING_REVIEW = [
   // All 29 left this list on 2026-11-17: the owner approved the coordinator's Korean in
   // chat (`G-41`, plan/00 §6 item 386), so all are on KO_PRESENT.
   // --- P7-T12's privacy-mode refusal (mainWindow) ---
-  // Shipped 2026-11-17 with no live Korean: the `ko-KR` bundle carries the coordinator's
-  // draft commented, "not adopted" (`G-41`, plan/00 §6 item 389(b)), so the id falls back
-  // to English. P7-T12's 22 rewritten error messages keep their reviewed Korean live and
-  // stay on KO_PRESENT; their drafts with the new next action sit beside them.
-  "rh-error-policy",
+  // Shipped 2026-11-17 with no live Korean, then left this list the same day: the owner
+  // approved the coordinator's Korean for it and for P7-T12's 22 rewritten error messages
+  // in chat (`G-41`, plan/00 §6 item 389(b)), so it is on KO_PRESENT.
+  // --- P7-T08's pane sections: Search, Report & audio, Privacy (mainWindow) ---
+  // Added 2026-11-17. Each is a commented draft in the ko-KR bundle, "not adopted",
+  // until the owner reviews it (`G-41`).
+  "research-helper-prefs-search",
+  "research-helper-prefs-default-years",
+  "research-helper-prefs-max-results",
+  "research-helper-prefs-hide-existing",
+  "research-helper-prefs-report",
+  "research-helper-prefs-report-language",
+  "research-helper-prefs-language-option",
+  "research-helper-prefs-tts-language",
+  "research-helper-prefs-tts-language-option",
+  "research-helper-prefs-tts-voice",
+  "research-helper-prefs-tts-voice-note",
+  "research-helper-prefs-tts-minutes",
+  "research-helper-prefs-tts-folder",
+  "research-helper-prefs-tts-folder-choose",
+  "research-helper-prefs-tts-folder-clear",
+  "research-helper-prefs-tts-folder-unset",
+  "research-helper-prefs-tts-folder-note",
+  "research-helper-prefs-tts-folder-refused",
+  "research-helper-prefs-privacy",
+  "research-helper-prefs-privacy-mode",
+  "research-helper-prefs-privacy-option",
+  "research-helper-prefs-privacy-explain",
+  "research-helper-prefs-fulltext-mode",
+  "research-helper-prefs-fulltext-option",
+  "research-helper-prefs-fulltext-note",
+  // --- P7-T09's Advanced section (mainWindow) ---
+  // Added 2026-11-17, as P7-T08's above (`G-41`).
+  "research-helper-prefs-advanced",
+  "research-helper-prefs-concurrency",
+  "research-helper-prefs-timeout",
+  "research-helper-prefs-cache-size",
+  "research-helper-prefs-cache-usage-row",
+  "research-helper-prefs-cache-usage-total",
+  "research-helper-prefs-cache-usage-unavailable",
+  "research-helper-prefs-debug",
+  "research-helper-prefs-debug-note",
+  "research-helper-prefs-data-location",
+  "research-helper-prefs-data-location-show",
+  "research-helper-prefs-data-location-unavailable",
+  // --- P7-T17's provider-policy lines (mainWindow) ---
+  // Added 2026-11-17, as P7-T08's above (`G-41`).
+  "research-helper-prefs-retention-title",
+  "research-helper-prefs-retention-openai",
+  "research-helper-prefs-retention-anthropic",
+  "research-helper-prefs-retention-gemini-paid",
+  "research-helper-prefs-retention-gemini-free",
+  "research-helper-prefs-retention-openrouter",
+  // --- P7-T13's diagnostics (mainWindow) ---
+  // Added 2026-11-17, as P7-T08's above (`G-41`).
+  "research-helper-prefs-diagnostics-title",
+  "research-helper-prefs-diagnostics-note",
+  "research-helper-prefs-diagnostics-preview",
+  "research-helper-prefs-diagnostics-text",
+  "research-helper-prefs-diagnostics-save",
+  "research-helper-prefs-diagnostics-copy",
+  "research-helper-prefs-diagnostics-status",
 ] as const satisfies readonly FluentMessageId[];
 
 /**
@@ -2058,6 +2173,10 @@ export const KO_PRESENT = [
   "research-helper-report-audio-save-script",
   "research-helper-report-audio-save-audio",
   "research-helper-report-audio-saved",
+  // P7-T12's privacy-mode refusal: Korean drafted by the coordinator and reviewed by the
+  // owner on 2026-11-17 (`G-41`, plan/00 §6 item 389), inserted byte for byte from the
+  // drafts recorded in plan/reports/ko-review-389.ftl.
+  "rh-error-policy",
 ] as const satisfies readonly FluentMessageId[];
 
 /* ---------------------------------------------------------------- arguments */
@@ -2451,6 +2570,32 @@ export interface FluentMessageArgsMap {
     collections: string;
   };
   "research-helper-egress-profile-notice": { papers: number; model: string };
+  // P7-T08: the pane's menulist items and the privacy line; selectors only.
+  "research-helper-prefs-language-option": { language: string };
+  "research-helper-prefs-tts-language-option": { language: string };
+  "research-helper-prefs-privacy-option": { mode: string };
+  "research-helper-prefs-privacy-explain": { mode: string };
+  "research-helper-prefs-fulltext-option": { mode: string };
+  // P7-T09: the cache lines (`$namespace` a selector, the rest numbers) and
+  // the database's location, shown on the user's own screen only.
+  "research-helper-prefs-cache-usage-row": {
+    namespace: string;
+    megabytes: number;
+    entries: number;
+  };
+  "research-helper-prefs-cache-usage-total": {
+    megabytes: number;
+    entries: number;
+  };
+  "research-helper-prefs-data-location": { path: string };
+  // P7-T17: each provider-policy line's verification date (ISO, YYYY-MM-DD).
+  "research-helper-prefs-retention-openai": { date: string };
+  "research-helper-prefs-retention-anthropic": { date: string };
+  "research-helper-prefs-retention-gemini-paid": { date: string };
+  "research-helper-prefs-retention-gemini-free": { date: string };
+  "research-helper-prefs-retention-openrouter": { date: string };
+  // P7-T13: the diagnostics status line's outcome.
+  "research-helper-prefs-diagnostics-status": { outcome: string };
 }
 
 /**
@@ -2658,6 +2803,24 @@ export const ARGUMENT_MESSAGE_IDS = [
   "rh-error-recommend-too-few-items",
   // mainWindow — the audio run's failures (1, P6-T14)
   "rh-error-tts",
+  // mainWindow — the pane's menulist items and privacy line (5, P7-T08)
+  "research-helper-prefs-language-option",
+  "research-helper-prefs-tts-language-option",
+  "research-helper-prefs-privacy-option",
+  "research-helper-prefs-privacy-explain",
+  "research-helper-prefs-fulltext-option",
+  // mainWindow — the pane's cache lines and data location (3, P7-T09)
+  "research-helper-prefs-cache-usage-row",
+  "research-helper-prefs-cache-usage-total",
+  "research-helper-prefs-data-location",
+  // mainWindow — the provider-policy lines' dates (5, P7-T17)
+  "research-helper-prefs-retention-openai",
+  "research-helper-prefs-retention-anthropic",
+  "research-helper-prefs-retention-gemini-paid",
+  "research-helper-prefs-retention-gemini-free",
+  "research-helper-prefs-retention-openrouter",
+  // mainWindow — the diagnostics status line (1, P7-T13)
+  "research-helper-prefs-diagnostics-status",
 ] as const satisfies readonly (keyof FluentMessageArgsMap)[];
 
 /**

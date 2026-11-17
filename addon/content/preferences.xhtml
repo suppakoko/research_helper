@@ -14,11 +14,16 @@
   Scope: the storage block, the LLM providers block (P3-T04: the provider
   choice, one block per provider with its key, model and base URL, and the
   Gemini paid-tier declaration) and the TWO literature-source credential
-  blocks. Spend ceilings, the Search, Report, Privacy and Advanced groups and
-  the general contact address (`contactEmail`) are other cards'.
+  blocks; P7-T08 (2026-11-17) added the Search, Report & audio and Privacy
+  groups, and P7-T09 (the same day) the Advanced group's settings, usage,
+  verbose logging and data location. Spend ceilings, the clear actions
+  (P7-T10), diagnostics (P7-T13) and the general contact address
+  (`contactEmail`) are other cards'.
 
   `preference=` bindings (P3-T04): only non-secret rows of docs/07 §8.5 —
-  `llmProvider`, each `<provider>.model` and `gemini.paidTier` — each the
+  `llmProvider`, each `<provider>.model` and `gemini.paidTier`, and P7-T08's
+  ten and P7-T09's three (PANE_BOUND_SETTINGS in
+  src/ui/prefs/preferencesPane.ts) — each the
   full key, as docs/08 §7.2 requires. The base-URL inputs are NOT bound:
   Zotero's binding writes every keystroke and cannot refuse a value, and
   docs/03 §14.4 requires validation at write time, so preferences.js writes
@@ -509,5 +514,395 @@
          session's calls, tokens and dollars, and run.maxSessionSpendCents).
          No preference attribute; nothing here is written. -->
     <html:div id="rh-prefs-usage-lines" class="rh-hint" role="status" />
+  </groupbox>
+
+  <!-- ============ Search (P7-T08; docs/08 §7.3) ============ -->
+  <!-- Four docs/07 §8.5 rows, each bound by Zotero's own preference= binding.
+       The ranges are §8.5's. `sources` is not here: §8.5 places it in the
+       search window's checkboxes only. -->
+  <groupbox id="rh-prefs-search" aria-labelledby="rh-prefs-search-title">
+    <label>
+      <html:h2
+        id="rh-prefs-search-title"
+        data-l10n-id="research-helper-prefs-search"
+      />
+    </label>
+    <hbox align="center">
+      <label
+        data-l10n-id="research-helper-prefs-default-years"
+        control="rh-years"
+      />
+      <html:input
+        id="rh-years"
+        type="number"
+        min="1"
+        max="20"
+        size="4"
+        preference="extensions.zotero.research-helper.searchYears"
+      />
+    </hbox>
+    <hbox align="center">
+      <label
+        data-l10n-id="research-helper-prefs-max-results"
+        control="rh-max"
+      />
+      <html:input
+        id="rh-max"
+        type="number"
+        min="10"
+        max="200"
+        step="10"
+        size="4"
+        preference="extensions.zotero.research-helper.maxResults"
+      />
+    </hbox>
+    <checkbox
+      id="rh-use-translators"
+      data-l10n-id="research-helper-prefs-use-translators"
+      preference="extensions.zotero.research-helper.useTranslators"
+    />
+    <checkbox
+      id="rh-hide-existing"
+      data-l10n-id="research-helper-prefs-hide-existing"
+      preference="extensions.zotero.research-helper.hideExisting"
+    />
+  </groupbox>
+
+  <!-- ============ Report & audio (P7-T08; docs/08 §7.3) ============ -->
+  <!-- The report language is always shown. The audio rows are shown only
+       while the hidden `audio.enabled` row is on (preferences.js, from the
+       host's readSettings). No preview button and no format menulist
+       (docs/08 §7.3's notes of 2026-11-16 and 2026-11-17), and no
+       autoSummarize checkbox (owner, plan/00 §6 item 381). -->
+  <groupbox id="rh-prefs-report" aria-labelledby="rh-prefs-report-title">
+    <label>
+      <html:h2
+        id="rh-prefs-report-title"
+        data-l10n-id="research-helper-prefs-report"
+      />
+    </label>
+    <hbox align="center">
+      <label
+        data-l10n-id="research-helper-prefs-report-language"
+        control="rh-lang"
+      />
+      <menulist
+        id="rh-lang"
+        preference="extensions.zotero.research-helper.reportLanguage"
+        native="true"
+      >
+        <menupopup>
+          <menuitem
+            value="auto"
+            data-l10n-id="research-helper-prefs-language-option"
+            data-l10n-args='{"language":"auto"}'
+          />
+          <menuitem
+            value="en"
+            data-l10n-id="research-helper-prefs-language-option"
+            data-l10n-args='{"language":"en"}'
+          />
+          <menuitem
+            value="ko"
+            data-l10n-id="research-helper-prefs-language-option"
+            data-l10n-args='{"language":"ko"}'
+          />
+          <menuitem
+            value="both"
+            data-l10n-id="research-helper-prefs-language-option"
+            data-l10n-args='{"language":"both"}'
+          />
+        </menupopup>
+      </menulist>
+    </hbox>
+
+    <vbox id="rh-prefs-audio" hidden="true">
+      <hbox align="center">
+        <label
+          data-l10n-id="research-helper-prefs-tts-language"
+          control="rh-tts-lang"
+        />
+        <menulist
+          id="rh-tts-lang"
+          preference="extensions.zotero.research-helper.tts.language"
+          native="true"
+        >
+          <menupopup>
+            <menuitem
+              value="auto"
+              data-l10n-id="research-helper-prefs-tts-language-option"
+              data-l10n-args='{"language":"auto"}'
+            />
+            <menuitem
+              value="en"
+              data-l10n-id="research-helper-prefs-tts-language-option"
+              data-l10n-args='{"language":"en"}'
+            />
+            <menuitem
+              value="ko"
+              data-l10n-id="research-helper-prefs-tts-language-option"
+              data-l10n-args='{"language":"ko"}'
+            />
+          </menupopup>
+        </menulist>
+      </hbox>
+      <hbox align="center">
+        <label
+          data-l10n-id="research-helper-prefs-tts-voice"
+          control="rh-voice"
+        />
+        <!-- Filled by preferences.js from the documented default voice list
+             the host returns; no call is made. Each label is a voice's name
+             (docs/08 §10.3). -->
+        <menulist
+          id="rh-voice"
+          preference="extensions.zotero.research-helper.tts.voice"
+          native="true"
+        >
+          <menupopup id="rh-voice-popup" />
+        </menulist>
+      </hbox>
+      <html:p
+        class="rh-hint"
+        data-l10n-id="research-helper-prefs-tts-voice-note"
+      />
+      <hbox align="center">
+        <label
+          data-l10n-id="research-helper-prefs-tts-minutes"
+          control="rh-tts-minutes"
+        />
+        <html:input
+          id="rh-tts-minutes"
+          type="number"
+          min="0"
+          max="60"
+          size="4"
+          preference="extensions.zotero.research-helper.tts.targetMinutes"
+        />
+      </hbox>
+      <!-- The folder for linked recordings. NOT bound: a local path, chosen
+           with a folder picker and written through the host's
+           setLinkedFolder, which checks it first. Shown here only; never
+           logged. -->
+      <hbox align="center">
+        <label
+          data-l10n-id="research-helper-prefs-tts-folder"
+          control="rh-tts-folder"
+        />
+        <html:input id="rh-tts-folder" type="text" size="40" readonly="true" />
+        <button
+          id="rh-tts-folder-choose"
+          data-l10n-id="research-helper-prefs-tts-folder-choose"
+        />
+        <button
+          id="rh-tts-folder-clear"
+          data-l10n-id="research-helper-prefs-tts-folder-clear"
+        />
+      </hbox>
+      <html:p id="rh-tts-folder-status" class="rh-hint" role="status" />
+      <html:p
+        class="rh-hint"
+        data-l10n-id="research-helper-prefs-tts-folder-note"
+      />
+    </vbox>
+  </groupbox>
+
+  <!-- ============ Privacy (P7-T08; docs/08 §7.3) ============ -->
+  <!-- The GLOBAL default only; a collection's own setting can only be
+       stricter (docs/09 §3.5). The explanation line is painted from the
+       chosen mode and says no more than docs/09 §3.5's table. -->
+  <groupbox id="rh-prefs-privacy" aria-labelledby="rh-prefs-privacy-title">
+    <label>
+      <html:h2
+        id="rh-prefs-privacy-title"
+        data-l10n-id="research-helper-prefs-privacy"
+      />
+    </label>
+    <hbox align="center">
+      <label
+        data-l10n-id="research-helper-prefs-privacy-mode"
+        control="rh-privacy"
+      />
+      <menulist
+        id="rh-privacy"
+        preference="extensions.zotero.research-helper.privacy.mode"
+        native="true"
+      >
+        <menupopup>
+          <menuitem
+            value="strict"
+            data-l10n-id="research-helper-prefs-privacy-option"
+            data-l10n-args='{"mode":"strict"}'
+          />
+          <menuitem
+            value="balanced"
+            data-l10n-id="research-helper-prefs-privacy-option"
+            data-l10n-args='{"mode":"balanced"}'
+          />
+          <menuitem
+            value="full"
+            data-l10n-id="research-helper-prefs-privacy-option"
+            data-l10n-args='{"mode":"full"}'
+          />
+        </menupopup>
+      </menulist>
+    </hbox>
+    <html:p id="rh-privacy-explain" class="rh-hint" role="status" />
+    <hbox align="center">
+      <label
+        data-l10n-id="research-helper-prefs-fulltext-mode"
+        control="rh-fulltext"
+      />
+      <menulist
+        id="rh-fulltext"
+        preference="extensions.zotero.research-helper.summary.fullTextMode"
+        native="true"
+      >
+        <menupopup>
+          <menuitem
+            value="never"
+            data-l10n-id="research-helper-prefs-fulltext-option"
+            data-l10n-args='{"mode":"never"}'
+          />
+          <menuitem
+            value="auto"
+            data-l10n-id="research-helper-prefs-fulltext-option"
+            data-l10n-args='{"mode":"auto"}'
+          />
+          <menuitem
+            value="always"
+            data-l10n-id="research-helper-prefs-fulltext-option"
+            data-l10n-args='{"mode":"always"}'
+          />
+        </menupopup>
+      </menulist>
+    </hbox>
+    <html:p
+      class="rh-hint"
+      data-l10n-id="research-helper-prefs-fulltext-note"
+    />
+    <!-- P7-T17 (2026-11-17; docs/08 §7.3's note of 2026-11-16, item 3):
+         preferences.js fills this with the provider-policy lines the host
+         returns (POLICY_NOTES), each with its verification date, and leaves
+         it hidden when there is none. -->
+    <html:div id="rh-prefs-retention" class="rh-hint" hidden="true" />
+  </groupbox>
+
+  <!-- ============ Advanced (P7-T09; docs/08 §7.3) ============ -->
+  <!-- The three number fields are bound (PANE_BOUND_SETTINGS.advanced). The
+       usage lines, the verbose-logging checkbox and the data location are
+       preferences.js's, through the host: the checkbox writes `logLevel`
+       ("debug" checked, "warn" unchecked) and nothing else — there is no
+       `debug` preference and `logRequestBodies` is not in the pane
+       (docs/07 §8.5, Diagnostics). The clear actions are P7-T10's;
+       diagnostics are P7-T13's. -->
+  <groupbox id="rh-prefs-advanced" aria-labelledby="rh-prefs-advanced-title">
+    <label>
+      <html:h2
+        id="rh-prefs-advanced-title"
+        data-l10n-id="research-helper-prefs-advanced"
+      />
+    </label>
+    <hbox align="center">
+      <label
+        data-l10n-id="research-helper-prefs-concurrency"
+        control="rh-conc"
+      />
+      <html:input
+        id="rh-conc"
+        type="number"
+        min="1"
+        max="8"
+        size="3"
+        preference="extensions.zotero.research-helper.concurrency"
+      />
+    </hbox>
+    <hbox align="center">
+      <label
+        data-l10n-id="research-helper-prefs-timeout"
+        control="rh-timeout"
+      />
+      <html:input
+        id="rh-timeout"
+        type="number"
+        min="10"
+        max="600"
+        step="10"
+        size="4"
+        preference="extensions.zotero.research-helper.timeoutSeconds"
+      />
+    </hbox>
+    <hbox align="center">
+      <label
+        data-l10n-id="research-helper-prefs-cache-size"
+        control="rh-cache-size"
+      />
+      <html:input
+        id="rh-cache-size"
+        type="number"
+        min="100"
+        max="5000"
+        step="100"
+        size="5"
+        preference="extensions.zotero.research-helper.cache.maxSizeMB"
+      />
+    </hbox>
+    <!-- The cache's own counts: the total, then one line per namespace
+         holding anything. Refreshed on open and after a clear (P7-T10). -->
+    <html:div id="rh-cache-breakdown" class="rh-hint" role="status" />
+    <checkbox
+      id="rh-verbose-logging"
+      data-l10n-id="research-helper-prefs-debug"
+    />
+    <html:p class="rh-hint" data-l10n-id="research-helper-prefs-debug-note" />
+    <!-- Where the plugin database lives (docs/09 §3.7, last bullet): shown on
+         the user's own screen, never logged, not editable. -->
+    <hbox align="center">
+      <html:p id="rh-data-location" class="rh-hint" />
+      <button
+        id="rh-data-location-show"
+        data-l10n-id="research-helper-prefs-data-location-show"
+      />
+    </hbox>
+    <!-- P7-T13: diagnostics (docs/07 §10.4, "As built"). The text is shown
+         first; Save and Copy are enabled only then, and act on exactly the
+         text shown. The host writes the file and fills the clipboard. -->
+    <html:h3
+      id="rh-diagnostics-title"
+      data-l10n-id="research-helper-prefs-diagnostics-title"
+    />
+    <html:p
+      class="rh-hint"
+      data-l10n-id="research-helper-prefs-diagnostics-note"
+    />
+    <hbox align="center">
+      <button
+        id="rh-diagnostics-preview"
+        data-l10n-id="research-helper-prefs-diagnostics-preview"
+      />
+      <button
+        id="rh-diagnostics-save"
+        data-l10n-id="research-helper-prefs-diagnostics-save"
+        disabled="true"
+      />
+      <button
+        id="rh-diagnostics-copy"
+        data-l10n-id="research-helper-prefs-diagnostics-copy"
+        disabled="true"
+      />
+    </hbox>
+    <html:textarea
+      id="rh-diagnostics-text"
+      data-l10n-id="research-helper-prefs-diagnostics-text"
+      readonly="true"
+      rows="12"
+      hidden="true"
+    />
+    <html:p
+      id="rh-diagnostics-status"
+      class="rh-hint"
+      role="status"
+      hidden="true"
+    />
   </groupbox>
 </vbox>

@@ -82,7 +82,26 @@ import {
   type PipelineJob,
   type ResumedReportRun,
 } from "./container";
-import type { Logger } from "../core/logger";
+import {
+  LOG_PREFIX,
+  createLogRing,
+  withLogRing,
+  type LogRing,
+  type Logger,
+} from "../core/logger";
+// `P7-T13`: the diagnostics text, its pure builder and its platform half.
+import {
+  buildDiagnostics,
+  diagnosticsJob,
+  type DiagnosticsCache,
+  type DiagnosticsJob,
+} from "../core/diagnostics";
+import {
+  copyDiagnosticsText,
+  pluginErrorLines,
+  writeDiagnosticsFile,
+  zoteroEnvironment,
+} from "../zotero/diagnosticsPlatform";
 import { formatValue } from "../i18n/ftl";
 import {
   L10N_AUDIO_ATTACHMENT_TITLE,
@@ -115,7 +134,11 @@ import {
 } from "../pipeline/audioReport/failures";
 import { resolveAudioLanguage } from "../pipeline/audioReport/script";
 import { audioFileName as wavFileName } from "../tts/audioStore";
-import { zoteroAudioFileSystem } from "../zotero/attachments";
+import { GEMINI_TTS_VOICES } from "../tts/geminiTts";
+import {
+  createZoteroAudioAttachments,
+  zoteroAudioFileSystem,
+} from "../zotero/attachments";
 import { merge } from "../model/merge";
 import type { SourceRecord } from "../model/sourceRecord";
 import type {
@@ -124,7 +147,7 @@ import type {
 } from "../pipeline/searchImport/types";
 import type { Pipeline } from "../pipeline/types";
 import { httpRequest } from "../core/http/client";
-import { getPref, setPref } from "../prefs";
+import { PREFS, PREF_NAMES, getPref, setPref, type PrefName } from "../prefs";
 import { PROVIDER_PREF_NAMES } from "./registerProviders";
 import type { PluginDatabase } from "./pluginDatabase";
 import { RECOMMEND_MAX_POSITIVES } from "../sources/semanticscholar/recommendations";
@@ -188,6 +211,9 @@ import {
   type LlmKeyCheck,
   type ModelSuggestions,
   type PreferencesHostApi,
+  type AdvancedPort,
+  type DiagnosticsPort,
+  type SettingsPort,
 } from "../ui/prefs/preferencesPane";
 import {
   createCancellationTokenSource,
@@ -197,6 +223,7 @@ import {
   modelsFor,
   reloadingUserPriceStore,
 } from "../llm/shared/modelCatalogue";
+import { POLICY_NOTES } from "../llm/shared/policyNotes";
 import type { ProviderId } from "../model/ids";
 import { readValidation, recordValidation } from "../zotero/keychain";
 import {
@@ -261,6 +288,7 @@ import {
   createCacheBlobStore,
   openPluginDatabase,
   pluginDatabasePath,
+  revealPluginDatabase,
 } from "../zotero/db";
 import {
   COLLECTION_MENU_DESCRIPTION,
@@ -1410,6 +1438,10 @@ declare module "../addon" {
  * | `validation` | `readValidation` / `recordValidation` in `src/zotero/keychain.ts`: the §8.5 status rows, gated by `redactRecord` (`P3-T14`) |
  * | `modelSuggestions` | {@link preferencesModelSuggestions}: `P3-T13`'s catalogue over the registry, the cache and the price table (`P3-T14`), through the graph's `modelPrices` (item 278(b)) |
  * | `prices` | the graph's `database.prices`, the `user_price` store (`P3-T14` step 5), through `reloadingUserPriceStore` so a change reaches `modelPrices` at once (item 278(b)) |
+ * | `settings` | {@link preferencesSettingsPort}: `audio.enabled`, `tts.voice`, `GEMINI_TTS_VOICES` and `tts.linkedFileDir`, for the Report & audio section (`P7-T08`) |
+ * | `advanced` | {@link preferencesAdvancedPort}: `logLevel`, the graph's cache counts and the plugin database's location and reveal, for the Advanced section (`P7-T09`) |
+ * | `diagnostics` | {@link preferencesDiagnosticsPort}: the diagnostics text over the preferences, the job queue, the log ring and the cache, and its save and copy (`P7-T13`) |
+ * | `policyNotes` | `POLICY_NOTES` from `src/llm/shared/policyNotes.ts`, the dated provider-policy lines of the Privacy section (`P7-T17`), handed over as data because `ui/` may not import `llm/` |
  * | `clock` | the graph's clock, for the Semantic Scholar retry delay and the `checkedAt` stamp |
  * | `logger` | a child of the graph's redacting logger |
  *
@@ -1417,9 +1449,158 @@ declare module "../addon" {
  * its Test call, to build one request, and the store it asks is the shipped
  * `src/zotero/keychain.ts` through the `SecretStore` port.
  */
+/**
+ * `P7-T08`: the pane host's {@link SettingsPort} — the Report & audio
+ * section's reads (`audio.enabled`, `tts.voice`, `tts.linkedFileDir`, and
+ * `GEMINI_TTS_VOICES`, the documented default voice list) and its one write
+ * (`tts.linkedFileDir`, after the same folder test the audio delivery uses).
+ * Bound here because `src/ui` may not import `src/tts` or `src/zotero`.
+ * Caller: {@link publishPreferencesHost}.
+ */
+export function preferencesSettingsPort(): SettingsPort {
+  let attachments: ReturnType<typeof createZoteroAudioAttachments> | undefined;
+  return {
+    readAudioEnabled: () => getPref("audioEnabled"),
+    // The documented default list, names only: no call (docs/08 §7.3's note
+    // of 2026-11-17). A voice's name is shown as it is (docs/08 §10.3).
+    voices: GEMINI_TTS_VOICES.map((voice) => ({
+      id: voice.id,
+      label: voice.displayName,
+    })),
+    readVoice: () => getPref("ttsVoice"),
+    getLinkedFolder: () => getPref("ttsLinkedFileDir"),
+    setLinkedFolder: (path) => {
+      setPref("ttsLinkedFileDir", path);
+    },
+    // resolveLinkedFolder's test (src/pipeline/audioReport/deliver.ts), over
+    // the same Zotero port, built on first use.
+    isUsableFolder: async (path) => {
+      attachments ??= createZoteroAudioAttachments();
+      return (
+        path.trim() !== "" &&
+        !attachments.isTemporaryFolder(path) &&
+        (await attachments.folderExists(path))
+      );
+    },
+  };
+}
+
+/**
+ * `P7-T09`: the Advanced section's {@link AdvancedPort}. Caller:
+ * {@link publishPreferencesHost}, which hands it to `createPreferencesHost`.
+ *
+ * - `logLevel` through `getPref` / `setPref`, which is the only row it writes
+ *   (`docs/07` §8.5, Diagnostics: no `debug` row; `logRequestBodies` stays as
+ *   it is). The logger reads the level live (`container.ts`'s `level`
+ *   getter), so the change takes effect without a restart.
+ * - The cache counts are `graph.cache.stats()`, the instance every job uses;
+ *   the location is `pluginDatabasePath()`. Both, and the reveal, answer "not
+ *   open" when `graph.database.ready` resolves to no database.
+ */
+export function preferencesAdvancedPort(
+  graph: Pick<ServiceGraph, "cache" | "database">,
+): AdvancedPort {
+  const open = async (): Promise<boolean> =>
+    (await graph.database.ready) !== undefined;
+  return {
+    readLogLevel: () => getPref("logLevel"),
+    writeLogLevel: (level) => {
+      setPref("logLevel", level);
+    },
+    cacheStats: async () => ((await open()) ? graph.cache.stats() : undefined),
+    databasePath: async () =>
+      (await open()) ? pluginDatabasePath() : undefined,
+    revealDatabase: async () => {
+      if (!(await open())) return false;
+      await revealPluginDatabase();
+      return true;
+    },
+  };
+}
+
+/**
+ * Preferences whose values the diagnostics text shows only as "set" or "not
+ * set": every `secret: true` row (none ships; the schema forbids one with a
+ * writer), the contact address (the user's email, which may appear only in
+ * the `User-Agent`), and the linked audio folder (a local path, never logged).
+ */
+const DIAGNOSTICS_WITHHELD_PREFS: ReadonlySet<PrefName> = new Set<PrefName>([
+  "contactEmail",
+  "ttsLinkedFileDir",
+]);
+
+/**
+ * `P7-T13`: the pane's diagnostics port. Reads the platform through
+ * `src/zotero/diagnosticsPlatform.ts`, the preferences through `getPref`, the
+ * jobs through the queue and the cache through its stats, and hands
+ * `buildDiagnostics` plain data. Nothing here logs a path or a value.
+ */
+export function preferencesDiagnosticsPort(
+  graph: Pick<ServiceGraph, "cache" | "database" | "jobs">,
+  ring: LogRing,
+): DiagnosticsPort {
+  return {
+    text: async () => {
+      const environment = zoteroEnvironment();
+      const settings = PREF_NAMES.map((name) => {
+        const def = PREFS[name] as { readonly secret?: boolean };
+        return {
+          name: PREFS[name].key,
+          value: getPref(name),
+          withheld: def.secret === true || DIAGNOSTICS_WITHHELD_PREFS.has(name),
+        };
+      });
+      const keysPresent: Record<string, boolean> = {};
+      for (const name of PREF_NAMES) {
+        if (name.endsWith("KeyPresent")) {
+          keysPresent[PREFS[name].key] = getPref(name) === true;
+        }
+      }
+      let jobs: readonly DiagnosticsJob[];
+      try {
+        jobs = (await graph.jobs.list({})).map(diagnosticsJob);
+      } catch {
+        jobs = [];
+      }
+      let cache: DiagnosticsCache | undefined;
+      try {
+        cache =
+          (await graph.database.ready) === undefined
+            ? undefined
+            : await graph.cache.stats();
+      } catch {
+        cache = undefined;
+      }
+      const withheldValues = [
+        String(getPref("contactEmail") ?? ""),
+        String(getPref("ttsLinkedFileDir") ?? ""),
+        environment.dataDirectory,
+      ];
+      return buildDiagnostics({
+        generatedAtEpochMs: Date.now(),
+        pluginVersion: version,
+        zoteroVersion: environment.zoteroVersion,
+        os: environment.os,
+        locale: environment.locale,
+        settings,
+        keysPresent,
+        jobs,
+        logLines: ring.lines(),
+        errors: pluginErrorLines(LOG_PREFIX),
+        cache,
+        withheldValues,
+        requestBodiesLogged: getPref("logRequestBodies") === true,
+      });
+    },
+    save: (path, text) => writeDiagnosticsFile(path, text),
+    copy: (text) => copyDiagnosticsText(text),
+  };
+}
+
 async function publishPreferencesHost(
   scope: Scope,
   graph: ServiceGraph,
+  ring: LogRing,
 ): Promise<void> {
   const host = createPreferencesHost({
     secrets: graph.secrets,
@@ -1438,6 +1619,10 @@ async function publishPreferencesHost(
     validation: { read: readValidation, record: recordValidation },
     modelSuggestions: preferencesModelSuggestions(graph),
     prices: reloadingUserPriceStore(graph.database.prices, graph.modelPrices),
+    settings: preferencesSettingsPort(),
+    advanced: preferencesAdvancedPort(graph),
+    policyNotes: POLICY_NOTES,
+    diagnostics: preferencesDiagnosticsPort(graph, ring),
     clock: graph.clock,
     logger: graph.logger.child({ surface: "preferences" }),
   });
@@ -3589,6 +3774,9 @@ async function publishReportWindowCommands(
  * with Phase 1".
  */
 export async function registerUI(scope: Scope): Promise<void> {
+  // `P7-T13`: the last lines this plugin lifetime logged, for the diagnostics
+  // text (`docs/07` §10.4 item 4). Memory only; a fresh ring per start.
+  const logRing = createLogRing();
   const graph = await installServices(scope, {
     transport: createZoteroHttpTransport(),
     prefs: createZoteroPrefStore(),
@@ -3603,7 +3791,8 @@ export async function registerUI(scope: Scope): Promise<void> {
     // Both channels of `docs/07` §10.3, and one prefix. The lossy sink
     // `P1-T25` had to build here — no level, no `reportError` — is gone; the
     // real one is `container.ts`'s, over `zoteroApi.ts`'s two facades.
-    logSink: createZoteroLogSink(),
+    // `P7-T13`: wrapped so the ring keeps each finished, redacted line.
+    logSink: withLogRing(createZoteroLogSink(), logRing),
     // The plugin database (`P3-T33`; `plan/00` §6 item 249): opened once by
     // `installServices` and shared by every store, closed in its teardown.
     pluginDatabase: {
@@ -3635,7 +3824,7 @@ export async function registerUI(scope: Scope): Promise<void> {
   // Before `APP_REGISTRATIONS`, for the same reason the services are: the
   // pane registration below can make a `zotero:pref` window reload and load
   // our fragment at once, and its script resolves the host on load.
-  await publishPreferencesHost(scope, graph);
+  await publishPreferencesHost(scope, graph, logRing);
   // The pane's Usage section (`P3-T16`), before the pane is registered, for
   // the same reason.
   await publishUsageHost(scope);

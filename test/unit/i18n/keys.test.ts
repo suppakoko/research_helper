@@ -613,14 +613,14 @@ describe("src/i18n/keys.ts — the LLM error messages P3-T05 ships", () => {
     expect(read("DEFERRED_ERROR_MESSAGE_IDS")).toEqual([]);
   });
 
-  it("ships rh-error-policy with P7-T12: no argument, Korean awaiting review (G-41, item 389)", () => {
+  it("ships rh-error-policy with P7-T12: no argument, Korean reviewed by the owner (G-41, item 389)", () => {
     const policy = new PolicyViolationError("x").messageKey;
     expect(policy).toBe("rh-error-policy");
     expect(read("ERROR_MESSAGE_IDS")).toContain(policy);
     expect(read("MAIN_WINDOW_MESSAGE_IDS")).toContain(policy);
     expect(read("ARGUMENT_MESSAGE_IDS")).not.toContain(policy);
-    expect(read("KO_PENDING_REVIEW")).toContain(policy);
-    expect(read("KO_PRESENT")).not.toContain(policy);
+    expect(read("KO_PENDING_REVIEW")).not.toContain(policy);
+    expect(read("KO_PRESENT")).toContain(policy);
     expect(read("DEFERRED_ERROR_MESSAGE_IDS")).toEqual([]);
   });
 

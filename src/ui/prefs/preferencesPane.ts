@@ -84,6 +84,11 @@
  *   `"unavailable"` and refuses to store.
  */
 
+import {
+  CACHE_NAMESPACES,
+  type CacheNamespace,
+  type CacheStats,
+} from "../../core/cache/cache";
 import type { Clock } from "../../core/clock";
 import {
   AuthenticationError,
@@ -345,7 +350,111 @@ export const PREFERENCES_L10N = {
   priceInvalid: "research-helper-prefs-price-invalid",
   priceRefused: "research-helper-prefs-price-refused",
   priceUnavailable: "research-helper-prefs-price-unavailable",
+  // P7-T08 (2026-11-17): the Search, Report & audio and Privacy sections
+  // (docs/08 §7.3 as P7-T01 left it). The Korean is G-41's: each is a
+  // commented draft, not adopted, and on KO_PENDING_REVIEW.
+  searchTitle: "research-helper-prefs-search",
+  defaultYears: "research-helper-prefs-default-years",
+  maxResults: "research-helper-prefs-max-results",
+  useTranslators: "research-helper-prefs-use-translators",
+  hideExisting: "research-helper-prefs-hide-existing",
+  reportTitle: "research-helper-prefs-report",
+  reportLanguage: "research-helper-prefs-report-language",
+  languageOption: "research-helper-prefs-language-option",
+  ttsLanguage: "research-helper-prefs-tts-language",
+  ttsLanguageOption: "research-helper-prefs-tts-language-option",
+  ttsVoice: "research-helper-prefs-tts-voice",
+  ttsVoiceNote: "research-helper-prefs-tts-voice-note",
+  ttsMinutes: "research-helper-prefs-tts-minutes",
+  ttsFolder: "research-helper-prefs-tts-folder",
+  ttsFolderChoose: "research-helper-prefs-tts-folder-choose",
+  ttsFolderClear: "research-helper-prefs-tts-folder-clear",
+  ttsFolderUnset: "research-helper-prefs-tts-folder-unset",
+  ttsFolderNote: "research-helper-prefs-tts-folder-note",
+  ttsFolderRefused: "research-helper-prefs-tts-folder-refused",
+  privacyTitle: "research-helper-prefs-privacy",
+  privacyMode: "research-helper-prefs-privacy-mode",
+  privacyOption: "research-helper-prefs-privacy-option",
+  privacyExplain: "research-helper-prefs-privacy-explain",
+  fullTextMode: "research-helper-prefs-fulltext-mode",
+  fullTextOption: "research-helper-prefs-fulltext-option",
+  fullTextNote: "research-helper-prefs-fulltext-note",
+  // P7-T09 (2026-11-17): the Advanced section's first half (docs/08 §7.3,
+  // item 4). The Korean is G-41's, as above.
+  advancedTitle: "research-helper-prefs-advanced",
+  concurrency: "research-helper-prefs-concurrency",
+  timeout: "research-helper-prefs-timeout",
+  cacheSize: "research-helper-prefs-cache-size",
+  cacheUsageRow: "research-helper-prefs-cache-usage-row",
+  cacheUsageTotal: "research-helper-prefs-cache-usage-total",
+  cacheUsageUnavailable: "research-helper-prefs-cache-usage-unavailable",
+  debug: "research-helper-prefs-debug",
+  debugNote: "research-helper-prefs-debug-note",
+  dataLocation: "research-helper-prefs-data-location",
+  dataLocationShow: "research-helper-prefs-data-location-show",
+  dataLocationUnavailable: "research-helper-prefs-data-location-unavailable",
+  // P7-T17 (2026-11-17): the Privacy section's dated provider-policy lines
+  // (POLICY_NOTES in src/llm/shared/policyNotes.ts). Korean is G-41's.
+  retentionTitle: "research-helper-prefs-retention-title",
+  retentionOpenai: "research-helper-prefs-retention-openai",
+  retentionAnthropic: "research-helper-prefs-retention-anthropic",
+  retentionGeminiPaid: "research-helper-prefs-retention-gemini-paid",
+  retentionGeminiFree: "research-helper-prefs-retention-gemini-free",
+  retentionOpenrouter: "research-helper-prefs-retention-openrouter",
+  // P7-T13 (2026-11-17): the Advanced section's diagnostics (docs/07 §10.4,
+  // "As built"). Korean is G-41's.
+  diagnosticsTitle: "research-helper-prefs-diagnostics-title",
+  diagnosticsNote: "research-helper-prefs-diagnostics-note",
+  diagnosticsPreview: "research-helper-prefs-diagnostics-preview",
+  diagnosticsText: "research-helper-prefs-diagnostics-text",
+  diagnosticsSave: "research-helper-prefs-diagnostics-save",
+  diagnosticsCopy: "research-helper-prefs-diagnostics-copy",
+  diagnosticsStatus: "research-helper-prefs-diagnostics-status",
 } as const satisfies Record<string, MainWindowMessageId>;
+
+/**
+ * `P7-T17`: the messages a provider-policy line may use. A row naming any
+ * other id is not shown.
+ */
+const POLICY_LINE_IDS: ReadonlySet<string> = new Set([
+  PREFERENCES_L10N.retentionOpenai,
+  PREFERENCES_L10N.retentionAnthropic,
+  PREFERENCES_L10N.retentionGeminiPaid,
+  PREFERENCES_L10N.retentionGeminiFree,
+  PREFERENCES_L10N.retentionOpenrouter,
+]);
+
+/**
+ * `P7-T08`: the pane's bound settings, by section — `docs/07` §8.5's rows that
+ * `docs/08` §7.3 (as `P7-T01` left it) places in the pane, each written by
+ * Zotero's own `preference=` binding. `tts.linkedFileDir` is not among them: it
+ * is a local path, chosen with a folder picker and written through
+ * {@link PreferencesHostApi.setLinkedFolder}, never through a binding.
+ *
+ * **Not in the pane, on purpose:** `sources` (the search window's checkboxes,
+ * §8.5), `autoSummarize` (off and hidden in v1.0, owner, `plan/00` §6 item 381;
+ * `plan/10` §0.4 line 23), `tts.model`, `tts.outputFormat`, `gemini.tierAnswer`
+ * and `audio.enabled` (hidden rows).
+ *
+ * `advanced` is `P7-T09`'s (2026-11-17): concurrency, the timeout and the cache
+ * cap. `logLevel` is not bound: the verbose-logging checkbox writes it through
+ * {@link PreferencesHostApi.setVerboseLogging} (`docs/07` §8.5, Diagnostics).
+ */
+export const PANE_BOUND_SETTINGS = {
+  search: ["searchYears", "maxResults", "useTranslators", "hideExisting"],
+  report: ["reportLanguage"],
+  audio: ["tts.language", "tts.voice", "tts.targetMinutes"],
+  privacy: ["privacy.mode", "summary.fullTextMode"],
+  advanced: ["concurrency", "timeoutSeconds", "cache.maxSizeMB"],
+} as const;
+
+/** The values each bound menulist offers: `docs/07` §8.5's value sets. */
+export const PANE_MENU_VALUES = {
+  reportLanguage: ["auto", "en", "ko", "both"],
+  "tts.language": ["auto", "en", "ko"],
+  "privacy.mode": ["strict", "balanced", "full"],
+  "summary.fullTextMode": ["never", "auto", "always"],
+} as const;
 
 /* ------------------------------------------------------- rule 7: paste input */
 
@@ -1014,6 +1123,204 @@ export type BaseUrlResult =
   | { readonly stored: true; readonly cleared: boolean }
   | { readonly stored: false; readonly reason: BaseUrlRefusal };
 
+/** One voice of the pane's list: its name, shown as it is (`docs/08` §10.3). */
+export interface PaneVoice {
+  readonly id: string;
+  readonly label: string;
+}
+
+/**
+ * `P7-T08`: what the Report & audio section needs beyond its bindings.
+ * {@link PreferencesHostApi.readSettings}'s answer. Reads preferences and the
+ * documented voice list only: no call, no key.
+ */
+export interface PaneSettings {
+  /** `audio.enabled`: the audio rows are shown only while it is on. */
+  readonly audioEnabled: boolean;
+  /**
+   * The documented default voice list (`GEMINI_TTS_VOICES`,
+   * `docs/04` §2.7), read by no call (`docs/08` §7.3's note of 2026-11-17).
+   */
+  readonly voices: readonly PaneVoice[];
+  /**
+   * The stored `tts.voice`, so a name the report window wrote from the live
+   * list and the default list lacks is still shown.
+   */
+  readonly voice: string;
+  /**
+   * `tts.linkedFileDir`, `""` when unset. Shown in the pane, which is the
+   * user's own screen; **never logged** (`docs/07` §8.5's row).
+   */
+  readonly linkedFolder: string;
+}
+
+/** Why {@link PreferencesHostApi.setLinkedFolder} kept the stored folder. */
+export type LinkedFolderRefusal = "unusable" | "unavailable";
+
+/** {@link PreferencesHostApi.setLinkedFolder}'s answer. Never echoes the path. */
+export type LinkedFolderResult =
+  | { readonly stored: true; readonly cleared: boolean }
+  | { readonly stored: false; readonly reason: LinkedFolderRefusal };
+
+/**
+ * `P7-T08`: the Report & audio section's reads and its one write, bound by the
+ * composition root (`publishPreferencesHost` in `src/bootstrap/registerUI.ts`)
+ * — so this file imports neither `src/tts` nor `src/zotero` (the layering
+ * rule) nor a preference writer.
+ */
+export interface SettingsPort {
+  /** The hidden `audio.enabled` row. */
+  readAudioEnabled(): boolean;
+  /** The documented default voice list. */
+  readonly voices: readonly PaneVoice[];
+  /** `tts.voice`. */
+  readVoice(): string;
+  /** `tts.linkedFileDir`. */
+  getLinkedFolder(): string;
+  setLinkedFolder(path: string): void;
+  /**
+   * The test `resolveLinkedFolder` (`src/pipeline/audioReport/deliver.ts`)
+   * applies before it uses a stored folder: absolute, an existing folder, and
+   * not a temporary one.
+   */
+  isUsableFolder(path: string): Promise<boolean>;
+}
+
+/* --------------------------------- P7-T17: dated provider-policy lines */
+
+/**
+ * One provider-policy line as the composition root hands it over: the shape
+ * of `PolicyNote` in `src/llm/shared/policyNotes.ts`, declared here because
+ * `ui/` may not import `llm/` (`eslint.config.js`'s layering rule).
+ */
+export interface PanePolicyNote {
+  readonly messageId: string;
+  readonly sourceUrls: readonly string[];
+  /** ISO date (`YYYY-MM-DD`) the sources were read. */
+  readonly asOf: string;
+}
+
+/** {@link PreferencesHostApi.readPolicyNotes}'s line: a Fluent id and its `$date`. */
+export interface PolicyLine {
+  readonly id: string;
+  readonly date: string;
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/u;
+
+function isHttpsUrl(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * `P7-T17` step 2 at the last step before the screen: a row is shown only
+ * with a known message, an ISO date and at least one `https` source, so a
+ * claim without a date or a source cannot reach the pane.
+ */
+export function policyLines(
+  notes: readonly PanePolicyNote[] | undefined,
+): readonly PolicyLine[] {
+  return (notes ?? [])
+    .filter(
+      (note) =>
+        POLICY_LINE_IDS.has(note.messageId) &&
+        ISO_DATE.test(note.asOf) &&
+        note.sourceUrls.length > 0 &&
+        note.sourceUrls.every(isHttpsUrl),
+    )
+    .map((note) => ({ id: note.messageId, date: note.asOf }));
+}
+
+/* ---------------------------------------- P7-T09: the Advanced section */
+
+/**
+ * The bytes in one MB as `cache.maxSizeMB` is converted (`cacheMaxBytes` in
+ * `src/bootstrap/container.ts`: MB × 1024 × 1024), so the usage line and the
+ * cap are in one unit.
+ */
+const BYTES_PER_MB = 1024 * 1024;
+
+/** `docs/07` §8.5's Diagnostics row: the checkbox's two values. */
+export const VERBOSE_LOG_LEVEL = "debug";
+export const QUIET_LOG_LEVEL = "warn";
+
+/** One namespace's line under the cache-size field. */
+export interface CacheUsageRow {
+  readonly namespace: CacheNamespace;
+  readonly entries: number;
+  readonly bytes: number;
+  /** `bytes` in the cap's unit ({@link BYTES_PER_MB}). */
+  readonly megabytes: number;
+}
+
+/**
+ * {@link PreferencesHostApi.cacheStats}'s answer: the namespaces holding
+ * anything, in `CACHE_NAMESPACES`' order, and their total. The total is the
+ * sum of the rows, so the rows always add up to it.
+ */
+export interface CacheUsage {
+  readonly rows: readonly CacheUsageRow[];
+  readonly entries: number;
+  readonly bytes: number;
+  readonly megabytes: number;
+}
+
+function countOf(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : 0;
+}
+
+/**
+ * `P7-T09` step 2: the cache's own counts (`Cache.stats()`), as the pane's
+ * lines. A namespace with nothing in it has no line; the total is always
+ * shown.
+ */
+export function cacheUsage(stats: CacheStats): CacheUsage {
+  const rows: CacheUsageRow[] = [];
+  for (const namespace of CACHE_NAMESPACES) {
+    const counted = stats.byNamespace[namespace] as
+      { entries?: unknown; bytes?: unknown } | undefined;
+    const entries = countOf(counted?.entries);
+    const bytes = countOf(counted?.bytes);
+    if (entries === 0 && bytes === 0) continue;
+    rows.push({ namespace, entries, bytes, megabytes: bytes / BYTES_PER_MB });
+  }
+  const entries = rows.reduce((sum, row) => sum + row.entries, 0);
+  const bytes = rows.reduce((sum, row) => sum + row.bytes, 0);
+  return { rows, entries, bytes, megabytes: bytes / BYTES_PER_MB };
+}
+
+/**
+ * `P7-T09`: the Advanced section's reads and its one write, bound by the
+ * composition root (`preferencesAdvancedPort` in
+ * `src/bootstrap/registerUI.ts`), so this file imports neither `src/zotero`
+ * nor a preference writer.
+ */
+export interface AdvancedPort {
+  /** `logLevel`. */
+  readLogLevel(): string;
+  /** Writes `logLevel`, and nothing else. */
+  writeLogLevel(level: typeof VERBOSE_LOG_LEVEL | typeof QUIET_LOG_LEVEL): void;
+  /** The cache's counts, or `undefined` when the plugin database is not open. */
+  cacheStats(): Promise<CacheStats | undefined>;
+  /**
+   * The plugin database's file, or `undefined` when it is not open. Shown on
+   * the user's own screen; **never logged**.
+   */
+  databasePath(): Promise<string | undefined>;
+  /**
+   * Show the database's file in the system's file manager; `false` when the
+   * database is not open.
+   */
+  revealDatabase(): Promise<boolean>;
+}
+
 /**
  * What `addon/content/preferences.js` is allowed to do. Published on the plugin
  * instance at {@link PREFERENCES_API_PROPERTY}.
@@ -1053,6 +1360,72 @@ export interface PreferencesHostApi {
    * was. Never resolves the URL; `P3-T06`'s resolver does that at call time.
    */
   setBaseUrl(provider: string, raw: string): Promise<BaseUrlResult>;
+  /**
+   * `P7-T08`: the Report & audio section's state. With no
+   * {@link SettingsPort} bound, audio reads as off and the list as empty.
+   */
+  readSettings(): Promise<PaneSettings>;
+  /**
+   * `P7-T08`: write `tts.linkedFileDir`. `""` clears it (the next linked WAV
+   * asks again); any other value is stored only when
+   * {@link SettingsPort.isUsableFolder} accepts it. The path is never logged.
+   */
+  setLinkedFolder(raw: string): Promise<LinkedFolderResult>;
+  /**
+   * `P7-T09`: whether `logLevel` is `debug`, which is when the verbose-logging
+   * checkbox renders checked (`docs/07` §8.5, Diagnostics).
+   */
+  readVerboseLogging(): Promise<boolean>;
+  /**
+   * `P7-T09`: write `logLevel` — `debug` for `true`, `warn` for `false` — and
+   * nothing else: never `logRequestBodies`, never a `debug` row. Resolves to
+   * whether it was written.
+   */
+  setVerboseLogging(on: boolean): Promise<boolean>;
+  /**
+   * `P7-T09`: the cache's usage ({@link cacheUsage}), or `undefined` when the
+   * plugin database is not open or its counts cannot be read.
+   */
+  cacheStats(): Promise<CacheUsage | undefined>;
+  /**
+   * `P7-T09`: the plugin database's file, `""` when it is not open. Shown in
+   * the pane; never logged.
+   */
+  databasePath(): Promise<string>;
+  /** `P7-T09`: "Show in folder". Resolves to whether it was asked. */
+  revealDatabase(): Promise<boolean>;
+  /**
+   * `P7-T17`: the Privacy section's dated provider-policy lines
+   * ({@link policyLines}); empty when none was bound.
+   */
+  readPolicyNotes(): Promise<readonly PolicyLine[]>;
+  /**
+   * `P7-T13`: the whole diagnostics text (`buildDiagnostics`,
+   * `src/core/diagnostics.ts`), `""` when no {@link DiagnosticsPort} is bound
+   * or it could not be built. The pane shows it before Save or Copy is offered.
+   */
+  diagnosticsText(): Promise<string>;
+  /**
+   * `P7-T13`: write `text` to the path the user just chose in the save picker.
+   * The path is neither kept nor logged. Resolves to whether it was written.
+   */
+  saveDiagnostics(path: string, text: string): Promise<boolean>;
+  /** `P7-T13`: put `text` on the clipboard. Resolves to whether it was. */
+  copyDiagnostics(text: string): Promise<boolean>;
+}
+
+/**
+ * `P7-T13`: the diagnostics text and its two outlets, bound by the composition
+ * root (`preferencesDiagnosticsPort` in `src/bootstrap/registerUI.ts`), so this
+ * file names neither a file writer nor the clipboard.
+ */
+export interface DiagnosticsPort {
+  /** Build the text now, from the live preferences, jobs, log ring and cache. */
+  text(): Promise<string>;
+  /** Write it; `false` on any failure. Never logs `path`. */
+  save(path: string, text: string): Promise<boolean>;
+  /** Copy it; `false` on any failure. */
+  copy(text: string): boolean | Promise<boolean>;
 }
 
 /**
@@ -1101,6 +1474,17 @@ export interface PreferencesHostDeps {
   readonly modelSuggestions?: () => Promise<ModelSuggestions>;
   /** `P3-T14` step 5: the user price table. */
   readonly prices?: PricesPort;
+  /** `P7-T08`: the Report & audio section's reads and its folder write. */
+  readonly settings?: SettingsPort;
+  /** `P7-T09`: the Advanced section's reads, its `logLevel` write and reveal. */
+  readonly advanced?: AdvancedPort;
+  /**
+   * `P7-T17`: `POLICY_NOTES` (`src/llm/shared/policyNotes.ts`), handed over
+   * as data by the composition root.
+   */
+  readonly policyNotes?: readonly PanePolicyNote[];
+  /** `P7-T13`: the diagnostics text, its save and its copy. */
+  readonly diagnostics?: DiagnosticsPort;
   readonly clock: Clock;
   /**
    * Redacting logger (`src/core/logger.ts`). The host logs ids, outcomes,
@@ -1147,6 +1531,10 @@ export function createPreferencesHost(
     validateLlm,
     modelSuggestions: readSuggestions,
     prices,
+    settings,
+    advanced,
+    policyNotes,
+    diagnostics,
     clock,
     logger,
   } = deps;
@@ -1488,6 +1876,173 @@ export function createPreferencesHost(
     return true;
   }
 
+  async function readSettings(): Promise<PaneSettings> {
+    if (settings === undefined) {
+      return { audioEnabled: false, voices: [], voice: "", linkedFolder: "" };
+    }
+    try {
+      return {
+        audioEnabled: settings.readAudioEnabled(),
+        voices: settings.voices.map((voice) => ({
+          id: voice.id,
+          label: voice.label,
+        })),
+        voice: settings.readVoice(),
+        linkedFolder: settings.getLinkedFolder(),
+      };
+    } catch (error) {
+      logger?.warn("pane settings could not be read", {
+        error: errorName(error),
+      });
+      return { audioEnabled: false, voices: [], voice: "", linkedFolder: "" };
+    }
+  }
+
+  async function setLinkedFolder(raw: string): Promise<LinkedFolderResult> {
+    if (settings === undefined) return { stored: false, reason: "unavailable" };
+    const path = typeof raw === "string" ? raw.trim() : "";
+    // The path is a local path: no line below names it (docs/09 §2.2).
+    if (path === "") {
+      settings.setLinkedFolder("");
+      logger?.info("linked audio folder cleared");
+      return { stored: true, cleared: true };
+    }
+    let usable: boolean;
+    try {
+      usable = await settings.isUsableFolder(path);
+    } catch (error) {
+      logger?.info("linked audio folder could not be checked", {
+        error: errorName(error),
+      });
+      return { stored: false, reason: "unavailable" };
+    }
+    if (!usable) {
+      logger?.info("linked audio folder refused", { reason: "unusable" });
+      return { stored: false, reason: "unusable" };
+    }
+    settings.setLinkedFolder(path);
+    logger?.info("linked audio folder stored");
+    return { stored: true, cleared: false };
+  }
+
+  async function readVerboseLogging(): Promise<boolean> {
+    if (advanced === undefined) return false;
+    try {
+      return advanced.readLogLevel() === VERBOSE_LOG_LEVEL;
+    } catch (error) {
+      logger?.warn("log level could not be read", { error: errorName(error) });
+      return false;
+    }
+  }
+
+  async function setVerboseLogging(on: boolean): Promise<boolean> {
+    if (advanced === undefined) return false;
+    // `logLevel` only: never `logRequestBodies`, never a `debug` row
+    // (docs/07 §8.5, Diagnostics).
+    const level = on === true ? VERBOSE_LOG_LEVEL : QUIET_LOG_LEVEL;
+    try {
+      advanced.writeLogLevel(level);
+    } catch (error) {
+      logger?.warn("log level could not be written", {
+        error: errorName(error),
+      });
+      return false;
+    }
+    logger?.info("log level set from the pane", { level });
+    return true;
+  }
+
+  async function cacheStats(): Promise<CacheUsage | undefined> {
+    if (advanced === undefined) return undefined;
+    try {
+      const stats = await advanced.cacheStats();
+      return stats === undefined ? undefined : cacheUsage(stats);
+    } catch (error) {
+      logger?.warn("cache usage could not be read", {
+        error: errorName(error),
+      });
+      return undefined;
+    }
+  }
+
+  async function databasePath(): Promise<string> {
+    if (advanced === undefined) return "";
+    try {
+      const path = await advanced.databasePath();
+      return typeof path === "string" ? path : "";
+    } catch (error) {
+      // The error's message can quote the path: its name only.
+      logger?.warn("database location could not be read", {
+        error: errorName(error),
+      });
+      return "";
+    }
+  }
+
+  async function revealDatabase(): Promise<boolean> {
+    if (advanced === undefined) return false;
+    try {
+      const shown = await advanced.revealDatabase();
+      logger?.info("database folder requested", { shown });
+      return shown;
+    } catch (error) {
+      logger?.info("database folder could not be shown", {
+        error: errorName(error),
+      });
+      return false;
+    }
+  }
+
+  async function diagnosticsText(): Promise<string> {
+    if (diagnostics === undefined) return "";
+    try {
+      const answer: unknown = await diagnostics.text();
+      const text = typeof answer === "string" ? answer : "";
+      logger?.info("diagnostics text built", {
+        lines: text === "" ? 0 : text.split("\n").length,
+      });
+      return text;
+    } catch (error) {
+      logger?.warn("diagnostics text could not be built", {
+        error: errorName(error),
+      });
+      return "";
+    }
+  }
+
+  async function saveDiagnostics(path: string, text: string): Promise<boolean> {
+    if (diagnostics === undefined) return false;
+    if (typeof path !== "string" || path === "") return false;
+    if (typeof text !== "string" || text === "") return false;
+    try {
+      // The path is the user's choice: neither kept nor logged.
+      const saved = (await diagnostics.save(path, text)) === true;
+      logger?.info("diagnostics saved", { saved });
+      return saved;
+    } catch (error) {
+      // The error's message can quote the path: its name only.
+      logger?.warn("diagnostics could not be saved", {
+        error: errorName(error),
+      });
+      return false;
+    }
+  }
+
+  async function copyDiagnostics(text: string): Promise<boolean> {
+    if (diagnostics === undefined) return false;
+    if (typeof text !== "string" || text === "") return false;
+    try {
+      const copied = (await diagnostics.copy(text)) === true;
+      logger?.info("diagnostics copied", { copied });
+      return copied;
+    } catch (error) {
+      logger?.warn("diagnostics could not be copied", {
+        error: errorName(error),
+      });
+      return false;
+    }
+  }
+
   return {
     paneId: PREFERENCES_PANE_ID,
     readState,
@@ -1500,6 +2055,17 @@ export function createPreferencesHost(
     listPrices,
     savePrice,
     deletePrice,
+    readSettings,
+    setLinkedFolder,
+    readVerboseLogging,
+    setVerboseLogging,
+    cacheStats,
+    databasePath,
+    revealDatabase,
+    readPolicyNotes: () => Promise.resolve(policyLines(policyNotes)),
+    diagnosticsText,
+    saveDiagnostics,
+    copyDiagnostics,
   };
 }
 

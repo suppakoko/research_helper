@@ -5,8 +5,11 @@ import {
   createLogger,
   DEFAULT_LOG_LEVEL,
   LOG_PREFIX,
+  LOG_RING_LINES,
   NULL_LOG_SINK,
+  createLogRing,
   redactContext,
+  withLogRing,
   type LogLevel,
   type LogSink,
 } from "../../../src/core/logger";
@@ -415,5 +418,79 @@ describe("NULL_LOG_SINK", () => {
   it("discards without breaking the logger", () => {
     const log = createLogger({ sink: NULL_LOG_SINK, clock, level: "debug" });
     expect(() => log.debug("a", { api_key: "abc123" })).not.toThrow();
+  });
+});
+
+/** `P7-T13`: a SYNTHETIC key of OpenRouter's shape, for the ring's redaction test. */
+const RING_PLANTED_KEY = `sk-or-v1-${"a1b2c3d4".repeat(8)}`;
+
+describe("P7-T13 — the log ring (docs/07 §10.4 item 4)", () => {
+  it("never holds more than its bound, keeping the newest lines in order", () => {
+    const ring = createLogRing(3);
+    for (let i = 1; i <= 10; i += 1) {
+      ring.push(`line ${String(i)}`);
+      expect(ring.size).toBeLessThanOrEqual(3);
+    }
+    expect(ring.lines()).toEqual(["line 8", "line 9", "line 10"]);
+  });
+
+  it("holds the default bound of 5000 lines when logged past it", () => {
+    const ring = createLogRing();
+    expect(ring.capacity).toBe(LOG_RING_LINES);
+    expect(LOG_RING_LINES).toBe(5000);
+    const log = createLogger({
+      sink: withLogRing({ write: () => undefined }, ring),
+      clock: createManualClock(0),
+      level: "debug",
+    });
+    for (let i = 0; i < 5100; i += 1) log.debug(`line ${String(i)}`);
+    expect(ring.size).toBe(5000);
+    expect(ring.lines()[0]).toContain("line 100");
+    expect(ring.lines()[4999]).toContain("line 5099");
+  });
+
+  it("keeps the redacted line the sink received, not the raw message", () => {
+    const received: string[] = [];
+    const ring = createLogRing(10);
+    const log = createLogger({
+      sink: withLogRing({ write: (line) => received.push(line) }, ring),
+      clock: createManualClock(0),
+      level: "debug",
+    });
+    log.warn(`key ${RING_PLANTED_KEY}`);
+    expect(ring.lines()).toEqual(received);
+    expect(ring.lines()[0]).not.toContain(RING_PLANTED_KEY);
+  });
+
+  it("keeps only what the level lets through", () => {
+    const ring = createLogRing(10);
+    const log = createLogger({
+      sink: withLogRing({ write: () => undefined }, ring),
+      clock: createManualClock(0),
+      level: "warn",
+    });
+    log.debug("not kept");
+    log.warn("kept");
+    expect(ring.size).toBe(1);
+  });
+
+  it("passes the second channel through", () => {
+    const reported: string[] = [];
+    const ring = createLogRing(10);
+    const log = createLogger({
+      sink: withLogRing(
+        { write: () => undefined, reportError: (line) => reported.push(line) },
+        ring,
+      ),
+      clock: createManualClock(0),
+    });
+    log.error("boom");
+    expect(reported).toHaveLength(1);
+    expect(ring.size).toBe(1);
+  });
+
+  it("refuses a bound below one", () => {
+    expect(() => createLogRing(0)).toThrow(RangeError);
+    expect(() => createLogRing(1.5)).toThrow(RangeError);
   });
 });

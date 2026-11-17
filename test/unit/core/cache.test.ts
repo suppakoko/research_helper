@@ -713,3 +713,41 @@ describe("P3-T33 — getOrCompute, stats, close, and no database", () => {
     });
   });
 });
+
+describe("P7-T09 — a lowered cache.maxSizeMB takes effect on the next prune", () => {
+  it("reads the cap per prune: entries kept under the old cap are evicted to 90 % of the new one, with no restart", async () => {
+    const connection = sqlite();
+    await runMigrations(connection);
+    const clock = createManualClock();
+    // The pane's field writes the preference; the cache reads it through
+    // this getter on every prune (container.ts's cacheMaxBytes).
+    let capBytes = BIG;
+    const cache = createSqliteCache({
+      connection: () => Promise.resolve(connection),
+      blobs: memoryBlobs(),
+      clock,
+      logger: createLogger({ sink: NULL_LOG_SINK, clock }),
+      maxBytes: () => capBytes,
+    });
+    const value = "x".repeat(298); // 300 bytes of JSON
+    for (const key of ["s1", "s2", "s3", "s4"]) {
+      clock.advance(60_000);
+      await cache.set("source-response", key, value);
+    }
+    expect(count(connection)).toBe(4);
+    const none = await cache.prune();
+    expect(none.evictedForSize).toBe(0);
+    expect(count(connection)).toBe(4);
+
+    capBytes = 1000; // 1200 bytes stored > 1000 → to 900
+    const pruned = await cache.prune();
+    expect(pruned.evictedForSize).toBe(1);
+    const left = connection.db
+      .prepare("SELECT key FROM cache_entry ORDER BY key")
+      .all()
+      .map((r) => (r as { key: string }).key);
+    // The least recently used goes first.
+    expect(left).toStrictEqual(["s2", "s3", "s4"]);
+    expect((await cache.stats()).bytes).toBeLessThanOrEqual(900);
+  });
+});

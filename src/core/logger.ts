@@ -4,8 +4,10 @@
  * **Scope.** `P1-T02`. The {@link Logger} contract of `docs/07` §10.3, its line
  * format, its level gating, and the redaction §10.3 and
  * `docs/09-security-privacy-and-api-keys.md` §2.1 require at the logger.
- * §10.4's 5000-line ring buffer and the debug bundle that reads it are a
- * separate surface with a separate owner and are not built here.
+ * §10.4's 5000-line ring buffer is section 6 below (`P7-T13`, 2026-11-17): a
+ * sink wrapper, {@link withLogRing}, so it holds only finished, redacted lines.
+ * Its one constructing site is `registerUI` in `src/bootstrap/registerUI.ts`;
+ * its one reader is the diagnostics text (`src/core/diagnostics.ts`).
  *
  * **Authority.** {@link LogLevel} and {@link Logger} are `docs/07` §10.3's,
  * verbatim. The `logLevel` pref's four values and its `"warn"` default are
@@ -380,3 +382,90 @@ export const NULL_LOG_SINK: LogSink = {
     /* discard */
   },
 };
+
+// ---------------------------------------------------------------------------
+// 6. The ring buffer — docs/07 §10.4 item 4 (`P7-T13`)
+// ---------------------------------------------------------------------------
+
+/**
+ * How many lines {@link LogRing} keeps: `docs/07` §10.4 item 4's "the plugin's
+ * own ring buffer (last 5000 lines)".
+ */
+export const LOG_RING_LINES = 5000;
+
+/**
+ * The last lines the logger emitted, for the diagnostics text (`P7-T13`).
+ *
+ * **Memory only, and bounded by line count.** Nothing here writes a file or a
+ * preference; the buffer goes when the plugin does. **Filled after
+ * redaction**: {@link withLogRing} puts in exactly the line the sink receives,
+ * which {@link createLogger} has already passed through `redact`, so the buffer
+ * can hold nothing a debug log could not.
+ */
+export interface LogRing {
+  /** Add one finished line; the oldest goes once {@link capacity} is reached. */
+  push(line: string): void;
+  /** The kept lines, oldest first, as a copy. */
+  lines(): readonly string[];
+  /** How many lines are kept now. */
+  readonly size: number;
+  /** The bound. */
+  readonly capacity: number;
+}
+
+/**
+ * Build a {@link LogRing}.
+ *
+ * @param capacity - the bound, a positive whole number; defaults to
+ *   {@link LOG_RING_LINES}
+ */
+export function createLogRing(capacity: number = LOG_RING_LINES): LogRing {
+  if (!Number.isInteger(capacity) || capacity < 1) {
+    throw new RangeError("a log ring holds at least one line");
+  }
+  const slots: string[] = new Array<string>(capacity);
+  let next = 0;
+  let size = 0;
+  return {
+    push(line) {
+      slots[next] = line;
+      next = (next + 1) % capacity;
+      if (size < capacity) size += 1;
+    },
+    lines() {
+      const start = size < capacity ? 0 : next;
+      const out: string[] = [];
+      for (let i = 0; i < size; i += 1) {
+        out.push(slots[(start + i) % capacity] as string);
+      }
+      return out;
+    },
+    get size() {
+      return size;
+    },
+    capacity,
+  };
+}
+
+/**
+ * A sink that also keeps each line in `ring`, then passes it on unchanged.
+ *
+ * Wrapping the sink, not the logger, is what makes "filled after redaction"
+ * structural: a sink only ever receives a finished line.
+ *
+ * @param sink - where lines go
+ * @param ring - where a copy of each line is kept
+ */
+export function withLogRing(sink: LogSink, ring: LogRing): LogSink {
+  return {
+    write(line, zoteroLevel) {
+      ring.push(line);
+      sink.write(line, zoteroLevel);
+    },
+    ...(sink.reportError !== undefined && {
+      reportError: (line: string) => {
+        sink.reportError?.(line);
+      },
+    }),
+  };
+}

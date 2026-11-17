@@ -2530,6 +2530,80 @@ Fluent goes in a XUL `<linkset>`, and each `<groupbox>` should carry `aria-label
 >    Help-menu entry for the bundle. "Remove all stored keys" stays where it is and is not part of the remove-all
 >    command.
 
+> **As built 2026-11-17 (`plan/10` `P7-T08`; coordinator, under `plan/00` §6 item 313): items 1–3 above.** The three
+> groupboxes follow the storage, providers, NCBI, Semantic Scholar and usage groups, as `rh-prefs-search`,
+> `rh-prefs-report` and `rh-prefs-privacy`, each with an `aria-labelledby` heading. Where they differ from the markup
+> drawn above:
+>
+> 1. **Search** as drawn, with ids on the two checkboxes (`rh-use-translators`, `rh-hide-existing`); the translator
+>    checkbox reuses `P2-T18`'s `research-helper-prefs-use-translators`.
+> 2. **Report & audio.** The language menulist's items are one message, `research-helper-prefs-language-option`, with
+>    `$language` as the item's value (so "English" and "한국어", each language's own name, are in the bundle, not literal
+>    labels). Under it, a block `rh-prefs-audio`, shown only while `audio.enabled` is on: the audio language
+>    (`tts.language`, `research-helper-prefs-tts-language-option`), the voice (`rh-voice`, filled by `preferences.js`
+>    from the documented default list the host returns), a line saying the list is the documented one and that
+>    opening it sends nothing, the length in minutes (`tts.targetMinutes`, 0–60), and **the folder for long
+>    recordings**: `tts.linkedFileDir` shown read-only with "Choose…" and "Forget this folder", written through the
+>    host's `setLinkedFolder` and never bound (a fifth control for the table below, for the base URL's reason: the
+>    value must be checked before it is written). No preview, no format, no `autoSummarize` (owner, `plan/00` §6
+>    item 381).
+> 3. **Privacy.** The mode menulist's items are `research-helper-prefs-privacy-option` with `$mode`; the line under it,
+>    `research-helper-prefs-privacy-explain`, is repainted from the chosen mode and words only `09-security-privacy-
+>    and-api-keys.md` §3.5's table (no retention claim: strict allows providers that keep content for 30 days, §3.3).
+>    Then `summary.fullTextMode` (`rh-fulltext`, never / auto / always) with a line that strict mode still sends no
+>    full text. An empty, hidden `rh-prefs-retention` waits for `P7-T17`'s dated line. There is **no egress-log view**:
+>    `09-security-privacy-and-api-keys.md` §3.6 item 4 ships no window for it in v1.
+>
+> Every key bound here has a `pref()` line (`01-zotero-plugin-platform.md` §7.2's note of this date). The 25 new
+> strings' Korean is a commented draft awaiting `G-41`.
+
+> **As built 2026-11-17 (`plan/10` `P7-T09`; coordinator, under `plan/00` §6 item 313): item 4's first half.** The
+> Advanced groupbox, `rh-prefs-advanced`, follows the Privacy group. It holds concurrency, timeout and cache size,
+> their usage, the verbose-logging checkbox and the data location; the clear actions, "Delete all plugin data",
+> "Reset" and "Remove all Research Helper content" are `P7-T10`'s, and diagnostics are `P7-T13`'s. Where it differs
+> from the markup drawn above:
+>
+> 1. **The three number fields are bound as drawn** (`rh-conc` 1–8, `rh-timeout` 10–600 step 10, `rh-cache-size`
+>    100–5000 step 100) and are `PANE_BOUND_SETTINGS.advanced` in `src/ui/prefs/preferencesPane.ts`. There is no
+>    separate unit label: the field's label ends "in MB". The labels say what each setting governs, as
+>    `07-architecture-and-data-model.md` §8.5 records it: `concurrency` is the model (`llm`) worker pool, and
+>    `timeoutSeconds` is the literature database requests' limit (LLM attempts have their own constant, §7.3's note).
+> 2. **The usage lines are `rh-cache-breakdown`, an `html:div`** (it holds one paragraph per line, so it cannot be a
+>    `p`): first the total, then one line per namespace holding anything, in `CACHE_NAMESPACES`' order. They are the
+>    cache's own counts (`Cache.stats()`), reduced by `cacheUsage` in `preferencesPane.ts`, whose total is the sum of
+>    the lines shown; megabytes are the cap's (`cache.maxSizeMB` × 1024 × 1024 bytes). They are read on open, and
+>    `preferences.js`'s `refreshCacheUsage` is what `P7-T10`'s clear actions call after a clear.
+> 3. **The verbose-logging checkbox writes through the pane's host** (`setVerboseLogging`), not by `setPref` from the
+>    script as the table below says: `preferences.js` writes no preference itself (its header; `09-security-privacy-and-api-keys.md` §1.9 rule 9). The host writes
+>    `logLevel` (`debug` checked, `warn` unchecked) and nothing else. A line under it says what it does.
+> 4. **The data location is the plugin database's file**, `research-helper-prefs-data-location` with `$path`, beside
+>    a "Show in folder" button that asks the host to show the file in the system's file manager (Zotero's
+>    `Zotero.File.reveal`, through `revealPluginDatabase` in `src/zotero/db.ts`). The path is shown on the user's own
+>    screen and is never logged. While the database is not open, the line says so and the button is disabled.
+>
+> The twelve new strings' Korean is a commented draft awaiting `G-41`.
+
+> **As built 2026-11-17 (`plan/10` `P7-T17`; coordinator, under `plan/00` §6 item 313): item 3's dated retention
+> text.** `rh-prefs-retention`, under the Privacy section, shows a heading and one line per provider (Gemini's paid
+> and free tiers each have one), each ending "Verified <date>". The lines are `POLICY_NOTES` in
+> `src/llm/shared/policyNotes.ts`, passed to the pane's host as data by `publishPreferencesHost`
+> (`src/bootstrap/registerUI.ts`), because `ui/` may not import `llm/`; `policyLines` in `preferencesPane.ts` drops
+> any row without an ISO date or an `https` source, and the block stays hidden when no line is left. Each line words
+> only the claims `09-security-privacy-and-api-keys.md` §3.3's re-verification of that date marks "Unchanged".
+> The six strings' Korean is a commented draft awaiting `G-41`.
+
+> **As built 2026-11-17 (`plan/10` `P7-T13`; coordinator, under `plan/00` §6 item 313): item 4's diagnostics.** Under
+> the data location in `rh-prefs-advanced`: a heading, a note saying what the text holds and that no API key and no
+> paper content is included and nothing is sent, and three buttons. **"Show diagnostics"** (`rh-diagnostics-preview`)
+> asks the host for the whole text and shows it in a read-only box (`rh-diagnostics-text`); **"Save diagnostics…"**
+> (`rh-diagnostics-save`) and **"Copy diagnostics"** (`rh-diagnostics-copy`) are disabled until then, and act on
+> exactly the text shown. Save opens Zotero's save picker (`FilePicker`, a text filter, the name
+> `research-helper-diagnostics.txt`); Copy uses Zotero's clipboard helper. Both go through the host
+> (`saveDiagnostics`, `copyDiagnostics`), which keeps no path and logs none, so the script names neither the clipboard
+> nor a file. A status line (`rh-diagnostics-status`, `role="status"`) says saved, copied, failed or unavailable. The
+> text is `buildDiagnostics` in `src/core/diagnostics.ts` (`07-architecture-and-data-model.md` §10.4, "As built").
+> The seven strings' Korean is a commented draft awaiting `G-41`.
+
 **Controls in this pane that are not `preference=` bindings.** Three, and each is deliberate:
 
 | Control | Why not a binding | What the script does |
@@ -2883,6 +2957,14 @@ Every error the user can see must say **what failed, why, and what to do**. Map 
 > NFR-14's "provider error text verbatim in a details disclosure" is not met by any window, on purpose:
 > `07-architecture-and-data-model.md` §10.2 forbids a raw provider message on a user surface. That conflict is an
 > owner question (item 389).
+
+> **DECIDED 2026-11-17 (owner, `plan/00-task-index.md` §6 item 389): "not on screen", and the Korean approved.** A
+> details disclosure shows machine values only (`07-…` §10.2's code, HTTP status, host, timestamp, item count); the
+> provider's own text goes only to the debug log, after `redact`, and NFR-14's sentence now says so. The owner approved
+> all 23 Korean drafts the same day (`G-41`), so the Korean of every rewritten message carries its next action and
+> `rh-error-policy` is no longer English in a Korean interface (`plan/reports/ko-review-389.ftl`). Checked surfaces:
+> the search window and the Related tab comply; the report window has no disclosure and §6 asks for none; the item
+> pane's summary section shows `redact`ed free text from a failed run and does not comply (item 392(a), for `P7-T03`).
 
 Always log the underlying exception with `Zotero.logError(e)` and, when debug logging is enabled, `Zotero.debug()` the request *shape* — never the key or the prompt body.
 

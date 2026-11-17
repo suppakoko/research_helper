@@ -60,13 +60,16 @@ import { config } from "../../package.json";
 import { createSystemClock } from "../../src/core/clock";
 import { UpstreamServerError } from "../../src/core/errors";
 import type { HttpRequest, HttpResponse } from "../../src/core/http/client";
-import { createLogger } from "../../src/core/logger";
+import { DIAGNOSTICS_SECTIONS } from "../../src/core/diagnostics";
+import { LOG_PREFIX, createLogger } from "../../src/core/logger";
+import type { ServiceGraph } from "../../src/bootstrap/container";
 import type { SecretId } from "../../src/core/secretStore";
 import type { ProviderId } from "../../src/model/ids";
 import { PREF_KEYS, setPrefStore } from "../../src/prefs";
 import { qualifiedPrefKey } from "../../src/prefs/keys";
 import {
   LLM_CREDENTIALS,
+  PANE_BOUND_SETTINGS,
   PANE_CREDENTIALS,
   PREFERENCES_API_PROPERTY,
   PREFERENCES_L10N,
@@ -80,6 +83,11 @@ import {
   type TestReport,
 } from "../../src/ui/prefs/preferencesPane";
 import { createKeychainSecretStore } from "../../src/zotero/keychain";
+import {
+  POLICY_NOTES,
+  POLICY_NOTES_AS_OF,
+} from "../../src/llm/shared/policyNotes";
+import { pluginDatabasePath } from "../../src/zotero/db";
 import {
   clearPref as clearRawPref,
   createZoteroPrefStore,
@@ -599,8 +607,9 @@ describe("P1-T44 — the preference pane", function () {
       }
     }
     // P3-T04: the only bound elements are docs/07 §8.5's non-secret rows —
-    // llmProvider, the four <provider>.model fields and gemini.paidTier — and
-    // no key field or base-URL field is among them.
+    // llmProvider, the four <provider>.model fields and gemini.paidTier, and
+    // since 2026-11-17 P7-T08's ten and P7-T09's three (PANE_BOUND_SETTINGS) — and no key field
+    // or base-URL field is among them.
     const bound = [
       ...doc.querySelectorAll(`#${PREFERENCES_ROOT_ID} [preference]`),
     ];
@@ -612,9 +621,10 @@ describe("P1-T44 — the preference pane", function () {
         PREF_KEYS.geminiModel,
         PREF_KEYS.anthropicModel,
         PREF_KEYS.geminiPaidTier,
+        ...Object.values(PANE_BOUND_SETTINGS).flat(),
       ].map((key) => qualifiedPrefKey(key)),
     );
-    assert.strictEqual(bound.length, allowed.size, "six bound elements");
+    assert.strictEqual(bound.length, allowed.size, "nineteen bound elements");
     for (const element of bound) {
       const name = element.getAttribute("preference") ?? "";
       assert.isTrue(allowed.has(name), `${name} is an allowed binding`);
@@ -687,10 +697,16 @@ describe("P1-T44 — the preference pane", function () {
       doc.getElementById("rh-prefs-remove-all"),
       "Remove all stored keys is present",
     );
-    assert.strictEqual(
-      doc.querySelectorAll(`#${PREFERENCES_ROOT_ID} [id*="copy" i]`).length,
-      0,
-      "no copy affordance",
+    // Narrowed 2026-11-17 (P7-T13; coordinator, under plan/00 §6 item 313), as
+    // the unit test "rule 8: no copy affordance in the markup or the script"
+    // is: the diagnostics "Copy diagnostics" button is the one copy
+    // affordance, and it copies the diagnostics text, never a key field.
+    assert.deepEqual(
+      [...doc.querySelectorAll(`#${PREFERENCES_ROOT_ID} [id*="copy" i]`)]
+        .map((element) => element.id)
+        .filter((id) => id !== "rh-diagnostics-copy"),
+      [],
+      "no copy affordance other than Copy diagnostics",
     );
 
     // Calling the action again with the window open navigates rather than
@@ -1107,5 +1123,488 @@ describe("P1-T44 — the preference pane", function () {
       win!.close();
       prefsWindow = null;
     }
+  });
+
+  it("P7-T08 and P7-T09: each Search, Report & audio, Privacy and Advanced control persists across a pane reopen; the folder row and the verbose-logging checkbox go through the host", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    const instance = await initializedInstance();
+    const host = publishedHost(instance)!;
+
+    interface PrefsWindow extends Window {
+      Zotero_Preferences?: { panes: Map<string, { loaded?: boolean }> };
+    }
+    async function openPane(): Promise<Window> {
+      const opened =
+        Zotero.Utilities.Internal.openPreferences(PREFERENCES_PANE_ID);
+      assert.isNotNull(opened, "openPreferences returned a window");
+      prefsWindow = opened;
+      await waitUntil(
+        () =>
+          (opened as PrefsWindow).Zotero_Preferences?.panes?.get(
+            PREFERENCES_PANE_ID,
+          )?.loaded === true,
+        "the pane to finish loading",
+      );
+      const root = opened!.document.getElementById(PREFERENCES_ROOT_ID);
+      await waitUntil(
+        () => root?.getAttribute("data-rh-initialized") === "true",
+        "the controller to initialise",
+      );
+      return opened!;
+    }
+    /**
+     * Close the window and wait until the window mediator no longer lists it.
+     * `win.closed` turns true at once, but `openPreferences` focuses any
+     * `zotero:pref` window the mediator still lists, so a reopen straight
+     * after it returned the closing window, painted before the folder was
+     * stored (measured 2026-11-17: its one paint was 56 ms before the store).
+     */
+    async function closePane(win: Window): Promise<void> {
+      win.close();
+      prefsWindow = null;
+      await waitUntil(() => win.closed, "the preferences window to close");
+      await waitUntil(
+        () => !Services.wm.getEnumerator("zotero:pref").hasMoreElements(),
+        "the window mediator to drop the preferences window",
+      );
+    }
+
+    type Control = {
+      readonly key: string;
+      readonly id: string;
+      readonly kind: "number" | "checkbox" | "menulist";
+      readonly choices: readonly (string | number | boolean)[];
+    };
+    const controls: readonly Control[] = [
+      { key: "searchYears", id: "rh-years", kind: "number", choices: [7, 8] },
+      { key: "maxResults", id: "rh-max", kind: "number", choices: [50, 60] },
+      {
+        key: "useTranslators",
+        id: "rh-use-translators",
+        kind: "checkbox",
+        choices: [true, false],
+      },
+      {
+        key: "hideExisting",
+        id: "rh-hide-existing",
+        kind: "checkbox",
+        choices: [false, true],
+      },
+      {
+        key: "reportLanguage",
+        id: "rh-lang",
+        kind: "menulist",
+        choices: ["ko", "en"],
+      },
+      {
+        key: "tts.language",
+        id: "rh-tts-lang",
+        kind: "menulist",
+        choices: ["en", "ko"],
+      },
+      {
+        key: "tts.voice",
+        id: "rh-voice",
+        kind: "menulist",
+        choices: ["Kore", "Puck"],
+      },
+      {
+        key: "tts.targetMinutes",
+        id: "rh-tts-minutes",
+        kind: "number",
+        choices: [12, 13],
+      },
+      {
+        key: "privacy.mode",
+        id: "rh-privacy",
+        kind: "menulist",
+        choices: ["strict", "full"],
+      },
+      {
+        key: "summary.fullTextMode",
+        id: "rh-fulltext",
+        kind: "menulist",
+        choices: ["never", "always"],
+      },
+      // P7-T09 (2026-11-17): the Advanced section's three number fields.
+      { key: "concurrency", id: "rh-conc", kind: "number", choices: [4, 5] },
+      {
+        key: "timeoutSeconds",
+        id: "rh-timeout",
+        kind: "number",
+        choices: [70, 80],
+      },
+      {
+        key: "cache.maxSizeMB",
+        id: "rh-cache-size",
+        kind: "number",
+        choices: [600, 700],
+      },
+    ];
+    // Every PANE_BOUND_SETTINGS row is exercised, and nothing else.
+    assert.deepEqual(
+      controls.map((c) => c.key).sort(),
+      [...Object.values(PANE_BOUND_SETTINGS).flat()].sort(),
+      "the controls are PANE_BOUND_SETTINGS",
+    );
+    const touched = [
+      ...controls.map((c) => c.key),
+      PREF_KEYS.audioEnabled,
+      PREF_KEYS.ttsLinkedFileDir,
+      PREF_KEYS.logLevel,
+      PREF_KEYS.logRequestBodies,
+    ];
+    const saved = touched.map((key) => ({
+      key,
+      had: prefHasUserValue(key),
+      value: getRawPref(key),
+    }));
+
+    const read = (doc: Document, control: Control): string => {
+      const element = doc.getElementById(control.id) as
+        (Element & { value?: string; checked?: boolean }) | null;
+      assert.isNotNull(element, `${control.id} exists`);
+      return control.kind === "checkbox"
+        ? String(element!.checked === true)
+        : String(element!.value ?? "");
+    };
+
+    let win: Window | undefined;
+    try {
+      // The audio rows are shown only while audio.enabled is on.
+      setRawPref(PREF_KEYS.audioEnabled, true);
+      // P7-T09: the verbose-logging checkbox starts from `warn`.
+      setRawPref(PREF_KEYS.logLevel, "warn");
+      const bodiesBefore = getRawPref(PREF_KEYS.logRequestBodies);
+      const noDebugRow = (): boolean =>
+        getRawPref("debug") === undefined && !prefHasUserValue("debug");
+      assert.isTrue(noDebugRow(), "no debug preference before the toggle");
+      win = await openPane();
+      let doc = win.document;
+      const audio = doc.getElementById("rh-prefs-audio") as
+        (Element & { hidden: boolean }) | null;
+      assert.isFalse(audio!.hidden, "the audio rows are shown");
+      const voices = doc.querySelectorAll("#rh-voice-popup menuitem");
+      log(`voice list: ${voices.length} documented voices`);
+      assert.isAbove(voices.length, 29, "the 30 documented voices");
+      const explain = doc.getElementById("rh-privacy-explain");
+      await waitUntil(
+        () => (explain?.textContent ?? "").trim().length > 0,
+        "the privacy line to be painted",
+      );
+      // P7-T17: the dated provider-policy lines, a heading and one per row of
+      // POLICY_NOTES, each translated and ending in its verification date.
+      const retention = doc.getElementById("rh-prefs-retention") as
+        (Element & { hidden: boolean }) | null;
+      assert.isFalse(retention!.hidden, "the provider-policy lines are shown");
+      const policyLinesShown = [...retention!.children];
+      assert.strictEqual(
+        policyLinesShown.length,
+        POLICY_NOTES.length + 1,
+        "a heading and one line per POLICY_NOTES row",
+      );
+      await waitUntil(
+        () =>
+          policyLinesShown
+            .slice(1)
+            .every((p) => (p.textContent ?? "").includes(POLICY_NOTES_AS_OF)),
+        "each provider-policy line to show its verification date",
+      );
+
+      const chosen = new Map<string, string>();
+      for (const control of controls) {
+        const current = read(doc, control);
+        const target =
+          control.choices.map(String).find((value) => value !== current) ??
+          String(control.choices[0]);
+        chosen.set(control.key, target);
+        const element = doc.getElementById(control.id) as Element & {
+          value: string;
+          checked: boolean;
+        };
+        if (control.kind === "checkbox") {
+          element.checked = target === "true";
+          element.dispatchEvent(new win.Event("command"));
+        } else if (control.kind === "menulist") {
+          element.value = target;
+          element.dispatchEvent(new win.Event("command"));
+        } else {
+          element.value = target;
+          element.dispatchEvent(new win.Event("input"));
+          element.dispatchEvent(new win.Event("change"));
+        }
+        await waitUntil(
+          () => String(getRawPref(control.key)) === target,
+          `${control.key} to be written by the binding`,
+        );
+      }
+
+      // P7-T09: the verbose-logging checkbox writes logLevel through the host,
+      // and nothing else; no `debug` preference appears.
+      type CheckboxElement = Element & { checked: boolean; disabled: boolean };
+      const verbose = doc.getElementById(
+        "rh-verbose-logging",
+      ) as CheckboxElement | null;
+      assert.isNotNull(verbose, "the verbose-logging checkbox exists");
+      assert.isFalse(verbose!.checked, "unchecked while logLevel is warn");
+      assert.isFalse(verbose!.disabled, "the host can write logLevel");
+      verbose!.checked = true;
+      verbose!.dispatchEvent(new win.Event("command"));
+      await waitUntil(
+        () => getRawPref(PREF_KEYS.logLevel) === "debug",
+        "the checkbox to write logLevel debug",
+      );
+      assert.strictEqual(
+        getRawPref(PREF_KEYS.logRequestBodies),
+        bodiesBefore,
+        "logRequestBodies is unchanged",
+      );
+      assert.isTrue(noDebugRow(), "no debug preference after checking");
+      // The cache lines: the total first. The plugin database is open in
+      // the test profile, so the unavailable line would be a failure.
+      const cacheLines = [
+        ...(doc.getElementById("rh-cache-breakdown")?.children ?? []),
+      ];
+      assert.isAbove(cacheLines.length, 0, "the cache usage is painted");
+      assert.strictEqual(
+        cacheLines[0]!.getAttribute("data-l10n-id"),
+        "research-helper-prefs-cache-usage-total",
+        "the first cache line is the total",
+      );
+      log(`cache lines: ${String(cacheLines.length)}`);
+      // The data location: the plugin database's file, shown, never printed.
+      const location = doc.getElementById("rh-data-location");
+      assert.strictEqual(
+        location?.getAttribute("data-l10n-id"),
+        "research-helper-prefs-data-location",
+        "the data location line is painted",
+      );
+      const locationArgs = JSON.parse(
+        location!.getAttribute("data-l10n-args") ?? "{}",
+      ) as { path?: unknown };
+      assert.isTrue(
+        locationArgs.path === pluginDatabasePath(),
+        "the data location is the plugin database's file",
+      );
+      assert.isFalse(
+        (doc.getElementById("rh-data-location-show") as CheckboxElement)
+          .disabled,
+        "Show in folder is enabled",
+      );
+
+      // The folder: a temporary one is refused and nothing is written; the
+      // profile folder is stored. Neither path is logged here.
+      const refused = await host.setLinkedFolder(PathUtils.tempDir);
+      assert.deepEqual(
+        refused,
+        { stored: false, reason: "unusable" },
+        "a temporary folder is refused",
+      );
+      assert.strictEqual(
+        getRawPref(PREF_KEYS.ttsLinkedFileDir) ?? "",
+        saved.find((s) => s.key === PREF_KEYS.ttsLinkedFileDir)?.value ?? "",
+        "the refusal wrote nothing",
+      );
+      const folder = PathUtils.profileDir;
+      assert.deepEqual(
+        await host.setLinkedFolder(folder),
+        { stored: true, cleared: false },
+        "the profile folder is stored",
+      );
+
+      await closePane(win);
+      win = await openPane();
+      doc = win.document;
+      for (const control of controls) {
+        assert.strictEqual(
+          read(doc, control),
+          chosen.get(control.key),
+          `${control.key} reads back after a reopen`,
+        );
+      }
+      const field = doc.getElementById("rh-tts-folder") as
+        (Element & { value: string }) | null;
+      assert.isTrue(field!.value === folder, "the folder reads back");
+      // P7-T09: the checkbox renders from the stored logLevel on reopen, and
+      // unchecking writes warn — again touching nothing else.
+      const verboseAgain = doc.getElementById(
+        "rh-verbose-logging",
+      ) as CheckboxElement | null;
+      assert.isTrue(verboseAgain!.checked, "checked after a reopen at debug");
+      verboseAgain!.checked = false;
+      verboseAgain!.dispatchEvent(new win.Event("command"));
+      await waitUntil(
+        () => getRawPref(PREF_KEYS.logLevel) === "warn",
+        "the checkbox to write logLevel warn",
+      );
+      assert.strictEqual(
+        getRawPref(PREF_KEYS.logRequestBodies),
+        bodiesBefore,
+        "logRequestBodies is still unchanged",
+      );
+      assert.isTrue(noDebugRow(), "no debug preference after unchecking");
+      assert.strictEqual(
+        doc.querySelectorAll("#rh-prefs-search [preference]").length,
+        PANE_BOUND_SETTINGS.search.length,
+        "Search binds its four rows",
+      );
+      // No autoSummarize control (owner, item 381).
+      assert.strictEqual(
+        doc.querySelectorAll(
+          `[preference="${qualifiedPrefKey(PREF_KEYS.autoSummarize)}"]`,
+        ).length,
+        0,
+        "no element is bound to autoSummarize",
+      );
+      // Forget clears the folder through the host.
+      (doc.getElementById("rh-tts-folder-clear") as Element).dispatchEvent(
+        new win.Event("command"),
+      );
+      await waitUntil(
+        () => (getRawPref(PREF_KEYS.ttsLinkedFileDir) ?? "") === "",
+        "Forget to clear tts.linkedFileDir",
+      );
+      await closePane(win);
+      win = undefined;
+
+      // With audio.enabled off, the audio rows are hidden again.
+      setRawPref(PREF_KEYS.audioEnabled, false);
+      win = await openPane();
+      const hidden = win.document.getElementById("rh-prefs-audio") as
+        (Element & { hidden: boolean }) | null;
+      assert.isTrue(hidden!.hidden, "the audio rows are hidden");
+      assert.isNotNull(
+        win.document.getElementById("rh-lang"),
+        "the report language is still shown",
+      );
+    } finally {
+      for (const { key, had, value } of saved) {
+        if (had && value !== undefined) setRawPref(key, value);
+        else clearRawPref(key);
+      }
+      if (win !== undefined && !win.closed) win.close();
+      prefsWindow = null;
+    }
+  });
+});
+
+/* ---------------------------------------------- P7-T13: the diagnostics */
+
+describe("P7-T13 — the diagnostics text, from the live plugin", function () {
+  /** SYNTHETIC values: none is a real key, address or folder. */
+  const PLANTED_KEY = `sk-or-v1-${randomHex(32)}`;
+  const PLANTED_EMAIL = `planted.${randomHex(4)}@example.org`;
+  const PLANTED_FOLDER = `C:\\Planted${randomHex(4)}\\Linked Audio`;
+  const MARKER = `p7t13-${randomHex(4)}`;
+  let emailBefore: PrefScalar | undefined;
+  let folderBefore: PrefScalar | undefined;
+  let win: Window | undefined;
+
+  before(async function () {
+    emailBefore = getRawPref(PREF_KEYS.contactEmail);
+    folderBefore = getRawPref(PREF_KEYS.ttsLinkedFileDir);
+  });
+
+  after(async function () {
+    if (win !== undefined && !win.closed) win.close();
+    if (emailBefore === undefined) clearRawPref(PREF_KEYS.contactEmail);
+    else setRawPref(PREF_KEYS.contactEmail, emailBefore);
+    if (folderBefore === undefined) clearRawPref(PREF_KEYS.ttsLinkedFileDir);
+    else setRawPref(PREF_KEYS.ttsLinkedFileDir, folderBefore);
+  });
+
+  it("holds the six sections and the ring's lines, withholds the address, the folder and the data directory, and redacts a logged key; Show fills the pane's box", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    const instance = await initializedInstance();
+    const host = publishedHost(instance)!;
+    const graph = (instance.api as { services?: ServiceGraph }).services!;
+    setRawPref(PREF_KEYS.contactEmail, PLANTED_EMAIL);
+    setRawPref(PREF_KEYS.ttsLinkedFileDir, PLANTED_FOLDER);
+    // Logged through the plugin's own logger, so the ring holds the line the
+    // sink received. `warn` passes the default level.
+    graph.logger.warn(`${MARKER} request failed with ${PLANTED_KEY}`, {
+      apiKey: PLANTED_KEY,
+      folder: PLANTED_FOLDER,
+    });
+
+    const text = await host.diagnosticsText();
+    const lines = text.split("\n");
+    log(
+      `[P7-T13] diagnostics: ${String(lines.length)} lines, ${String(text.length)} characters`,
+    );
+    let at = -1;
+    for (const name of DIAGNOSTICS_SECTIONS) {
+      const next = text.indexOf(`== ${name} ==`);
+      assert.isAbove(next, at, `section "${name}" in order`);
+      at = next;
+    }
+    assert.include(text, "No API key and no paper content is included.");
+    assert.include(text, `Zotero ${String(Zotero.version)}`);
+    assert.include(text, `${PREF_KEYS.contactEmail} = set`);
+    assert.include(text, `${PREF_KEYS.ttsLinkedFileDir} = set`);
+    const planted = lines.filter((line) => line.includes(MARKER));
+    assert.strictEqual(
+      planted.length,
+      1,
+      "the ring holds the planted line once",
+    );
+    assert.include(planted[0] ?? "", LOG_PREFIX);
+    assert.notInclude(text, PLANTED_KEY);
+    assert.notInclude(text, PLANTED_KEY.slice(0, 16));
+    assert.notInclude(text, PLANTED_EMAIL);
+    assert.notInclude(text, PLANTED_FOLDER);
+    assert.notInclude(text, String(Zotero.DataDirectory.dir));
+
+    // The pane: Show fills the read-only box, and only then are Save and
+    // Copy enabled. Neither is pressed: no file and no clipboard is touched.
+    const opened =
+      Zotero.Utilities.Internal.openPreferences(PREFERENCES_PANE_ID);
+    assert.isNotNull(opened, "openPreferences returned a window");
+    win = opened!;
+    // As the P7-T08 test opens it: the pane loads after the window does, so
+    // the document is read only once the pane says it is loaded.
+    const prefs = win as Window & {
+      Zotero_Preferences?: { panes: Map<string, { loaded?: boolean }> };
+    };
+    await waitUntil(
+      () =>
+        prefs.Zotero_Preferences?.panes?.get(PREFERENCES_PANE_ID)?.loaded ===
+        true,
+      "the pane to finish loading",
+    );
+    const doc = win.document;
+    await waitUntil(
+      () =>
+        doc
+          .getElementById(PREFERENCES_ROOT_ID)
+          ?.getAttribute("data-rh-initialized") === "true",
+      "the controller to initialise",
+    );
+    const save = doc.getElementById("rh-diagnostics-save") as
+      (Element & { disabled: boolean }) | null;
+    const copy = doc.getElementById("rh-diagnostics-copy") as
+      (Element & { disabled: boolean }) | null;
+    const box = doc.getElementById("rh-diagnostics-text") as
+      (HTMLTextAreaElement & { hidden: boolean }) | null;
+    assert.isTrue(save!.disabled, "Save disabled before Show");
+    assert.isTrue(copy!.disabled, "Copy disabled before Show");
+    assert.isTrue(box!.hidden, "the box hidden before Show");
+    (doc.getElementById("rh-diagnostics-preview") as Element).dispatchEvent(
+      new win.Event("command"),
+    );
+    await waitUntil(() => box!.value !== "", "Show to fill the box");
+    assert.isTrue(box!.readOnly, "the box is read-only");
+    assert.isFalse(box!.hidden, "the box is shown");
+    assert.isFalse(save!.disabled, "Save enabled after Show");
+    assert.isFalse(copy!.disabled, "Copy enabled after Show");
+    assert.include(box!.value, "== cache statistics ==");
+    assert.notInclude(box!.value, PLANTED_KEY);
+    assert.notInclude(box!.value, PLANTED_EMAIL);
+    win.close();
+    await waitUntil(() => win!.closed, "the preferences window to close");
+    await waitUntil(
+      () => !Services.wm.getEnumerator("zotero:pref").hasMoreElements(),
+      "the window mediator to drop the preferences window",
+    );
   });
 });

@@ -707,6 +707,36 @@ Two design rules follow:
 
 Verified 2026-09-08 against each provider's own documentation.
 
+> **Re-verified 2026-11-17 (`plan/10` `P7-T17`; §8 items 6 and 7).** Each page below was read on 2026-11-17, without
+> signing in and without a key, and each claim the preference pane shows was compared with the page's own words. The
+> pane's lines are `POLICY_NOTES` in `src/llm/shared/policyNotes.ts`; each carries its source URL and this date.
+>
+> | Claim (as the pane shows it) | Page read 2026-11-17 | Result |
+> |---|---|---|
+> | OpenAI: API data is not used for training unless you opt in | [developers.openai.com/api/docs/guides/your-data](https://developers.openai.com/api/docs/guides/your-data) (no date shown) | Unchanged: *"data sent to the OpenAI API is not used to train or improve OpenAI models (unless you explicitly opt in to share data with us)"* |
+> | OpenAI: abuse-monitoring logs kept up to 30 days | same page | Unchanged, with a wider exception: *"retained for up to 30 days unless longer retention is required by law, or is reasonably necessary to protect our services or any third party from harm."* The second exception is new since 2026-09-08; the pane's line names both. |
+> | Anthropic: API inputs and outputs are not used for training by default | [privacy.claude.com …7996868](https://privacy.claude.com/en/articles/7996868-is-my-data-used-for-model-training) (article dated 18 August 2026) | Unchanged |
+> | Anthropic: deleted within 30 days; up to 2 years for a Usage Policy violation | [privacy.claude.com …7996866](https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-personal-data) (updated 1 July 2026) | Unchanged: 30 days; 2 years for inputs and outputs and 7 years for classification scores on a violation; 5 years for feedback |
+> | Gemini, paid: prompts and responses not used to improve Google's products | [ai.google.dev/gemini-api/terms](https://ai.google.dev/gemini-api/terms), which now redirects (301) to [aistudio.google.com/docs/terms](https://aistudio.google.com/docs/terms) (effective 23 March 2026) | Unchanged, as are the unpaid-services sentence, the human-reviewer sentence and the "Paid Service only when … a Cloud Project associated with an active billing account" sentence |
+> | Gemini, paid: kept 55 days to detect policy violations | [aistudio.google.com/docs/usage-policies](https://aistudio.google.com/docs/usage-policies) (redirected from `ai.google.dev`; no date shown) | Unchanged: *"Google retains the following data for fifty-five (55) days for the purposes of detecting and preventing violations"* |
+> | Gemini, free: used to improve Google's products; human reviewers may read it | the terms page above | Unchanged |
+> | OpenRouter: does not use inputs or outputs for training | [openrouter.ai/privacy](https://openrouter.ai/privacy) (updated 31 August 2026) | Unchanged |
+> | OpenRouter: does not store inputs after categorizing them unless you opt in to logging | [openrouter.ai/terms](https://openrouter.ai/terms) §6.5 (updated 31 August 2026) | Unchanged |
+>
+> **One correction to the table above.** Its Gemini paid row says retention is *"configurable to 7/14/28/55 days in AI
+> Studio"*. The [logs policy](https://aistudio.google.com/docs/logs-policy), read the same day, says that window
+> belongs to the **Gemini API logs** a project keeps (*"Logs are retained for a default maximum period of 55 days"*;
+> deletion *"after 7, 14, 28, or 55 days"*), and that those logs are *"separate from any logs held solely for abuse
+> monitoring purposes"*. The 55-day abuse-monitoring retention is not configurable by anything this corpus records.
+> The pane does not mention the configurable window.
+>
+> **Kept out of the pane, still not re-verified:** OpenAI's Private Safety Processing page, OpenRouter's account
+> privacy-toggle labels and the free-model 404 string, and the Vertex AI figures (the callouts below). None reaches
+> user-facing text. The upstream providers OpenRouter routes to are covered by one line saying each has its own
+> policy, which the [privacy policy](https://openrouter.ai/privacy) states (*"Some Model Providers may use your Inputs
+> and Outputs for model training or improvement."*). The next re-verification is due at the next minor release
+> (§8 item 7; `docs/13`'s release checklist).
+
 | Provider / tier | Trains on API data by default? | Retention of inputs & outputs | ZDR available? |
 |---|---|---|---|
 | **OpenAI API** | **No** | Up to **30 days** abuse-monitoring logs; some endpoints (Assistants, Threads, Conversations, Vector Stores) retain application state **until deleted** | **Yes** — prior approval by OpenAI + additional terms; via sales |
@@ -1279,8 +1309,10 @@ Verify each before release. Items marked **[BLOCKER]** must not ship unresolved.
 5. ~~**The maintainer contact address.**~~ **Settled 2026-09-09: `suppakoko@gmail.com`** (decision D10, `00-overview.md` §3). It ships in the `User-Agent` on every host and in NCBI's `tool`/`email` parameters, is published inside the XPI, and will receive real mail from these services — it must be monitored. Crossref's `mailto` parameter is the one slot that carries the *user's* address instead, when they set the `contactEmail` pref; see `02-literature-database-apis.md` §2.2 for the per-host table.
 6. **Re-verify the items still flagged `Unverified` / `Partially verified` inline** before any of them reaches user-facing text: OpenAI's Private Safety Processing page (403 to direct fetch), OpenRouter's remaining privacy-toggle labels and the literal free-model guardrail 404 string (help-centre article 403s), the Vertex AI figures (`cloud.google.com` unreachable from the research network — the ~24 h cache figure is not corroborated even in excerpts), the Europe PMC rate limit, the NIH and Elsevier peer-review citations, and the provider "test key" endpoints. Note that as of the 2026-09-08 pass the OpenAI, Anthropic, Google Gemini and OpenRouter *policy* claims in §3.3 were re-fetched from the providers' live pages and hold.
    *Noted 2026-11-16 (`plan/00` §6 item 380): still open; `plan/10` `P7-T17` is the card that re-verifies each claim before it reaches user-facing text, and records any it cannot re-verify as kept out of the UI.*
+   *Noted 2026-11-17 (`plan/10` `P7-T17`): the OpenAI, Anthropic, Gemini and OpenRouter policy claims were re-read that day (§3.3's "Re-verified 2026-11-17" table); the items listed above were not, and none of them is shown in the pane.*
 7. **Set a policy-review cadence.** Every figure in §3.3 is dated 2026-09-08. Provider retention terms change. Recommend re-verifying at each minor release and stamping the verification date in the UI next to the retention information.
    **DECIDED 2026-11-16 (coordinator, under `plan/00-task-index.md` §6 item 313; recorded with item 380) — the recommended default.** The provider policy claims in §3.3 are **re-verified at each minor release**, and **the verification date is stamped next to the retention text in the UI** (the pane's Privacy section, `08-ui-ux-spec.md` §7.3). `plan/10` `P7-T17` does the v1.0 re-verification, records each claim's date in §3.3, and shows the date in the pane; the release checklist carries a line for it at every minor release. The owner may overturn this.
+   *Done 2026-11-17 (`plan/10` `P7-T17`):* the policy claims were re-read on the providers' own pages that day (§3.3's "Re-verified 2026-11-17" table, with each URL and the date each page shows). The pane's Privacy section shows one line per provider with "Verified 2026-11-17" (`POLICY_NOTES` in `src/llm/shared/policyNotes.ts`, each with its sources and date); the claims that could not be re-verified stay out of the UI (item 6). The per-minor-release line is in `13-testing-build-and-release.md` §8.9.
 8. **Where the two source-credential checks hang off the interfaces.** §2.3 now defines a test call for all six credentials, but `validateCredentials()` is a member of `LLMProvider` only (`07-architecture-and-data-model.md` §4.3); `LiteratureSource` (§4.2) has no equivalent. Either the NCBI and Semantic Scholar checks stay adapter-local functions that `preferences.js` calls directly (what §2.3 assumes today, and what needs no interface change), or `LiteratureSource` grows an optional `validateCredentials?()` so both paths return the same `CredentialCheckResult`. The second is tidier and is an interface change to doc 07 §4.2, so it is the owner's call, not this document's. **Decided 2026-10-23 (owner, `plan/00` §6 item 272(d); written by `P3-T14`): for Phase 3 the NCBI and Semantic Scholar checks stay where they are, in `src/ui/prefs/preferencesPane.ts` (`ncbiTestRequest`, `classifyNcbiResponse`, `semanticScholarTestRequest`, `classifySemanticScholarResponse`), and move into the source adapters with `plan/00` §6 item 52, not with `P3-T14`. `P3-T14` adds the four LLM checks beside them through each adapter's `validateCredentials()`; `LiteratureSource` (doc 07 §4.2) gains no member now, and the second option above stays open until item 52 is done.**
 9. **Confirm the invalid-key behaviour of the NCBI and Semantic Scholar APIs.** §2.3's two `> **Unverified:**` callouts record that `02-literature-database-apis.md` documents neither, so every non-success outcome for those two credentials currently resolves to `inconclusive`. One request each with a deliberately corrupted key settles it. Until it is settled, the prefs pane can tell the user "we could not verify this key" but never "this key is wrong".
 

@@ -1147,127 +1147,24 @@ jobs:
 
 ### 5.2 `.github/workflows/release.yml`
 
-```yaml
-name: Release
-
-on:
-  push:
-    tags:
-      - "v*.*.*"
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Existing tag to (re-)release, e.g. v1.0.0"
-        required: true
-        type: string
-
-permissions:
-  contents: write
-
-env:
-  NODE_VERSION: "22"
-
-jobs:
-  release:
-    name: Build and publish release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.tag || github.ref }}
-          fetch-depth: 0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Lint and typecheck
-        run: |
-          npm run lint:check
-          npm run typecheck
-
-      - name: Run tests
-        env:
-          FIXTURE_MODE: replay
-        run: npm test
-
-      - name: Resolve version from tag
-        id: version
-        run: |
-          set -euo pipefail
-          tag="${{ inputs.tag || github.ref_name }}"
-          version="${tag#v}"
-          pkg_version="$(node -p "require('./package.json').version")"
-          if [ "$version" != "$pkg_version" ]; then
-            echo "::error::Tag $tag does not match package.json version $pkg_version"
-            exit 1
-          fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          if [[ "$version" == *-* ]]; then
-            echo "prerelease=true" >> "$GITHUB_OUTPUT"
-            echo "update_manifest=update-beta.json" >> "$GITHUB_OUTPUT"
-          else
-            echo "prerelease=false" >> "$GITHUB_OUTPUT"
-            echo "update_manifest=update.json" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Build XPI and update manifest
-        run: npm run build
-
-      - name: Collect release assets
-        id: assets
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          cp .scaffold/build/*.xpi dist/
-          cp .scaffold/build/update*.json dist/ 2>/dev/null || true
-          ls -la dist/
-          ( cd dist && sha256sum *.xpi > SHA256SUMS.txt )
-          cat dist/SHA256SUMS.txt
-
-      - name: Create GitHub Release and attach assets
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ inputs.tag || github.ref_name }}
-          name: research_helper ${{ steps.version.outputs.version }}
-          prerelease: ${{ steps.version.outputs.prerelease }}
-          generate_release_notes: true
-          fail_on_unmatched_files: true
-          files: |
-            dist/*.xpi
-            dist/update*.json
-            dist/SHA256SUMS.txt
-
-      - name: Publish update manifest to the release branch
-        if: steps.version.outputs.prerelease == 'false'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          manifest="${{ steps.version.outputs.update_manifest }}"
-          tmp="$(mktemp -d)"
-          cp "dist/${manifest}" "$tmp/"
-          # update-beta.json is refreshed by prerelease runs; keep whichever exists
-          [ -f "dist/update-beta.json" ] && cp dist/update-beta.json "$tmp/" || true
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin release:release || git branch release
-          git checkout release
-          cp "$tmp/"*.json .
-          git add ./*.json
-          if git diff --cached --quiet; then
-            echo "Update manifest unchanged; nothing to publish."
-          else
-            git commit -m "chore(release): update manifest for v${{ steps.version.outputs.version }}"
-            git push origin release
-          fi
-```
+> **Corrected 2026-11-17 (coordinator, under `plan/00-task-index.md` §6 item 313; `P7-T21` finding 4).** This section
+> printed a full YAML listing of the release workflow until 2026-11-17. `P7-T21` hardened
+> `.github/workflows/release.yml` and the listing stopped matching it, so the listing was removed rather than copied
+> again: **the file is the authority**, and its header comment records each deviation from the old listing with its
+> source. The old listing is in the repository's history (commit `d741ff2`). What the file does, in order:
+>
+> 1. **Job `build`, holding `contents: read` only**, on a `v*.*.*` tag push or a manual run naming an existing tag:
+>    check out, `npm ci`, refuse to continue if the tag and `package.json`'s `version` disagree, lint and typecheck,
+>    run the unit and contract tests, `npm run l10n:check`, `npm audit --omit=dev --audit-level=high`, build the XPI
+>    and the scaffold-generated update manifests, collect the assets with `SHA256SUMS.txt`, and refuse to continue
+>    unless the built manifest's version equals the tag, one XPI was built, and each `update*.json`'s `update_hash`
+>    is `sha512:` and equals that XPI's SHA-512 (`plan/00` §6 items 381(b), 390(c)).
+> 2. **Job `publish`, the only one holding `contents: write`:** create the GitHub Release for the tag with the XPI,
+>    the update manifests and `SHA256SUMS.txt` attached; then, for a release that is not a pre-release, commit
+>    `update.json` and `update-beta.json`, by name, to the `release` branch.
+>
+> The workflow sets `permissions: {}` at the top, every third-party action is pinned to a full commit with its tag as
+> a comment (item 390(a)), and no secret is referenced beyond the run's automatic `GITHUB_TOKEN`.
 
 Two things this workflow deliberately does:
 
@@ -1276,99 +1173,29 @@ Two things this workflow deliberately does:
 
 ### 5.3 `.github/workflows/compat.yml` (scheduled early warning)
 
-```yaml
-name: Compatibility and freshness watch
-
-on:
-  schedule:
-    - cron: "17 4 * * 1"
-  workflow_dispatch:
-
-permissions:
-  contents: read
-  issues: write
-
-env:
-  NODE_VERSION: "22"
-
-jobs:
-  live-contract:
-    name: Live contract check against real APIs
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Compare live responses against recorded fixtures
-        id: drift
-        continue-on-error: true
-        env:
-          FIXTURE_MODE: verify
-          NCBI_API_KEY: ${{ secrets.NCBI_API_KEY }}
-          CROSSREF_MAILTO: ${{ secrets.CROSSREF_MAILTO }}
-          SEMANTIC_SCHOLAR_API_KEY: ${{ secrets.SEMANTIC_SCHOLAR_API_KEY }}
-        run: npx tsx scripts/record-fixtures.ts --verify --report drift-report.md
-
-      - name: Upload drift report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: drift-report
-          path: drift-report.md
-          retention-days: 30
-
-      - name: Open an issue when a source API has drifted
-        if: steps.drift.outcome == 'failure'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('node:fs');
-            let body = 'Live contract check failed; see the drift-report artifact.';
-            try {
-              body = fs.readFileSync('drift-report.md', 'utf8').slice(0, 60000);
-            } catch (e) {
-              core.warning(`Could not read drift report: ${e.message}`);
-            }
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `Literature API drift detected (${new Date().toISOString().slice(0, 10)})`,
-              labels: ['api-drift', 'maintenance'],
-              body,
-            });
-
-  zotero-beta:
-    name: Integration tests against the Zotero beta channel
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run in-Zotero tests against the beta build
-        env:
-          FIXTURE_MODE: replay
-          ZOTERO_CHANNEL: beta
-        run: npm run test:integration -- --exit-on-finish
-```
+> **Corrected 2026-11-17 (coordinator, under `plan/00-task-index.md` §6 item 313; `P7-T22` finding 3).** This section
+> printed a YAML listing with two jobs, `live-contract` and `zotero-beta`, until 2026-11-17. `P7-T22` built
+> `.github/workflows/compat.yml` and the listing stopped matching it, so the listing was removed rather than copied
+> again: **the file is the authority**, and its header comment records each deviation with its source. The old listing
+> is in the repository's history (commit `d741ff2`). The differences, in short:
+>
+> - **No `live-contract` job.** It needs real provider keys as repository secrets and a `--verify` mode in
+>   `scripts/record-fixtures.ts`, neither of which exists; it is deferred to a later release and §8.9's line is waived
+>   for v1.0 (`plan/00` §6 item 381(a)).
+> - **One job, `zotero-beta`, on `ubuntu-24.04`, weekly (Monday 04:17 UTC) and on demand,** holding `contents: read`
+>   and `issues: write` under a top-level `permissions: {}`, with every action pinned to a commit (item 390(a)).
+> - **It does not use `ZOTERO_CHANNEL`.** It downloads the current beta from
+>   `https://www.zotero.org/download/client/dl?channel=beta&platform=linux-x86_64` and points
+>   `ZOTERO_PLUGIN_ZOTERO_BIN_PATH` at it, as `ci.yml`'s integration job does for its pinned release. Whether
+>   `zotero-plugin-scaffold` reads `ZOTERO_CHANNEL` stays unmeasured; the file no longer depends on it.
+> - **It is not `continue-on-error`.** A failed run is red, and its last step opens an issue, or comments on the one
+>   already open, with the run's link and the beta it tested, using the `gh` CLI and no label (item 390(b)).
+>
+> **DECIDED 2026-11-17 (owner, `plan/00-task-index.md` §6 item 390(d)): advance warning only.** The beta channel may
+> serve the next Zotero series (11.0-beta.4 on 2026-11-17), which the manifest's `strict_max_version` (`10.0.*`) does
+> not claim. A failure of this weekly run is **advance notice for the next `strict_max_version`** (§6.2's upgrade
+> drill), **not a release blocker**: no release waits on it, and the release checklist (§8.9) records its state, it
+> does not require it green.
 
 The `zotero-beta` job is the concrete mitigation for risk R-1 in `11-implementation-roadmap.md`: it surfaces Zotero-side breakage during the beta window rather than after users upgrade.
 
@@ -1408,7 +1235,7 @@ Zotero now ships a new major version roughly every **6–10 weeks** ([Zotero blo
 **The upgrade drill** — run within one week of each Zotero major release entering beta:
 
 1. Read `zotero.org/support/dev/zotero_<N>_for_developers` in full.
-2. Run the integration suite against the beta (the `zotero-beta` CI job does this weekly).
+2. Run the integration suite against the beta (the `zotero-beta` CI job does this weekly). Its failures are advance notice for this drill, not a release blocker (owner, 2026-11-17, `plan/00-task-index.md` §6 item 390(d); §5.3).
 3. If **no code change is needed**: bump only `strict_max_version` — see §6.3, which does not require a new XPI.
 4. If a code change is needed: fix it behind `src/zotero/`, release a **minor** version supporting both series (`strict_min_version` stays at the oldest supported), and note the compatibility in the changelog.
 5. Update the README compatibility table.
@@ -1641,6 +1468,12 @@ Run on **Windows, macOS, and Linux** for a minor or major release; Windows plus 
 - [ ] Screen-reader smoke test: NVDA on Windows and VoiceOver on macOS announce dialog titles, control labels, and job completion.
 - [ ] Both Zotero light and dark themes render legibly; no status is conveyed by colour alone (NFR-13).
 - [ ] **Fully offline:** the plugin loads, the UI opens, existing content is usable, and every network action fails with a clear message (NFR-9).
+  *Measured 2026-11-17 (`plan/10` `P7-T18`; `test/integration/offline.spec.ts`; `plan/reports/P7-T18.md`):* with
+  Zotero's offline switch on, the plugin starts, the Search & Import, Summarize and Report windows and the preferences
+  pane open, and existing summaries, notes, a saved report and an audio file are usable. Every network action ends on
+  a message and no stack trace, but **only the keyword search shows `rh-error-offline`**: the report window shows its
+  generic failure line, the related window its error panel with the code `SOURCE` and each list "failed (OFFLINE)",
+  and the summarize window a "— failed" row. Open at `plan/00` §6 item 393; this line is not met until it is settled.
 
 ### 8.8 Resources and stability
 
@@ -1657,9 +1490,17 @@ Run on **Windows, macOS, and Linux** for a minor or major release; Windows plus 
 - [ ] Installing the **previous** version and letting Zotero update to this one succeeds.
 - [ ] CHANGELOG entry written, including a Compatibility line.
 - [ ] README compatibility table, screenshots, and cost figures updated.
+- [ ] **Provider policies re-verified for this minor release** (`09-security-privacy-and-api-keys.md` §8 item 7;
+  added 2026-11-17 by `plan/10` `P7-T17`). Each page in `09-…` §3.3's re-verification table is read again, each
+  `POLICY_NOTES` row in `src/llm/shared/policyNotes.ts` is compared with its page and its `asOf` date updated, a
+  claim that no longer holds is changed or removed, and a page that cannot be read takes its line out of the pane.
 - [ ] Fixtures re-recorded within the last 180 days, with the diff reviewed (§3.3).
 - [ ] The `live-contract` scheduled job was green (or its drift issue was triaged) within the last 2 weeks.
   *Waived for v1.0 — DECIDED 2026-11-16 (owner, `plan/00-task-index.md` §6 item 381; `plan/10` §0.4 line 18).* The scheduled `live-contract` job (§5.3) is deferred to a later release, because **no job holding real provider keys as repository secrets exists**, and v1.0 does not add one. The release checklist records this line as waived with that reason (`plan/10` `P7-T24`). The fixtures' 180-day age rule on the line above **still applies** to v1.0. The line stands, unwaived, for later releases once the job exists.
+- [ ] The latest weekly `zotero-beta` run (§5.3) is recorded: green, or its issue read as notice for the next
+  `strict_max_version` (§6.2). *Added 2026-11-17 — DECIDED 2026-11-17 (owner, `plan/00-task-index.md` §6 item
+  390(d)): advance warning only.* This line records the run's state; it is **not a release blocker**, so a red run
+  against a series the manifest does not claim does not hold a release.
 - [ ] Forum announcement drafted; community-list submission prepared (§7.2).
 - [ ] **NCBI registration is on file** for `tool=research_helper` and `email=suppakoko@gmail.com`. NCBI's policy is that *"merely providing values for tool and email in requests is not sufficient… these values must be registered with NCBI"*, which makes this a release obligation rather than a code one — see `09-security-privacy-and-api-keys.md` §5.1 and decision D10 (`00-overview.md` §3). The address is the maintainer's on every NCBI request, never a user's.
 

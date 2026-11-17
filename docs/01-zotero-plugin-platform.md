@@ -1999,6 +1999,9 @@ pref("extensions.zotero.research-helper.reportLanguage", "auto");
 // `Charon` ("Informative") is the default narrator recommended by 04-audio-report-tts.md §2.7,
 // which owns the choice. Kore appears in that document only inside Google's own API examples.
 pref("extensions.zotero.research-helper.tts.voice", "Charon");
+// "auto" follows the stored report's language; else "en" or "ko" (07-… §8.5). Added 2026-11-17
+// (plan/10 P7-T08): bound in the pane's Report & audio section, so it needs a default here.
+pref("extensions.zotero.research-helper.tts.language", "auto");
 // Audio settings named by 04-audio-report-tts.md §12; schema rows in 07-… §8.5.
 // tts.model ships EMPTY on purpose: the empty string means "use the TTS model doc 04
 // recommends for the selected provider, resolved at call time from the live model list".
@@ -2011,6 +2014,9 @@ pref("extensions.zotero.research-helper.tts.targetMinutes", 0);
 pref("extensions.zotero.research-helper.tts.outputFormat", "wav");
 // MUST ship false: onAsyncRender fires on every selection change (08-ui-ux-spec.md §3.3).
 pref("extensions.zotero.research-helper.autoSummarize", false);
+// "never" | "auto" | "always" (06-… §5.4, decision D7); strict mode forces "never" (09-… §3.5).
+// Added 2026-11-17 (plan/10 P7-T08): bound in the pane's Privacy section.
+pref("extensions.zotero.research-helper.summary.fullTextMode", "auto");
 // Global default privacy mode: "strict" | "balanced" | "full". Semantics owned by
 // 09-security-privacy-and-api-keys.md §3.5; per-collection overrides are NOT prefs (they
 // live in the collection_settings table, 07-… §8.3). Bound in 08-ui-ux-spec.md §7.3.
@@ -2063,6 +2069,12 @@ pref("extensions.zotero.research-helper.semanticscholar.lastValidationResult", "
 Every key bound by a `preference=` attribute in `08-ui-ux-spec.md` §7.3 needs a line here: a bound control whose pref has no default reads `undefined` on first paint and renders wrong (an unchecked `hideExisting`, an empty `timeoutSeconds`, an empty cache-size field). That is why `cache.maxSizeMB` and `tts.outputFormat` appear above — §7.3 binds both. `logLevel` appears because §7.3's "Verbose debug logging" checkbox writes it through a scripted handler rather than a `preference=` binding, and a scripted handler still needs a default to read on first paint.
 
 The remaining `07-architecture-and-data-model.md` §8.5 rows — most of the `summary.*`, `fullText.*`, `report.*`, `screening.*` and `cache.*` families, plus `logRequestBodies`, `background.enabled`, `prefsSchemaVersion`, `privacy.egressAcknowledged`, `llm.tokenEstimateCalibration` and the `tts.*` keys that have no control — have no control in the pane and are read through the typed accessor in `07-architecture-and-data-model.md` §8.5.1, which falls back to the schema default, so they need no `pref()` line. Adding one for them is harmless and makes them visible in `about:config`; the two `run.*` lines above are there for exactly that reason, because a spending control the user cannot find in `about:config` is a spending control they cannot audit.
+
+> **Added 2026-11-17 (coordinator, under `plan/00` §6 item 313; `plan/10` `P7-T08`).** The pane's Report & audio and
+> Privacy sections bind `tts.language` and `summary.fullTextMode`, so the block above gained a line for each, by the
+> rule of the paragraph before last. `tts.linkedFileDir` is shown in the same section but written through the pane's
+> host, not a binding (`08-ui-ux-spec.md` §7.3's note of this date), so it still has none: its empty default is the
+> "ask on first use" state, which the typed accessor already returns.
 
 > ⛔ **Do not store API keys in prefs.** Note that the pref list above deliberately contains **no** API key entries at all — not for the LLM/TTS providers and not for NCBI or Semantic Scholar, which [09-security-privacy-and-api-keys.md](09-security-privacy-and-api-keys.md) §1.7 also assigns `SecretId`s (`source.ncbi`, `source.semanticscholar`) in the keystore. Only presence booleans and validation metadata are prefs. Prefs land as plaintext `user_pref(...)` lines in `prefs.js` inside the Zotero *profile* directory, with no encryption layer — that is fine for a voice name or a concurrency limit, and not fine for a credential that can spend the user's money.
 >

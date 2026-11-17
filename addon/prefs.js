@@ -35,9 +35,10 @@
 // report.critiqueModel, report.saveNote), nor the three Phase 5 rows §7.2 gives
 // no line (related.linkToSeed, related.enabled, recommend.enabled; P5-T02,
 // 2026-11-02), nor report.pausedNoticeShown (P4-T21, 2026-11-02, never shown to
-// the user), nor the four Phase 6 rows §7.2 gives no line (tts.language,
-// tts.linkedFileDir, gemini.tierAnswer, the hidden audio.enabled; P6-T02,
-// 2026-11-16). tts.provider is struck in docs/07 §8.5 and has no line
+// the user), nor the three Phase 6 rows §7.2 gives no line (tts.linkedFileDir,
+// gemini.tierAnswer, the hidden audio.enabled; P6-T02, 2026-11-16).
+// tts.language and summary.fullTextMode gained a line on 2026-11-17, when
+// P7-T08 bound them in the pane (docs/01 §7.2's note of that date). tts.provider is struck in docs/07 §8.5 and has no line
 // (plan/00 §6 item 378(c): Gemini TTS only). The four Phase 1 rows below that
 // §7.2 does not list (logRequestBodies, prefsSchemaVersion, secretBackend,
 // ncbi.keyPresent) are listed anyway because a setting the user cannot find in
@@ -112,6 +113,10 @@ pref("privacy.mode", "balanced");
 // MUST ship false: onAsyncRender fires on every selection change (docs/08
 // §3.3), so an unconditional LLM call there burns credits.
 pref("autoSummarize", false);
+// "never" | "auto" | "always" (docs/06 §5.4, decision D7); strict privacy mode
+// forces "never" (docs/09 §3.5). Bound in the pane's Privacy section since
+// P7-T08 (2026-11-17), so it needs a line here or the menulist paints empty.
+pref("summary.fullTextMode", "auto");
 // Global cache cap in MB, 100–5000 (docs/07 §8.5; cap semantics in docs/07
 // §9.2). Bound in the Advanced groupbox of docs/08 §7.3, so it needs a default
 // here or the field paints empty.
@@ -128,6 +133,9 @@ pref("reportLanguage", "auto");
 // `Charon` ("Informative") is the default narrator docs/04 §2.7 recommends.
 // In v1.0 the report window's audio section chooses it (plan/09 §0.4 line 11).
 pref("tts.voice", "Charon");
+// "auto" follows the stored report's language; else "en" or "ko" (docs/07
+// §8.5). Bound in the pane's Report & audio section since P7-T08 (2026-11-17).
+pref("tts.language", "auto");
 // Ships EMPTY on purpose: "" means the TTS model docs/04 recommends, resolved at
 // call time from the live model list. Never hardcode a TTS model ID here.
 pref("tts.model", "");

@@ -28,7 +28,9 @@
  *   (`docs/09` §1.9 rule 2). The digest the host returns goes into the field's
  *   `placeholder` and nowhere else — not into a log line, not into an error.
  * - **No clipboard.** Nothing here reads or writes the clipboard, there is no
- *   copy button, and `copy` / `cut` on a key field are refused (rule 7/8).
+ *   copy button for a key, and `copy` / `cut` on a key field are refused
+ *   (rule 7/8). "Copy diagnostics" (`P7-T13`, 2026-11-17) hands the
+ *   diagnostics text, which holds no key, to the host, and the host copies it.
  * - **No `Zotero.Prefs` write.** This file writes no preference at all (rule
  *   9, decision D5). The non-secret rows the markup binds — `llmProvider`,
  *   each `<provider>.model`, `gemini.paidTier` — are written by Zotero's own
@@ -47,6 +49,19 @@
  *   it may be out of date. Picking a suggestion only types it into the
  *   field, which Zotero's own binding then stores; any model ID can still be
  *   typed. The price table is listed and edited through the host.
+ * - **The Search, Report & audio and Privacy sections** (`P7-T08`) are bound
+ *   by Zotero's own `preference=` binding. This file fills the voice list
+ *   from the documented default list the host returns (no call), hides the
+ *   audio rows while `audio.enabled` is off, paints the privacy line for the
+ *   chosen mode, and drives the linked-audio folder row: a folder picker, then
+ *   the host's `setLinkedFolder`, which checks the folder and writes it. The
+ *   folder's path is shown in its field and never logged.
+ * - **The Advanced section** (`P7-T09`): its three number fields are bound;
+ *   this file paints the verbose-logging checkbox from the host and sends a
+ *   toggle to the host's `setVerboseLogging` (which writes `logLevel` and
+ *   nothing else), paints the cache-usage lines (`refreshCacheUsage`, which
+ *   `P7-T10`'s clear actions call again), and shows the plugin database's
+ *   location with "Show in folder", which the host performs.
  * - **No literal human-readable string.** Every visible string is a Fluent id
  *   from `research-helper-mainWindow.ftl`; the ids are listed in
  *   {@link RHPreferences.l10n} and `test/unit/ui/preferencesPane.test.ts`
@@ -61,7 +76,7 @@
  * can be stored.
  */
 
-/* global Zotero, window, document */
+/* global Zotero, window, document, ChromeUtils */
 
 var RHPreferences = {
   /** Element ids this file and `preferences.xhtml` share. */
@@ -145,7 +160,46 @@ var RHPreferences = {
     providerMenu: "rh-provider",
     providerBlockPrefix: "rh-provider-",
     s2Request: "rh-s2-request",
+    /**
+     * P7-T08: the Report & audio and Privacy sections' elements. The bound
+     * controls (`PANE_BOUND_SETTINGS`) are written by Zotero's own binding;
+     * this file only fills the voice list, shows or hides the audio rows,
+     * paints the privacy line and drives the folder row through the host.
+     */
+    audio: "rh-prefs-audio",
+    voice: "rh-voice",
+    voicePopup: "rh-voice-popup",
+    privacy: "rh-privacy",
+    privacyExplain: "rh-privacy-explain",
+    folder: "rh-tts-folder",
+    folderChoose: "rh-tts-folder-choose",
+    folderClear: "rh-tts-folder-clear",
+    folderStatus: "rh-tts-folder-status",
+    /**
+     * P7-T09: the Advanced section's scripted elements. The three number
+     * fields are Zotero's bindings; the checkbox, the usage lines and the
+     * data location go through the host.
+     */
+    verbose: "rh-verbose-logging",
+    cacheBreakdown: "rh-cache-breakdown",
+    dataLocation: "rh-data-location",
+    dataLocationShow: "rh-data-location-show",
+    /** P7-T17: the Privacy section's dated provider-policy lines. */
+    retention: "rh-prefs-retention",
+    /** P7-T13: the Advanced section's diagnostics. */
+    diagnosticsPreview: "rh-diagnostics-preview",
+    diagnosticsSave: "rh-diagnostics-save",
+    diagnosticsCopy: "rh-diagnostics-copy",
+    diagnosticsText: "rh-diagnostics-text",
+    diagnosticsStatus: "rh-diagnostics-status",
   },
+
+  /** Zotero's folder picker, as `addon/content/reportWindow.js` loads it. */
+  filePickerModule: "chrome://zotero/content/modules/filePicker.mjs",
+
+  /** P7-T08: `docs/07` §8.5's `privacy.mode` values, and its default. */
+  PRIVACY_MODES: ["strict", "balanced", "full"],
+  PRIVACY_DEFAULT: "balanced",
 
   /**
    * Fluent ids, as literals: this file cannot import `PREFERENCES_L10N`.
@@ -201,6 +255,16 @@ var RHPreferences = {
     priceInvalid: "research-helper-prefs-price-invalid",
     priceRefused: "research-helper-prefs-price-refused",
     priceUnavailable: "research-helper-prefs-price-unavailable",
+    privacyExplain: "research-helper-prefs-privacy-explain",
+    ttsFolderUnset: "research-helper-prefs-tts-folder-unset",
+    ttsFolderRefused: "research-helper-prefs-tts-folder-refused",
+    cacheUsageRow: "research-helper-prefs-cache-usage-row",
+    cacheUsageTotal: "research-helper-prefs-cache-usage-total",
+    cacheUsageUnavailable: "research-helper-prefs-cache-usage-unavailable",
+    dataLocation: "research-helper-prefs-data-location",
+    dataLocationUnavailable: "research-helper-prefs-data-location-unavailable",
+    retentionTitle: "research-helper-prefs-retention-title",
+    diagnosticsStatus: "research-helper-prefs-diagnostics-status",
   },
 
   /**
@@ -549,6 +613,105 @@ var RHPreferences = {
       if (zotero && zotero.isLinux) return "linux";
       return "other";
     },
+
+    /**
+     * P7-T08: the voice list's items, `{ id, label }`: the documented list
+     * the host returned, then the stored voice when that list lacks it (the
+     * report window can write a name from the live list), so the bound
+     * menulist never shows a blank for a stored value.
+     *
+     * @param {{ voices?: { id: string, label: string }[], voice?: string }} settings
+     * @returns {{ id: string, label: string }[]}
+     */
+    voiceItems(settings) {
+      const items = [];
+      const seen = {};
+      for (const voice of (settings && settings.voices) || []) {
+        if (!voice || typeof voice.id !== "string" || voice.id === "") continue;
+        if (seen[voice.id]) continue;
+        seen[voice.id] = true;
+        const label =
+          typeof voice.label === "string" && voice.label !== ""
+            ? voice.label
+            : voice.id;
+        items.push({ id: voice.id, label });
+      }
+      const stored = settings && settings.voice;
+      if (typeof stored === "string" && stored !== "" && !seen[stored]) {
+        items.push({ id: stored, label: stored });
+      }
+      return items;
+    },
+
+    /**
+     * P7-T08: the privacy line's `$mode`: the menulist's value when it is
+     * one of §8.5's three, else the default — never a value the Fluent
+     * selector does not know.
+     *
+     * @param {string} value
+     * @param {{ PRIVACY_MODES: string[], PRIVACY_DEFAULT: string }} ctx
+     * @returns {string}
+     */
+    privacyMode(value, ctx) {
+      return ctx.PRIVACY_MODES.indexOf(value) >= 0
+        ? value
+        : ctx.PRIVACY_DEFAULT;
+    },
+
+    /**
+     * P7-T08: the folder row's status after a write: nothing on success (the
+     * field shows the folder, or the unset line shows), the refusal line on
+     * a refusal. The path is never part of a message.
+     *
+     * @param {{ stored: boolean, reason?: string }|undefined} result
+     * @param {object} l10n
+     * @returns {string|undefined} the message id, or nothing to show
+     */
+    folderMessage(result, l10n) {
+      if (result && result.stored) return undefined;
+      return l10n.ttsFolderRefused;
+    },
+
+    /**
+     * P7-T09: the cache lines as Fluent ids and arguments — the total first,
+     * then one per row the host returned. `$namespace` is a selector;
+     * `$megabytes` and `$entries` are numbers. No usage: one line saying the
+     * size cannot be read.
+     *
+     * @param {object|undefined} usage the host's `cacheStats()` answer
+     * @param {Record<string, string>} l10n
+     * @returns {{ id: string, args?: object }[]}
+     */
+    cacheLines(usage, l10n) {
+      const count = (value) =>
+        typeof value === "number" && Number.isFinite(value) && value > 0
+          ? value
+          : 0;
+      if (!usage || typeof usage !== "object") {
+        return [{ id: l10n.cacheUsageUnavailable }];
+      }
+      const lines = [
+        {
+          id: l10n.cacheUsageTotal,
+          args: {
+            megabytes: count(usage.megabytes),
+            entries: count(usage.entries),
+          },
+        },
+      ];
+      for (const row of usage.rows || []) {
+        if (!row || typeof row.namespace !== "string") continue;
+        lines.push({
+          id: l10n.cacheUsageRow,
+          args: {
+            namespace: row.namespace,
+            megabytes: count(row.megabytes),
+            entries: count(row.entries),
+          },
+        });
+      }
+      return lines;
+    },
   },
 
   /** @returns {object} the host, never null */
@@ -643,10 +806,15 @@ var RHPreferences = {
     this.suggestionsLoad = null;
     this.buildModelSuggestions();
     this.buildPriceSection();
+    this.wireSettings();
+    this.wireAdvanced();
     const state = await this.refresh();
     this.paintProviders(state);
     await this.paintPrices();
     this.paintUsage();
+    await this.paintSettings();
+    await this.paintRetention();
+    await this.paintAdvanced();
     if (root && typeof root.setAttribute === "function") {
       root.setAttribute("data-rh-initialized", "true");
     }
@@ -941,6 +1109,439 @@ var RHPreferences = {
       this.el(prefix + "-base-url-status"),
       this.logic.baseUrlMessage(result, this.l10n).id,
     );
+  },
+
+  /**
+   * P7-T08: the privacy line follows the menulist; the folder buttons ask
+   * the host. Nothing here writes a preference: the bound controls are
+   * Zotero's, and the folder goes through `setLinkedFolder`.
+   */
+  wireSettings() {
+    const privacy = this.el(this.spec.privacy);
+    if (privacy) {
+      privacy.addEventListener("command", () => this.paintPrivacyExplain());
+    }
+    const choose = this.el(this.spec.folderChoose);
+    if (choose) {
+      choose.addEventListener("command", () => {
+        this.settle(this.chooseLinkedFolder());
+      });
+    }
+    const clear = this.el(this.spec.folderClear);
+    if (clear) {
+      clear.addEventListener("command", () => {
+        this.settle(this.storeLinkedFolder(""));
+      });
+    }
+  },
+
+  /** P7-T08: one line for the chosen mode, from docs/09 §3.5's table. */
+  paintPrivacyExplain() {
+    const menu = this.el(this.spec.privacy);
+    const mode = this.logic.privacyMode(menu ? menu.value : "", this);
+    this.localize(this.el(this.spec.privacyExplain), this.l10n.privacyExplain, {
+      mode,
+    });
+  },
+
+  /**
+   * P7-T08: read the host's settings and paint the Report & audio section:
+   * the audio rows shown only while `audio.enabled` is on, the voice list,
+   * the folder row. With no host the audio rows stay hidden.
+   */
+  async paintSettings() {
+    this.paintPrivacyExplain();
+    let settings;
+    if (this.can("readSettings")) {
+      try {
+        settings = await this.host.readSettings();
+      } catch (error) {
+        this.report("readSettings", error);
+      }
+    }
+    const audio = this.el(this.spec.audio);
+    if (audio) audio.hidden = !(settings && settings.audioEnabled === true);
+    this.fillVoices(settings);
+    this.paintFolder(settings ? settings.linkedFolder : "");
+    const canWrite = this.can("setLinkedFolder");
+    for (const id of [this.spec.folderChoose, this.spec.folderClear]) {
+      const button = this.el(id);
+      if (button) button.disabled = !canWrite;
+    }
+  },
+
+  /**
+   * Fill the voice menulist and select the stored voice. Setting `value`
+   * from script fires no `command`, so Zotero's binding writes nothing.
+   *
+   * @param {object|undefined} settings
+   */
+  fillVoices(settings) {
+    const menu = this.el(this.spec.voice);
+    const popup = this.el(this.spec.voicePopup);
+    if (!menu || !popup) return;
+    while (popup.firstChild) popup.firstChild.remove();
+    for (const voice of this.logic.voiceItems(settings)) {
+      const item = this.xul("menuitem");
+      item.setAttribute("value", voice.id);
+      item.setAttribute("label", voice.label);
+      popup.appendChild(item);
+    }
+    const stored =
+      settings && typeof settings.voice === "string" ? settings.voice : "";
+    if (stored !== "") menu.value = stored;
+  },
+
+  /**
+   * @param {string} path the stored folder, `""` when unset; shown here, on
+   *   the user's own screen, and never logged
+   */
+  paintFolder(path) {
+    const field = this.el(this.spec.folder);
+    if (field) field.value = typeof path === "string" ? path : "";
+    const status = this.el(this.spec.folderStatus);
+    if (!status) return;
+    // A chosen folder speaks for itself in the field; the line is hidden.
+    const unset = !(typeof path === "string" && path !== "");
+    status.hidden = !unset;
+    if (unset) this.localize(status, this.l10n.ttsFolderUnset);
+  },
+
+  /** Ask for a folder with Zotero's picker, then store it through the host. */
+  async chooseLinkedFolder() {
+    const path = await this.pickFolder();
+    if (path) await this.storeLinkedFolder(path);
+  },
+
+  /**
+   * Store (or, with `""`, forget) the folder; on a refusal the stored one
+   * stays and the refusal line shows. The path is never logged here.
+   *
+   * @param {string} path
+   */
+  async storeLinkedFolder(path) {
+    if (!this.can("setLinkedFolder")) return;
+    const result = await this.host.setLinkedFolder(path);
+    if (result && result.stored) {
+      await this.paintSettings();
+      return;
+    }
+    const id = this.logic.folderMessage(result, this.l10n);
+    const status = this.el(this.spec.folderStatus);
+    if (id && status) {
+      status.hidden = false;
+      this.localize(status, id);
+    }
+  },
+
+  /**
+   * Zotero's folder picker; `""` on a cancel or any failure. As in
+   * `addon/content/reportWindow.js`, nothing is logged, because a picker's
+   * message can quote the path.
+   *
+   * @returns {Promise<string>}
+   */
+  async pickFolder() {
+    try {
+      const utils =
+        typeof ChromeUtils === "undefined" ? undefined : ChromeUtils;
+      if (!utils || typeof utils.importESModule !== "function") return "";
+      const module = utils.importESModule(this.filePickerModule);
+      const Picker = module ? module.FilePicker : undefined;
+      if (typeof Picker !== "function") return "";
+      const picker = new Picker();
+      const button = this.el(this.spec.folderChoose);
+      const title = (button && button.getAttribute("label")) || "";
+      picker.init(window, title, picker.modeGetFolder);
+      const result = await picker.show();
+      if (result !== picker.returnOK) return "";
+      return typeof picker.file === "string" ? picker.file : "";
+    } catch {
+      return "";
+    }
+  },
+
+  /**
+   * P7-T09: wire the Advanced section's two scripted controls. The three
+   * number fields are Zotero's bindings.
+   */
+  wireAdvanced() {
+    const verbose = this.el(this.spec.verbose);
+    if (verbose) {
+      verbose.addEventListener("command", () => {
+        this.settle(this.storeVerboseLogging(verbose.checked === true));
+      });
+    }
+    const show = this.el(this.spec.dataLocationShow);
+    if (show) {
+      show.addEventListener("command", () => {
+        this.settle(this.revealDatabase());
+      });
+    }
+    this.wireDiagnostics();
+  },
+
+  /**
+   * P7-T17: the provider-policy lines under the Privacy section, each with
+   * its verification date, after one heading line. With no line from the
+   * host the block stays hidden: a claim without a date is never shown.
+   */
+  async paintRetention() {
+    const container = this.el(this.spec.retention);
+    if (!container) return;
+    let lines = [];
+    if (this.can("readPolicyNotes")) {
+      try {
+        lines = (await this.host.readPolicyNotes()) || [];
+      } catch (error) {
+        this.report("readPolicyNotes", error);
+        lines = [];
+      }
+    }
+    while (container.firstChild) container.firstChild.remove();
+    let shown = 0;
+    for (const line of lines) {
+      if (!line || typeof line.id !== "string") continue;
+      if (typeof line.date !== "string" || line.date === "") continue;
+      if (shown === 0) {
+        const title = document.createElementNS(this.HTML_NS, "p");
+        this.localize(title, this.l10n.retentionTitle);
+        container.appendChild(title);
+      }
+      const p = document.createElementNS(this.HTML_NS, "p");
+      this.localize(p, line.id, { date: line.date });
+      container.appendChild(p);
+      shown += 1;
+    }
+    container.hidden = shown === 0;
+  },
+
+  /** P7-T09: the checkbox, the cache lines and the database's location. */
+  async paintAdvanced() {
+    await this.paintVerboseLogging();
+    await this.refreshCacheUsage();
+    await this.paintDataLocation();
+  },
+
+  /**
+   * Checked exactly when `logLevel` is `debug` (docs/07 §8.5); disabled when
+   * the host cannot write it.
+   */
+  async paintVerboseLogging() {
+    const box = this.el(this.spec.verbose);
+    if (!box) return;
+    let on = false;
+    if (this.can("readVerboseLogging")) {
+      try {
+        on = (await this.host.readVerboseLogging()) === true;
+      } catch (error) {
+        this.report("readVerboseLogging", error);
+      }
+    }
+    box.checked = on;
+    box.disabled = !this.can("setVerboseLogging");
+  },
+
+  /**
+   * Write `debug` or `warn` through the host; on a refusal, show the stored
+   * value again.
+   *
+   * @param {boolean} on
+   */
+  async storeVerboseLogging(on) {
+    if (!this.can("setVerboseLogging")) return;
+    const stored = await this.host.setVerboseLogging(on === true);
+    if (stored !== true) await this.paintVerboseLogging();
+  },
+
+  /**
+   * P7-T09 step 2: one line for the total, then one per namespace holding
+   * anything. Called on open and, by P7-T10's clear actions, after a clear.
+   */
+  async refreshCacheUsage() {
+    const container = this.el(this.spec.cacheBreakdown);
+    if (!container) return;
+    let usage;
+    if (this.can("cacheStats")) {
+      try {
+        usage = await this.host.cacheStats();
+      } catch (error) {
+        this.report("cacheStats", error);
+      }
+    }
+    while (container.firstChild) container.firstChild.remove();
+    for (const line of this.logic.cacheLines(usage, this.l10n)) {
+      const p = document.createElementNS(this.HTML_NS, "p");
+      this.localize(p, line.id, line.args);
+      container.appendChild(p);
+    }
+  },
+
+  /**
+   * The plugin database's file, read-only, and "Show in folder". The path is
+   * shown here, on the user's own screen, and never logged.
+   */
+  async paintDataLocation() {
+    let path = "";
+    if (this.can("databasePath")) {
+      try {
+        const value = await this.host.databasePath();
+        path = typeof value === "string" ? value : "";
+      } catch (error) {
+        this.report("databasePath", error);
+      }
+    }
+    const line = this.el(this.spec.dataLocation);
+    if (line) {
+      if (path !== "") this.localize(line, this.l10n.dataLocation, { path });
+      else this.localize(line, this.l10n.dataLocationUnavailable);
+    }
+    const show = this.el(this.spec.dataLocationShow);
+    if (show) show.disabled = !(path !== "" && this.can("revealDatabase"));
+  },
+
+  /** "Show in folder": the host opens the system's file manager. */
+  async revealDatabase() {
+    if (this.can("revealDatabase")) await this.host.revealDatabase();
+  },
+
+  /**
+   * P7-T13: the diagnostics text. "Show diagnostics" asks the host for the
+   * whole text and puts it in the read-only box; only then are Save and Copy
+   * enabled, and each acts on exactly the text shown. Nothing here names the
+   * clipboard or writes a file: the host does both, and keeps no path.
+   */
+  wireDiagnostics() {
+    // Nothing is offered before a preview, whatever the markup says.
+    this.diagnosticsShown = "";
+    this.setDiagnosticsActions(false);
+    const box = this.el(this.spec.diagnosticsText);
+    if (box) box.hidden = true;
+    const preview = this.el(this.spec.diagnosticsPreview);
+    if (preview) {
+      preview.addEventListener("command", () => {
+        this.settle(this.previewDiagnostics());
+      });
+    }
+    const save = this.el(this.spec.diagnosticsSave);
+    if (save) {
+      save.addEventListener("command", () => {
+        this.settle(this.saveDiagnostics());
+      });
+    }
+    const copy = this.el(this.spec.diagnosticsCopy);
+    if (copy) {
+      copy.addEventListener("command", () => {
+        this.settle(this.copyDiagnostics());
+      });
+    }
+  },
+
+  /** The text the box shows, or `""` before a preview. */
+  diagnosticsShown: "",
+
+  async previewDiagnostics() {
+    this.diagnosticsShown = "";
+    this.setDiagnosticsActions(false);
+    const box = this.el(this.spec.diagnosticsText);
+    let text = "";
+    if (this.can("diagnosticsText")) {
+      try {
+        const answer = await this.host.diagnosticsText();
+        text = typeof answer === "string" ? answer : "";
+      } catch (error) {
+        this.report("diagnosticsText", error);
+        text = "";
+      }
+    }
+    if (box) {
+      box.value = text;
+      box.hidden = text === "";
+    }
+    if (text === "") {
+      this.paintDiagnosticsStatus("unavailable");
+      return;
+    }
+    this.diagnosticsShown = text;
+    this.paintDiagnosticsStatus("");
+    this.setDiagnosticsActions(true);
+  },
+
+  setDiagnosticsActions(enabled) {
+    for (const id of [this.spec.diagnosticsSave, this.spec.diagnosticsCopy]) {
+      const button = this.el(id);
+      if (button) button.disabled = !enabled;
+    }
+  },
+
+  async saveDiagnostics() {
+    const text = this.diagnosticsShown;
+    if (text === "" || !this.can("saveDiagnostics")) return;
+    const path = await this.pickSaveFile();
+    if (path === "") return;
+    let saved;
+    try {
+      saved = (await this.host.saveDiagnostics(path, text)) === true;
+    } catch (error) {
+      this.report("saveDiagnostics", error);
+      saved = false;
+    }
+    this.paintDiagnosticsStatus(saved ? "saved" : "failed");
+  },
+
+  async copyDiagnostics() {
+    const text = this.diagnosticsShown;
+    if (text === "" || !this.can("copyDiagnostics")) return;
+    let copied;
+    try {
+      copied = (await this.host.copyDiagnostics(text)) === true;
+    } catch (error) {
+      this.report("copyDiagnostics", error);
+      copied = false;
+    }
+    this.paintDiagnosticsStatus(copied ? "copied" : "failed");
+  },
+
+  /** @param {string} outcome - saved, copied, failed, unavailable, or "" to hide */
+  paintDiagnosticsStatus(outcome) {
+    const line = this.el(this.spec.diagnosticsStatus);
+    if (!line) return;
+    if (outcome === "") {
+      line.hidden = true;
+      return;
+    }
+    line.hidden = false;
+    this.localize(line, this.l10n.diagnosticsStatus, { outcome });
+  },
+
+  /**
+   * Zotero's save picker; `""` on a cancel or any failure. Nothing is logged
+   * and nothing is kept: a picker's message can quote the path.
+   *
+   * @returns {Promise<string>}
+   */
+  async pickSaveFile() {
+    try {
+      const utils =
+        typeof ChromeUtils === "undefined" ? undefined : ChromeUtils;
+      if (!utils || typeof utils.importESModule !== "function") return "";
+      const module = utils.importESModule(this.filePickerModule);
+      const Picker = module ? module.FilePicker : undefined;
+      if (typeof Picker !== "function") return "";
+      const picker = new Picker();
+      const button = this.el(this.spec.diagnosticsSave);
+      const title = (button && button.getAttribute("label")) || "";
+      picker.init(window, title, picker.modeSave);
+      picker.defaultString = "research-helper-diagnostics.txt";
+      picker.appendFilters(picker.filterText);
+      const result = await picker.show();
+      if (result !== picker.returnOK && result !== picker.returnReplace) {
+        return "";
+      }
+      return typeof picker.file === "string" ? picker.file : "";
+    } catch {
+      return "";
+    }
   },
 
   /**

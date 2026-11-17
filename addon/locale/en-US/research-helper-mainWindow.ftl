@@ -1105,3 +1105,158 @@ research-helper-egress-profile-notice =
 ## and 6). No argument.
 
 research-helper-recommend-profile-unusable = The model could not describe this collection, so its profile comes from the collection's own terms, and the search may find less.
+
+## The preference pane's Search, Report & audio and Privacy sections (P7-T08;
+## docs/08 §7.3 as P7-T01 left it). Each control is bound to its docs/07 §8.5
+## row, except the audio folder, which the pane writes through its host. The
+## two menulists' items share one message each: `$language` is `auto`, `en`,
+## `ko` or `both`, `$mode` is `strict`, `balanced` or `full` (privacy) or
+## `never`, `auto` or `always` (full text), all selectors only. "English" and
+## "한국어" are each language's own name and are not translated. A voice's
+## name is not translated (docs/08 §10.3). The privacy lines say no more than
+## docs/09 §3.5's table. Korean pending review (G-41).
+
+research-helper-prefs-search = Search
+research-helper-prefs-default-years =
+    .value = Default date range, in years
+research-helper-prefs-max-results =
+    .value = Results to fetch from each database
+research-helper-prefs-hide-existing =
+    .label = Hide items already in my library
+research-helper-prefs-report = Report & audio
+research-helper-prefs-report-language =
+    .value = Report language
+research-helper-prefs-language-option =
+    .label =
+        { $language ->
+            [en] English
+            [ko] 한국어
+            [both] Both English and Korean
+           *[auto] Zotero's language
+        }
+research-helper-prefs-tts-language =
+    .value = Audio language
+research-helper-prefs-tts-language-option =
+    .label =
+        { $language ->
+            [en] English
+            [ko] 한국어
+           *[auto] The report's language
+        }
+research-helper-prefs-tts-voice =
+    .value = Voice
+research-helper-prefs-tts-voice-note = The voices listed are Google Gemini's documented voices. Opening this list sends nothing; to hear a voice, make the audio in the report window.
+research-helper-prefs-tts-minutes =
+    .value = Audio length in minutes (0 sets it from the report's length)
+research-helper-prefs-tts-folder =
+    .value = Folder for long recordings
+research-helper-prefs-tts-folder-choose =
+    .label = Choose…
+research-helper-prefs-tts-folder-clear =
+    .label = Forget this folder
+research-helper-prefs-tts-folder-unset = No folder chosen. Research Helper asks the first time a recording is too large to store in Zotero.
+research-helper-prefs-tts-folder-note = A recording over 10 MiB (about 3.6 minutes) is kept in this folder and linked from Zotero, so it does not sync to Zotero's mobile apps.
+research-helper-prefs-tts-folder-refused = That folder cannot be used: choose an existing folder that is not a temporary one. The folder you had stays chosen.
+research-helper-prefs-privacy = Privacy
+research-helper-prefs-privacy-mode =
+    .value = Privacy mode
+research-helper-prefs-privacy-option =
+    .label =
+        { $mode ->
+            [strict] Strict
+            [full] Full
+           *[balanced] Balanced
+        }
+research-helper-prefs-privacy-explain =
+    { $mode ->
+        [strict] Strict: each paper's title, authors, venue, year and abstract are sent, never its PDF full text, your notes or annotations, or collection and tag names. Models that may train on what you send, or whose data policy is unknown, are refused.
+        [full] Full: PDF full text is sent as well. Your notes, annotations, and collection and tag names are sent only if you allow it separately. Models that may train on what you send need your confirmation.
+       *[balanced] Balanced: PDF full text is sent as well, when the full-text setting below allows it. Your notes, annotations, and collection and tag names are never sent. A model whose data policy is unknown is warned about; a model that may train on what you send is refused, or, for a Google Gemini key not marked as paid, needs your confirmation.
+    }
+research-helper-prefs-fulltext-mode =
+    .value = Full text in summaries
+research-helper-prefs-fulltext-option =
+    .label =
+        { $mode ->
+            [never] Never: abstracts only
+            [always] Whenever full text is found
+           *[auto] When it adds to the abstract
+        }
+research-helper-prefs-fulltext-note = Each run's cost confirmation can still switch to abstracts only. Strict privacy mode never sends full text, whatever is chosen here.
+
+## The preference pane's Advanced section (P7-T09; docs/08 §7.3). Concurrency,
+## the timeout and the cache limit are bound to their docs/07 §8.5 rows. The
+## cache lines are painted from the cache's own counts: `$namespace` is a
+## selector only; `$megabytes` and `$entries` are numbers. The verbose-logging
+## checkbox writes `logLevel` through the pane's host and nothing else. `$path`
+## is the plugin database's file, shown on the user's own screen only. Korean
+## pending review (G-41).
+
+research-helper-prefs-advanced = Advanced
+research-helper-prefs-concurrency =
+    .value = Model tasks run in parallel (1–8)
+research-helper-prefs-timeout =
+    .value = Time limit for one literature database request, in seconds
+research-helper-prefs-cache-size =
+    .value = Cache size limit, in MB
+research-helper-prefs-cache-usage-row =
+    { $namespace ->
+        [source-response] Literature database answers
+        [canonical-work] Merged records
+        [summary] Summaries
+        [embedding] Embeddings
+        [llm-completion] Model answers
+        [recommendation] Recommendations
+       *[report] Reports
+    }: { NUMBER($megabytes, maximumFractionDigits: 1) } MB, { $entries ->
+        [one] 1 entry
+       *[other] { $entries } entries
+    }
+research-helper-prefs-cache-usage-total =
+    Cache in use: { NUMBER($megabytes, maximumFractionDigits: 1) } MB, { $entries ->
+        [one] 1 entry
+       *[other] { $entries } entries
+    }
+research-helper-prefs-cache-usage-unavailable = The cache's size cannot be read now.
+research-helper-prefs-debug =
+    .label = Verbose debug logging
+research-helper-prefs-debug-note = Writes more detail to Zotero's debug output, to help find a problem. API keys are never written there. Turn it off when you are done.
+research-helper-prefs-data-location = Research Helper's database: { $path }
+research-helper-prefs-data-location-show =
+    .label = Show in folder
+research-helper-prefs-data-location-unavailable = Research Helper's database is not open, so its location is not shown.
+
+## The Privacy section's provider-policy lines (P7-T17; docs/09 §3.3's
+## re-verification of 2026-11-17). Each line words only what that provider's
+## own pages say, as POLICY_NOTES in src/llm/shared/policyNotes.ts lists
+## them; `$date` is the day those pages were read. Korean pending review
+## (G-41).
+
+research-helper-prefs-retention-title = What each provider's own pages say about what it receives:
+research-helper-prefs-retention-openai = OpenAI: API data is not used for training unless you opt in. Abuse-monitoring logs are kept for up to 30 days, or longer when the law requires it or to protect its services or others from harm. Verified { $date }.
+research-helper-prefs-retention-anthropic = Anthropic: API inputs and outputs are not used for training by default, and are deleted within 30 days. When flagged for a Usage Policy violation, inputs and outputs may be kept for up to 2 years and classification scores for up to 7 years. Verified { $date }.
+research-helper-prefs-retention-gemini-paid = Gemini, paid tier: prompts and responses are not used to improve Google's products. They are kept for 55 days to detect and prevent policy violations. Verified { $date }.
+research-helper-prefs-retention-gemini-free = Gemini, free tier: prompts and responses are used to improve Google's products, and human reviewers may read them. Verified { $date }.
+research-helper-prefs-retention-openrouter = OpenRouter: inputs and outputs are not used for training, and inputs are not stored after they are categorized unless you opt in to logging. The model provider a request is routed to has its own policy, and some may use inputs and outputs for training. Verified { $date }.
+
+## The Advanced section's diagnostics (P7-T13; docs/07 §10.4, "As built").
+## The text itself is plain English built by src/core/diagnostics.ts and is
+## not localized. Korean pending review (G-41).
+
+research-helper-prefs-diagnostics-title = Diagnostics
+research-helper-prefs-diagnostics-note = To help find a problem, Research Helper can put together a text with its version and Zotero's, your settings, recent jobs, the last log lines, recent errors and cache counts. No API key and no paper content is included. Nothing is sent: you save or copy it yourself.
+research-helper-prefs-diagnostics-preview =
+    .label = Show diagnostics
+research-helper-prefs-diagnostics-text =
+    .aria-label = Diagnostics text
+research-helper-prefs-diagnostics-save =
+    .label = Save diagnostics…
+research-helper-prefs-diagnostics-copy =
+    .label = Copy diagnostics
+research-helper-prefs-diagnostics-status =
+    { $outcome ->
+        [saved] Diagnostics saved.
+        [copied] Diagnostics copied.
+        [failed] Diagnostics could not be saved or copied.
+       *[unavailable] Diagnostics cannot be put together now.
+    }

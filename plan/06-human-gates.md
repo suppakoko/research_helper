@@ -763,6 +763,8 @@ this approval.
 
 ### G-41 — Review the Phase 1 `ko-KR` UI bundle (`KO_PENDING_REVIEW.length`, 82 as of 2026-10-08)
 
+> *Measured 2026-11-17 in Zotero 10.0.3, in three runs (12:51, 12:57 and 13:03, each 359 passed), after the owner approved all 23 drafts of `plan/00` §6 item 389(b) in chat: `[P1-T18] ko-KR totals: 499 present, 0 absent; expected 499 / 0`, and `0 gap id(s)` in each of the three bundles. The 23 went in byte for byte from the commented drafts into `research-helper-mainWindow.ftl` (`plan/reports/ko-review-389.ftl`); `rh-error-policy` left `KO_PENDING_REVIEW` for `KO_PRESENT`, so the list was empty, and `ci.yml`'s step is a plain `npm run l10n:check` again. The `P7-T08` and later cards of the same day add new commented drafts; their ids are listed in `plan/reports/P7-batchB.md`.*
+
 > *Measured 2026-11-17 in Zotero 10.0.3, in three runs, after the owner approved the batch of 29 in chat (`plan/00` §6 item 386): `[P1-T18] ko-KR totals: 498 present, 1 absent; expected 498 / 1`. All 29 (`P6-T14`'s `rh-error-tts`, `P6-T15`'s 13 and `P6-T17`'s 15) went in byte for byte from the commented drafts, 16 into `research-helper-mainWindow.ftl` and 13 into `research-helper-reportWindow.ftl`, recorded in `plan/reports/ko-review-386.ftl`, and left `KO_PENDING_REVIEW` for `KO_PRESENT`. So `KO_PENDING_REVIEW` is empty again, and the 1 absent is `P0-T24`'s deliberate fallback fixture.*
 >
 > *Re-counted 2026-11-02 (`plan/00` §6 items 333, 334): `P4-T20`'s 25, `P5-T15`'s 12 and `P4-T21`'s 2 left `KO_PENDING_REVIEW` that day. What it still holds is what cards in progress add; `src/i18n/keys.ts` is the count.*

@@ -18,6 +18,13 @@
 # redirect resolved to is printed and named in any issue, so a failure says
 # which beta it was.
 #
+# What a failure means. DECIDED 2026-11-17 (owner, plan/00 §6 item 390(d)):
+# advance warning only. The beta channel may serve the next Zotero series
+# (11.0-beta.4 on 2026-11-17), which the manifest's `strict_max_version`
+# (`10.0.*`) does not claim, so a red run is notice for the next
+# `strict_max_version` (docs/13 §6.2's upgrade drill), not a release blocker.
+# release.yml does not read this run, and docs/13 §8.9 records its state.
+#
 # Deliberate differences from docs/13 §5.3:
 #
 # - No `live-contract` job (plan/10 §0.4 line 18): it needs keys, and this
@@ -118,6 +125,7 @@ jobs:
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           body="The scheduled integration run against the Zotero beta failed: ${run_url}
           Beta tarball: ${BETA:-not resolved}
+          This is advance notice for the next strict_max_version, not a release blocker (plan/00 §6 item 390(d)).
           See docs/13 §6.2's upgrade drill; the debug logs are attached to the run."
           number="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
             --search "\"${title}\" in:title" --json number,title \

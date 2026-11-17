@@ -15,8 +15,11 @@
  * named (d). `rh-error-cancelled` is outside the audit:
  * `OperationCancelledError` is not user-facing.
  *
- * The `ko-KR` side is `G-41`'s: each id whose `draft` is true carries the
- * coordinator's Korean as a commented draft, not adopted (item 389(b)).
+ * The `ko-KR` side is `G-41`'s: each id whose `draft` is true was given the
+ * coordinator's Korean as a commented draft, not adopted (item 389(b)); the
+ * owner approved all 23 on 2026-11-17, so each is now live under a one-line
+ * provenance comment and no draft is left (item 389(b), recorded in
+ * plan/reports/ko-review-389.ftl).
  */
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -29,6 +32,7 @@ import {
   DEFERRED_ERROR_MESSAGE_IDS,
   ERROR_MESSAGE_IDS,
   KO_PENDING_REVIEW,
+  KO_PRESENT,
 } from "../../../src/i18n/keys";
 
 type Service =
@@ -44,7 +48,7 @@ interface AuditRow {
   readonly service: Service;
   /** Contained, ignoring case, in the message (in every variant of a select). */
   readonly nextAction: string;
-  /** A commented Korean draft, not adopted, sits in the ko-KR bundle (item 389(b)). */
+  /** P7-T12 drafted new Korean for it, which the owner approved on 2026-11-17 (item 389(b)). */
   readonly draft: boolean;
 }
 
@@ -367,29 +371,32 @@ describe("P7-T12: every rh-error-* message against NFR-14", () => {
     expect(strays).toEqual([]);
   });
 
-  it("keeps a commented Korean draft, not adopted, for each new or changed message (G-41, item 389(b))", () => {
-    // A draft beside a live entry is indented inside its comment ("#     id = "),
-    // so it is never read as a commented stub ("# id = "), which marks an id
-    // with no live Korean; `rh-error-policy`'s draft is that stub.
+  it("ships the owner-approved Korean live for each new or changed message, under its provenance line (G-41, item 389(b))", () => {
+    const PROVENANCE =
+      "# Korean drafted by the coordinator and reviewed by the owner on 2026-11-17 (G-41, plan/00 §6 item 389).";
     const lines = KO.split("\n");
-    const undrafted = AUDIT.filter((row) => row.draft).filter((row) => {
-      const stub = row.id === "rh-error-policy";
-      const prefix = stub ? `# ${row.id} = ` : `#     ${row.id} = `;
-      const at = lines.findIndex((line) => line.startsWith(prefix));
-      const marker = at >= 1 ? lines[at - 1] : undefined;
-      const live = lines[at + 1]?.startsWith(`${row.id} =`) ?? false;
+    const unadopted = AUDIT.filter((row) => row.draft).filter((row) => {
+      const at = lines.findIndex((line) => line.startsWith(`${row.id} = `));
+      const live = at >= 1 ? lines[at] : undefined;
       return (
-        marker === undefined ||
-        !marker.startsWith("# Draft (coordinator, 2026-11-17, not adopted") ||
-        live === stub
+        live === undefined ||
+        lines[at - 1] !== PROVENANCE ||
+        // The approved text is one line, and carries the next action.
+        live.trim() === `${row.id} =`
       );
     });
-    expect(undrafted.map((row) => row.id)).toEqual([]);
+    expect(unadopted.map((row) => row.id)).toEqual([]);
     expect(AUDIT.filter((row) => row.draft)).toHaveLength(23);
+    expect(lines.filter((line) => line === PROVENANCE)).toHaveLength(23);
+    // No draft of item 389 is left commented beside a live entry.
+    expect(KO).not.toContain("not adopted; G-41, plan/00 §6 item 389");
   });
 
-  it("leaves rh-error-policy without live Korean, on KO_PENDING_REVIEW, until G-41 adopts it", () => {
-    expect(message(KO, "rh-error-policy")).toBeUndefined();
-    expect(KO_PENDING_REVIEW).toContain("rh-error-policy");
+  it("ships rh-error-policy with live Korean, off KO_PENDING_REVIEW (G-41, item 389(b))", () => {
+    expect(message(KO, "rh-error-policy")).toBe(
+      "개인정보 모드에서 허용하지 않는 요청이라 Research Helper가 보내기 전에 멈췄습니다. Research Helper 설정에서 개인정보 모드를 확인하세요.",
+    );
+    expect(KO_PENDING_REVIEW).not.toContain("rh-error-policy");
+    expect(KO_PRESENT).toContain("rh-error-policy");
   });
 });

@@ -2,8 +2,13 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
+import {
+  CACHE_NAMESPACES,
+  type CacheNamespace,
+  type CacheStats,
+} from "../../../src/core/cache/cache";
 import { createManualClock } from "../../../src/core/clock";
 import {
   AuthenticationError,
@@ -34,6 +39,13 @@ import { PREFS } from "../../../src/prefs/schema";
 import {
   LLM_CREDENTIALS,
   MIN_DIGEST_KEY_LENGTH,
+  PANE_BOUND_SETTINGS,
+  PANE_MENU_VALUES,
+  type AdvancedPort,
+  type DiagnosticsPort,
+  type SettingsPort,
+  cacheUsage,
+  policyLines,
   NCBI_TEST_PMID,
   NCBI_TEST_URL,
   OS_KEYSTORE_PREF_VALUE,
@@ -1344,7 +1356,8 @@ describe("P1-T44 — the fragment carries the markup rules", () => {
     for (const { name } of bound) {
       expect(qualified.has(name), `${name} is a PREF_KEYS row`).toBe(true);
     }
-    // Exactly the non-secret rows docs/08 §7.3 binds, and no others.
+    // Exactly the non-secret rows docs/08 §7.3 binds, and no others: P3-T04's
+    // six, and since 2026-11-17 P7-T08's ten and P7-T09's three (PANE_BOUND_SETTINGS).
     expect(bound.map((b) => b.name).sort()).toEqual(
       [
         PREF_KEYS.llmProvider,
@@ -1353,6 +1366,7 @@ describe("P1-T44 — the fragment carries the markup rules", () => {
         PREF_KEYS.geminiModel,
         PREF_KEYS.anthropicModel,
         PREF_KEYS.geminiPaidTier,
+        ...Object.values(PANE_BOUND_SETTINGS).flat(),
       ]
         .map((key) => qualifiedPrefKey(key))
         .sort(),
@@ -1412,10 +1426,15 @@ describe("P1-T44 — the fragment carries the markup rules", () => {
         new RegExp(`id="${elementPrefix}-base-url-status"[^>]*role="status"`),
       );
     }
-    // The Gemini block, and only it, carries the paid-tier declaration.
-    const checkboxes = [...XHTML_CODE.matchAll(/<checkbox\b[^>]*>/g)].map(
-      (m) => m[0],
-    );
+    // The Gemini block, and only it, carries the paid-tier declaration. The
+    // pane's other checkboxes are P7-T08's two Search rows and P7-T09's verbose-
+    // logging box (2026-11-17).
+    const checkboxes = [...XHTML_CODE.matchAll(/<checkbox\b[^>]*>/g)]
+      .map((m) => m[0])
+      .filter(
+        (tag) =>
+          !/id="rh-(use-translators|hide-existing|verbose-logging)"/.test(tag),
+      );
     expect(checkboxes).toHaveLength(1);
     expect(checkboxes[0]).toContain(
       `preference="${qualifiedPrefKey(PREF_KEYS.geminiPaidTier)}"`,
@@ -1501,7 +1520,21 @@ describe("P1-T44 — the fragment carries the markup rules", () => {
   });
 
   it("rule 8: no copy affordance in the markup or the script", () => {
-    expect(XHTML_CODE).not.toMatch(/copy/i);
+    // Narrowed 2026-11-17 (P7-T13; coordinator, under plan/00 §6 item 313):
+    // the diagnostics "Copy diagnostics" button is the one copy affordance,
+    // and it copies the diagnostics text, never a key field. The host does
+    // the copy, so the script still names no clipboard.
+    const diagnosticsCopy = [
+      'id="rh-diagnostics-copy"',
+      'data-l10n-id="research-helper-prefs-diagnostics-copy"',
+    ];
+    for (const attribute of diagnosticsCopy) {
+      expect(XHTML_CODE.split(attribute)).toHaveLength(2);
+    }
+    let rest = XHTML_CODE;
+    for (const attribute of diagnosticsCopy)
+      rest = rest.split(attribute).join("");
+    expect(rest).not.toMatch(/copy/i);
     expect(SCRIPT_CODE).not.toMatch(/clipboard/i);
     expect(SCRIPT_CODE).not.toMatch(/execCommand/);
     // The script *refuses* copy and cut on the field; that is the only mention.
@@ -2999,5 +3032,1412 @@ describe("P3-T14 — the controller: Test, stored status, model suggestions, pri
     expect(NO_CREDIT_MESSAGE_KEY).toBe(
       new QuotaExceededError(402, "x", {}).messageKey,
     );
+  });
+});
+
+/* ------------------------- P7-T08: Search, Report & audio, Privacy */
+
+/** The PREFERENCES_L10N names P7-T08 adds (the checkbox reuses P2-T18's id). */
+const P7T08_NAMES = [
+  "searchTitle",
+  "defaultYears",
+  "maxResults",
+  "hideExisting",
+  "reportTitle",
+  "reportLanguage",
+  "languageOption",
+  "ttsLanguage",
+  "ttsLanguageOption",
+  "ttsVoice",
+  "ttsVoiceNote",
+  "ttsMinutes",
+  "ttsFolder",
+  "ttsFolderChoose",
+  "ttsFolderClear",
+  "ttsFolderUnset",
+  "ttsFolderNote",
+  "ttsFolderRefused",
+  "privacyTitle",
+  "privacyMode",
+  "privacyOption",
+  "privacyExplain",
+  "fullTextMode",
+  "fullTextOption",
+  "fullTextNote",
+] as const;
+
+const P7T08_IDS: string[] = P7T08_NAMES.map((name) => PREFERENCES_L10N[name]);
+
+/** The `<menulist>` with `id`, and its items' `value`s in order. */
+function menulist(id: string): { tag: string; values: string[] } {
+  const match = new RegExp(
+    `<menulist\\b[^>]*id="${id}"[^>]*>([\\s\\S]*?)</menulist>`,
+  ).exec(XHTML_CODE);
+  expect(match, `the ${id} menulist`).not.toBeNull();
+  return {
+    tag: match![0],
+    values: [...match![1]!.matchAll(/<menuitem\b[^>]*value="([^"]*)"/g)].map(
+      (m) => m[1]!,
+    ),
+  };
+}
+
+/** The `PREFS` entry for a branch-relative key. */
+function prefDef(key: string): {
+  values?: readonly unknown[];
+  min?: number;
+  max?: number;
+  default: unknown;
+} {
+  const def = Object.values(PREFS).find((d) => d.key === key);
+  expect(def, `${key} is a PREFS row`).toBeDefined();
+  return def as never;
+}
+
+/** One `<groupbox>` of the shipped markup, by id. */
+function groupbox(id: string): string {
+  const box = new RegExp(`<groupbox\\s+id="${id}"[\\s\\S]*?</groupbox>`).exec(
+    XHTML_CODE,
+  );
+  expect(box, id).not.toBeNull();
+  return box![0];
+}
+
+type MemorySettingsPort = SettingsPort & { folder: string; writes: string[] };
+
+/** A settings port over memory, recording every folder write. */
+function settingsPort(
+  options: {
+    audioEnabled?: boolean;
+    folder?: string;
+    voice?: string;
+    usable?: (path: string) => Promise<boolean>;
+  } = {},
+): MemorySettingsPort {
+  const port: MemorySettingsPort = {
+    folder: options.folder ?? "",
+    writes: [],
+    readAudioEnabled: () => options.audioEnabled ?? false,
+    voices: [
+      { id: "Charon", label: "Charon" },
+      { id: "Kore", label: "Kore" },
+    ],
+    readVoice: () => options.voice ?? "Charon",
+    getLinkedFolder: () => port.folder,
+    setLinkedFolder: (path: string) => {
+      port.writes.push(path);
+      port.folder = path;
+    },
+    isUsableFolder: options.usable ?? (() => Promise.resolve(true)),
+  };
+  return port;
+}
+
+function settingsHost(port?: SettingsPort) {
+  const sink = recordingSink();
+  const clock = createManualClock(1_760_000_000_000);
+  const host = createPreferencesHost({
+    secrets: memoryStore(),
+    request: () => Promise.reject(new Error("no request in this test")),
+    getBackendPref: () => OS_KEYSTORE_PREF_VALUE,
+    providerPrefs: {
+      getActiveProvider: () => "openrouter",
+      getBaseUrl: () => "",
+      setBaseUrl: () => undefined,
+    },
+    ...(port !== undefined && { settings: port }),
+    clock,
+    logger: createLogger({ sink, clock, level: "debug" }),
+  });
+  return { host, sink };
+}
+
+describe("P7-T08 — the pane's Search, Report & audio and Privacy sections", () => {
+  it("binds each PANE_BOUND_SETTINGS row exactly once, by its full key, inside its own section; each is a docs/07 §8.5 row", () => {
+    for (const key of Object.values(PANE_BOUND_SETTINGS).flat()) {
+      prefDef(key);
+      const attribute = `preference="${qualifiedPrefKey(key)}"`;
+      expect(XHTML_CODE.split(attribute).length - 1, key).toBe(1);
+    }
+    const sections: [string, readonly string[]][] = [
+      ["rh-prefs-search", PANE_BOUND_SETTINGS.search],
+      [
+        "rh-prefs-report",
+        [...PANE_BOUND_SETTINGS.report, ...PANE_BOUND_SETTINGS.audio],
+      ],
+      ["rh-prefs-privacy", PANE_BOUND_SETTINGS.privacy],
+    ];
+    for (const [section, keys] of sections) {
+      const box = groupbox(section);
+      expect(box).toContain(`aria-labelledby="${section}-title"`);
+      for (const key of keys) {
+        expect(box, `${key} in ${section}`).toContain(
+          `preference="${qualifiedPrefKey(key)}"`,
+        );
+      }
+    }
+  });
+
+  it("offers exactly §8.5's value set in each bound menulist, every item localized through one message with its value as the argument", () => {
+    const menus: [string, keyof typeof PANE_MENU_VALUES, string, string][] = [
+      [
+        "rh-lang",
+        "reportLanguage",
+        PREFERENCES_L10N.languageOption,
+        "language",
+      ],
+      [
+        "rh-tts-lang",
+        "tts.language",
+        PREFERENCES_L10N.ttsLanguageOption,
+        "language",
+      ],
+      ["rh-privacy", "privacy.mode", PREFERENCES_L10N.privacyOption, "mode"],
+      [
+        "rh-fulltext",
+        "summary.fullTextMode",
+        PREFERENCES_L10N.fullTextOption,
+        "mode",
+      ],
+    ];
+    for (const [id, key, message, arg] of menus) {
+      const { tag, values } = menulist(id);
+      expect([...values].sort(), id).toEqual([...PANE_MENU_VALUES[key]].sort());
+      expect([...values].sort(), id).toEqual(
+        [...(prefDef(key).values as string[])].sort(),
+      );
+      expect(tag).toContain(`preference="${qualifiedPrefKey(key)}"`);
+      for (const value of values) {
+        expect(tag, `${id} ${value}`).toContain(
+          `data-l10n-args='{"${arg}":"${value}"}'`,
+        );
+      }
+      expect(tag.split(`data-l10n-id="${message}"`).length - 1).toBe(
+        values.length,
+      );
+      // No literal label: the items are Fluent's.
+      expect(tag).not.toMatch(/<menuitem\b[^>]*\blabel=/);
+    }
+  });
+
+  it("gives each number input §8.5's bounds", () => {
+    for (const [id, key] of [
+      ["rh-years", "searchYears"],
+      ["rh-max", "maxResults"],
+      ["rh-tts-minutes", "tts.targetMinutes"],
+    ] as const) {
+      const tag = new RegExp(`<html:input\\b[^>]*id="${id}"[^>]*/>`).exec(
+        XHTML_CODE,
+      );
+      expect(tag, id).not.toBeNull();
+      const def = prefDef(key);
+      expect(tag![0]).toContain('type="number"');
+      expect(tag![0]).toContain(`preference="${qualifiedPrefKey(key)}"`);
+      // tts.targetMinutes is "0, or 1–60": one input from 0 to 60.
+      expect(tag![0]).toContain(`min="${def.min ?? 0}"`);
+      expect(tag![0]).toContain(`max="${def.max}"`);
+    }
+  });
+
+  it("has no autoSummarize control, no voice preview, no format menulist, and does not bind the folder or sources (item 381; docs/08 §7.3's notes)", () => {
+    expect(XHTML_CODE).not.toContain(qualifiedPrefKey("autoSummarize"));
+    expect(XHTML_CODE).not.toMatch(/auto-summarize/);
+    expect(XHTML_CODE).not.toContain("rh-voice-preview");
+    expect(XHTML_CODE).not.toContain("rh-audio-format");
+    expect(XHTML_CODE).not.toContain(qualifiedPrefKey("tts.outputFormat"));
+    const folder = /<html:input\b[^>]*id="rh-tts-folder"[^>]*\/>/.exec(
+      XHTML_CODE,
+    );
+    expect(folder, "the folder field").not.toBeNull();
+    expect(folder![0]).toContain('readonly="true"');
+    expect(folder![0]).not.toContain("preference=");
+    expect(XHTML_CODE).not.toContain(qualifiedPrefKey("tts.linkedFileDir"));
+    expect(XHTML_CODE).not.toContain(qualifiedPrefKey("sources"));
+  });
+
+  it("hides the audio rows by default and keeps the report language outside them; leaves a hidden, empty retention placeholder for P7-T17", () => {
+    const report = groupbox("rh-prefs-report");
+    const audio = /<vbox\s+id="rh-prefs-audio"[^>]*>[\s\S]*<\/vbox>/.exec(
+      report,
+    );
+    expect(audio, "the audio rows").not.toBeNull();
+    expect(audio![0]).toMatch(/^<vbox\s+id="rh-prefs-audio"\s+hidden="true"/);
+    for (const key of PANE_BOUND_SETTINGS.audio) {
+      expect(audio![0]).toContain(qualifiedPrefKey(key));
+    }
+    expect(audio![0]).not.toContain(qualifiedPrefKey("reportLanguage"));
+    expect(report).toContain(qualifiedPrefKey("reportLanguage"));
+    expect(groupbox("rh-prefs-privacy")).toMatch(
+      /<html:div\s+id="rh-prefs-retention"\s+class="rh-hint"\s+hidden="true"\s*\/>/,
+    );
+  });
+
+  it("ships every P7-T08 id in en-US, declared on the main-window surface, and only as a commented draft in ko-KR", () => {
+    expect(P7T08_IDS).toHaveLength(25);
+    const declared = new Set<string>(MAIN_WINDOW_MESSAGE_IDS);
+    for (const id of P7T08_IDS) {
+      expect(declared.has(id), id).toBe(true);
+      expect(FTL, id).toMatch(new RegExp(`^${id} =`, "m"));
+      expect(KO_FTL, id).not.toMatch(new RegExp(`^${id} =`, "m"));
+      expect(KO_FTL, id).toMatch(new RegExp(`^# ${id} =`, "m"));
+    }
+    expect(KO_FTL).toContain(
+      "# Draft (coordinator, 2026-11-17, not adopted; G-41, P7-T08):",
+    );
+    // Every data-l10n-id in the three groupboxes is a PREFERENCES_L10N id.
+    const known = new Set<string>(Object.values(PREFERENCES_L10N));
+    for (const section of [
+      "rh-prefs-search",
+      "rh-prefs-report",
+      "rh-prefs-privacy",
+    ]) {
+      for (const m of groupbox(section).matchAll(/data-l10n-id="([^"]+)"/g)) {
+        expect(known.has(m[1]!), m[1]).toBe(true);
+      }
+    }
+  });
+
+  it("words the privacy line from docs/09 §3.5's table and makes no retention claim", () => {
+    const explain =
+      /^research-helper-prefs-privacy-explain =\n((?: {4}.*\n)+)/m.exec(FTL);
+    expect(explain, "the privacy line").not.toBeNull();
+    const text = explain![1]!;
+    expect(text).toMatch(/\[strict\] Strict:[^\n]*never its PDF full text/);
+    expect(text).toMatch(/\*\[balanced\] Balanced:[^\n]*are never sent/);
+    expect(text).toMatch(/\[full\] Full:/);
+    // Strict allows providers that keep content for 30 days (docs/09 §3.3;
+    // item 270), so no line may promise that nothing is kept.
+    expect(text).not.toMatch(/retain|retention|deleted|zero|not kept/i);
+  });
+});
+
+describe("P7-T08 — the host's readSettings and setLinkedFolder", () => {
+  it("reads audio off, no voices and no folder, and refuses a write, when no settings port is bound", async () => {
+    const { host } = settingsHost();
+    await expect(host.readSettings()).resolves.toEqual({
+      audioEnabled: false,
+      voices: [],
+      voice: "",
+      linkedFolder: "",
+    });
+    await expect(host.setLinkedFolder("C:\\Audio")).resolves.toEqual({
+      stored: false,
+      reason: "unavailable",
+    });
+  });
+
+  it("reads the port: audio.enabled, the documented voices, tts.voice and the folder", async () => {
+    const port = settingsPort({
+      audioEnabled: true,
+      folder: "D:\\Rec",
+      voice: "Kore",
+    });
+    const { host } = settingsHost(port);
+    await expect(host.readSettings()).resolves.toEqual({
+      audioEnabled: true,
+      voices: [
+        { id: "Charon", label: "Charon" },
+        { id: "Kore", label: "Kore" },
+      ],
+      voice: "Kore",
+      linkedFolder: "D:\\Rec",
+    });
+  });
+
+  it("stores a usable folder, trimmed; clears on empty; refuses an unusable one and keeps the stored folder", async () => {
+    const usable = new Set(["D:\\Recordings"]);
+    const port = settingsPort({
+      folder: "D:\\Old",
+      usable: (path) => Promise.resolve(usable.has(path)),
+    });
+    const { host } = settingsHost(port);
+    await expect(host.setLinkedFolder("  D:\\Recordings ")).resolves.toEqual({
+      stored: true,
+      cleared: false,
+    });
+    expect(port.folder).toBe("D:\\Recordings");
+    await expect(host.setLinkedFolder("C:\\Temp\\x")).resolves.toEqual({
+      stored: false,
+      reason: "unusable",
+    });
+    expect(port.folder).toBe("D:\\Recordings");
+    await expect(host.setLinkedFolder("   ")).resolves.toEqual({
+      stored: true,
+      cleared: true,
+    });
+    expect(port.writes).toEqual(["D:\\Recordings", ""]);
+  });
+
+  it("answers unavailable when the folder check throws, writes nothing and logs no part of the path", async () => {
+    const port = settingsPort({
+      usable: () => Promise.reject(new Error("D:\\Secret\\path is gone")),
+    });
+    const { host, sink } = settingsHost(port);
+    await expect(host.setLinkedFolder("D:\\Secret\\path")).resolves.toEqual({
+      stored: false,
+      reason: "unavailable",
+    });
+    expect(port.writes).toEqual([]);
+    expect(sink.lines.join("\n")).not.toContain("Secret");
+  });
+
+  it("never logs the folder's path, on a store, a refusal or a clear", async () => {
+    const port = settingsPort({
+      usable: (path) => Promise.resolve(path.includes("Good")),
+    });
+    const { host, sink } = settingsHost(port);
+    await host.setLinkedFolder("D:\\Users\\someone\\GoodFolder");
+    await host.setLinkedFolder("D:\\Users\\someone\\BadFolder");
+    await host.setLinkedFolder("");
+    expect(sink.lines.length).toBeGreaterThanOrEqual(3);
+    expect(sink.lines.join("\n")).not.toMatch(
+      /someone|GoodFolder|BadFolder|Users/,
+    );
+  });
+
+  it("reads audio as off when the port throws, and logs only the error's name", async () => {
+    const port = settingsPort();
+    port.readAudioEnabled = () => {
+      throw new Error("D:\\leak");
+    };
+    const { host, sink } = settingsHost(port);
+    await expect(host.readSettings()).resolves.toMatchObject({
+      audioEnabled: false,
+    });
+    expect(sink.lines.join("\n")).not.toContain("leak");
+  });
+});
+
+interface SettingsController {
+  logic: {
+    voiceItems: (s: unknown) => { id: string; label: string }[];
+    privacyMode: (value: string, ctx: unknown) => string;
+    folderMessage: (r: unknown, l10n: unknown) => string | undefined;
+  };
+  l10n: Record<string, string>;
+  init: (root: unknown) => Promise<void>;
+  storeLinkedFolder: (path: string) => Promise<void>;
+}
+
+function settingsPane(port: MemorySettingsPort) {
+  const { host: real } = settingsHost(port);
+  const h = paneHarness({
+    host: {
+      ...fakeHost({}),
+      readSettings: () => real.readSettings(),
+      setLinkedFolder: (path: string) => real.setLinkedFolder(path),
+    },
+  });
+  return { h, c: h.controller as unknown as SettingsController };
+}
+
+describe("P7-T08 — the controller's Report & audio and Privacy painting", () => {
+  it("lists the documented voices, then a stored voice the list lacks, once each", () => {
+    const c = paneHarness({}).controller as unknown as SettingsController;
+    expect(
+      c.logic.voiceItems({
+        voices: [
+          { id: "Charon", label: "Charon" },
+          { id: "Charon", label: "Charon" },
+          { id: "", label: "x" },
+        ],
+        voice: "Newvoice",
+      }),
+    ).toEqual([
+      { id: "Charon", label: "Charon" },
+      { id: "Newvoice", label: "Newvoice" },
+    ]);
+    expect(
+      c.logic.voiceItems({
+        voices: [{ id: "Kore", label: "Kore" }],
+        voice: "Kore",
+      }),
+    ).toEqual([{ id: "Kore", label: "Kore" }]);
+    expect(c.logic.voiceItems(undefined)).toEqual([]);
+  });
+
+  it("falls back to balanced for a privacy value the Fluent selector does not know", () => {
+    const c = paneHarness({}).controller as unknown as SettingsController;
+    expect(c.logic.privacyMode("strict", c)).toBe("strict");
+    expect(c.logic.privacyMode("full", c)).toBe("full");
+    expect(c.logic.privacyMode("", c)).toBe("balanced");
+    expect(c.logic.privacyMode("paranoid", c)).toBe("balanced");
+  });
+
+  it("shows the audio rows only while audio.enabled is on, fills the voices and the folder, and paints the privacy line for the chosen mode", async () => {
+    for (const audioEnabled of [false, true]) {
+      const { h, c } = settingsPane(
+        settingsPort({ audioEnabled, folder: "D:\\Rec", voice: "Kore" }),
+      );
+      h.byId("rh-privacy").value = "strict";
+      await c.init(h.root);
+      expect(h.byId("rh-prefs-audio").hidden).toBe(!audioEnabled);
+      expect(
+        h
+          .byId("rh-voice-popup")
+          .children.map((item) => item.getAttribute("value")),
+      ).toEqual(["Charon", "Kore"]);
+      expect(h.byId("rh-voice").value).toBe("Kore");
+      expect(h.byId("rh-tts-folder").value).toBe("D:\\Rec");
+      expect(h.byId("rh-tts-folder-status").hidden).toBe(true);
+      expect(h.byId("rh-tts-folder-choose").disabled).toBe(false);
+      const explain = h.byId("rh-privacy-explain");
+      expect(explain.getAttribute("data-l10n-id")).toBe(
+        PREFERENCES_L10N.privacyExplain,
+      );
+      expect(explain.getAttribute("data-l10n-args")).toBe('{"mode":"strict"}');
+      h.byId("rh-privacy").value = "full";
+      h.byId("rh-privacy").fire("command");
+      expect(explain.getAttribute("data-l10n-args")).toBe('{"mode":"full"}');
+    }
+  });
+
+  it("with no host, keeps the audio rows hidden, the voice list empty and the folder buttons disabled", async () => {
+    const h = paneHarness({});
+    await (h.controller as unknown as SettingsController).init(h.root);
+    expect(h.byId("rh-prefs-audio").hidden).toBe(true);
+    expect(h.byId("rh-tts-folder-choose").disabled).toBe(true);
+    expect(h.byId("rh-tts-folder-clear").disabled).toBe(true);
+    expect(h.byId("rh-voice-popup").children).toHaveLength(0);
+  });
+
+  it("shows the refusal line and keeps the folder when the host refuses; forgets it through the host on Forget", async () => {
+    const port = settingsPort({
+      audioEnabled: true,
+      folder: "D:\\Rec",
+      usable: () => Promise.resolve(false),
+    });
+    const { h, c } = settingsPane(port);
+    await c.init(h.root);
+    await c.storeLinkedFolder("D:\\Nope");
+    const status = h.byId("rh-tts-folder-status");
+    expect(status.hidden).toBe(false);
+    expect(status.getAttribute("data-l10n-id")).toBe(
+      PREFERENCES_L10N.ttsFolderRefused,
+    );
+    expect(port.folder).toBe("D:\\Rec");
+    expect(h.byId("rh-tts-folder").value).toBe("D:\\Rec");
+    await c.storeLinkedFolder("");
+    expect(port.folder).toBe("");
+    expect(h.byId("rh-tts-folder").value).toBe("");
+    expect(status.hidden).toBe(false);
+    expect(status.getAttribute("data-l10n-id")).toBe(
+      PREFERENCES_L10N.ttsFolderUnset,
+    );
+  });
+
+  it("wires Forget to the host's setLinkedFolder with an empty path", async () => {
+    const port = settingsPort({ audioEnabled: true, folder: "D:\\Rec" });
+    const { h, c } = settingsPane(port);
+    await c.init(h.root);
+    h.byId("rh-tts-folder-clear").fire("command");
+    for (let i = 0; i < 5; i += 1) await Promise.resolve();
+    expect(port.writes).toEqual([""]);
+  });
+});
+
+/* ------------------------------------------- P7-T09: the Advanced section */
+
+const P7T09_NAMES = [
+  "advancedTitle",
+  "concurrency",
+  "timeout",
+  "cacheSize",
+  "cacheUsageRow",
+  "cacheUsageTotal",
+  "cacheUsageUnavailable",
+  "debug",
+  "debugNote",
+  "dataLocation",
+  "dataLocationShow",
+  "dataLocationUnavailable",
+] as const;
+
+const P7T09_IDS: string[] = P7T09_NAMES.map((name) => PREFERENCES_L10N[name]);
+
+const MIB = 1024 * 1024;
+
+/** Fake `Cache.stats()`: every namespace, `entries`/`bytes` as given. */
+function fakeStats(
+  counts: Partial<Record<CacheNamespace, [number, number]>>,
+): CacheStats {
+  const byNamespace = {} as Record<
+    CacheNamespace,
+    { entries: number; bytes: number }
+  >;
+  let entries = 0;
+  let bytes = 0;
+  for (const namespace of CACHE_NAMESPACES) {
+    const [n, b] = counts[namespace] ?? [0, 0];
+    byNamespace[namespace] = { entries: n, bytes: b };
+    entries += n;
+    bytes += b;
+  }
+  return { entries, bytes, byNamespace, hitRate: 0 };
+}
+
+type MemoryAdvancedPort = AdvancedPort & {
+  level: string;
+  levelWrites: string[];
+  reveals: number;
+};
+
+function advancedPort(
+  options: {
+    level?: string;
+    stats?: CacheStats;
+    path?: string;
+    open?: boolean;
+  } = {},
+): MemoryAdvancedPort {
+  const open = options.open ?? true;
+  const port: MemoryAdvancedPort = {
+    level: options.level ?? "warn",
+    levelWrites: [],
+    reveals: 0,
+    readLogLevel: () => port.level,
+    writeLogLevel: (level) => {
+      port.levelWrites.push(level);
+      port.level = level;
+    },
+    cacheStats: () =>
+      Promise.resolve(open ? (options.stats ?? fakeStats({})) : undefined),
+    databasePath: () =>
+      Promise.resolve(
+        open
+          ? (options.path ?? "C:\\Users\\someone\\Zotero\\x.sqlite")
+          : undefined,
+      ),
+    revealDatabase: () => {
+      if (!open) return Promise.resolve(false);
+      port.reveals += 1;
+      return Promise.resolve(true);
+    },
+  };
+  return port;
+}
+
+function advancedHost(port?: AdvancedPort) {
+  const sink = recordingSink();
+  const clock = createManualClock(1_760_000_000_000);
+  const host = createPreferencesHost({
+    secrets: memoryStore(),
+    request: () => Promise.reject(new Error("no request in this test")),
+    getBackendPref: () => OS_KEYSTORE_PREF_VALUE,
+    providerPrefs: {
+      getActiveProvider: () => "openrouter",
+      getBaseUrl: () => "",
+      setBaseUrl: () => undefined,
+    },
+    ...(port !== undefined && { advanced: port }),
+    clock,
+    logger: createLogger({ sink, clock, level: "debug" }),
+  });
+  return { host, sink };
+}
+
+describe("P7-T09 — the Advanced section's markup and strings", () => {
+  it("binds concurrency, timeoutSeconds and cache.maxSizeMB once each, inside rh-prefs-advanced, with §8.5's bounds", () => {
+    const box = groupbox("rh-prefs-advanced");
+    expect(box).toContain('aria-labelledby="rh-prefs-advanced-title"');
+    for (const [id, key, step] of [
+      ["rh-conc", "concurrency", undefined],
+      ["rh-timeout", "timeoutSeconds", "10"],
+      ["rh-cache-size", "cache.maxSizeMB", "100"],
+    ] as const) {
+      const tag = new RegExp(`<html:input\\b[^>]*id="${id}"[^>]*/>`).exec(box);
+      expect(tag, id).not.toBeNull();
+      const def = prefDef(key);
+      expect(tag![0]).toContain('type="number"');
+      expect(tag![0]).toContain(`preference="${qualifiedPrefKey(key)}"`);
+      expect(tag![0]).toContain(`min="${def.min}"`);
+      expect(tag![0]).toContain(`max="${def.max}"`);
+      if (step !== undefined) expect(tag![0]).toContain(`step="${step}"`);
+      expect(
+        XHTML_CODE.split(`preference="${qualifiedPrefKey(key)}"`).length - 1,
+      ).toBe(1);
+    }
+    expect([...PANE_BOUND_SETTINGS.advanced]).toEqual([
+      "concurrency",
+      "timeoutSeconds",
+      "cache.maxSizeMB",
+    ]);
+  });
+
+  it("gives the verbose-logging checkbox no binding: no logLevel, no debug, no logRequestBodies attribute anywhere", () => {
+    const box = groupbox("rh-prefs-advanced");
+    const checkbox = /<checkbox\b[^>]*id="rh-verbose-logging"[^>]*\/>/.exec(
+      box,
+    );
+    expect(checkbox, "the checkbox").not.toBeNull();
+    expect(checkbox![0]).not.toContain("preference=");
+    expect(XHTML_CODE).not.toContain(qualifiedPrefKey("logLevel"));
+    expect(XHTML_CODE).not.toContain(qualifiedPrefKey("logRequestBodies"));
+    expect(XHTML_CODE).not.toContain(qualifiedPrefKey("debug"));
+    expect(box).toMatch(
+      /<html:div\s+id="rh-cache-breakdown"[^>]*role="status"/,
+    );
+    expect(box).toMatch(/<html:p\s+id="rh-data-location"/);
+    expect(box).toContain('id="rh-data-location-show"');
+  });
+
+  it("ships every P7-T09 id in en-US, on the main-window surface, and only as a commented draft in ko-KR", () => {
+    expect(P7T09_IDS).toHaveLength(12);
+    const declared = new Set<string>(MAIN_WINDOW_MESSAGE_IDS);
+    for (const id of P7T09_IDS) {
+      expect(declared.has(id), id).toBe(true);
+      expect(FTL, id).toMatch(new RegExp(`^${id} =`, "m"));
+      expect(KO_FTL, id).not.toMatch(new RegExp(`^${id} =`, "m"));
+      expect(KO_FTL, id).toMatch(new RegExp(`^# ${id} =`, "m"));
+    }
+    expect(KO_FTL).toContain(
+      "# Draft (coordinator, 2026-11-17, not adopted; G-41, P7-T09):",
+    );
+    const known = new Set<string>(Object.values(PREFERENCES_L10N));
+    for (const m of groupbox("rh-prefs-advanced").matchAll(
+      /data-l10n-id="([^"]+)"/g,
+    )) {
+      expect(known.has(m[1]!), m[1]).toBe(true);
+    }
+    // The row's selector covers every namespace, with a default.
+    const row = new RegExp(
+      `^${PREFERENCES_L10N.cacheUsageRow} =\\n((?: {4}.*\\n)+)`,
+      "m",
+    ).exec(FTL);
+    expect(row, "the row message").not.toBeNull();
+    for (const namespace of CACHE_NAMESPACES) {
+      expect(row![1], namespace).toMatch(new RegExp(`\\[${namespace}\\]`));
+    }
+  });
+});
+
+describe("P7-T09 — cacheUsage: the namespace rows add up to the total", () => {
+  it("adds the rows up to the total, in CACHE_NAMESPACES' order, leaving out empty namespaces", () => {
+    const stats = fakeStats({
+      summary: [180, 180 * MIB],
+      "source-response": [1200, 28 * MIB],
+      embedding: [40, 6 * MIB],
+      report: [3, 1234],
+    });
+    const usage = cacheUsage(stats);
+    expect(usage.rows.map((row) => row.namespace)).toEqual([
+      "source-response",
+      "summary",
+      "embedding",
+      "report",
+    ]);
+    expect(usage.rows.reduce((sum, row) => sum + row.bytes, 0)).toBe(
+      usage.bytes,
+    );
+    expect(usage.rows.reduce((sum, row) => sum + row.entries, 0)).toBe(
+      usage.entries,
+    );
+    expect(usage.bytes).toBe(stats.bytes);
+    expect(usage.entries).toBe(stats.entries);
+    expect(usage.megabytes).toBeCloseTo(214 + 1234 / MIB, 9);
+    expect(usage.rows[1]).toEqual({
+      namespace: "summary",
+      entries: 180,
+      bytes: 180 * MIB,
+      megabytes: 180,
+    });
+  });
+
+  it("answers an empty cache with no row and a zero total; ignores a negative or non-numeric count", () => {
+    expect(cacheUsage(fakeStats({}))).toEqual({
+      rows: [],
+      entries: 0,
+      bytes: 0,
+      megabytes: 0,
+    });
+    const odd = fakeStats({ summary: [2, 10] });
+    (odd.byNamespace as Record<string, unknown>)["embedding"] = {
+      entries: -4,
+      bytes: Number.NaN,
+    };
+    const usage = cacheUsage(odd);
+    expect(usage.rows.map((row) => row.namespace)).toEqual(["summary"]);
+    expect(usage.bytes).toBe(10);
+  });
+});
+
+describe("P7-T09 — the host's Advanced methods", () => {
+  it("with no port: verbose off and unwritable, no usage, no path, nothing to reveal", async () => {
+    const { host } = advancedHost();
+    await expect(host.readVerboseLogging()).resolves.toBe(false);
+    await expect(host.setVerboseLogging(true)).resolves.toBe(false);
+    await expect(host.cacheStats()).resolves.toBeUndefined();
+    await expect(host.databasePath()).resolves.toBe("");
+    await expect(host.revealDatabase()).resolves.toBe(false);
+  });
+
+  it("reads verbose as on exactly when logLevel is debug, and writes only debug or warn", async () => {
+    for (const [level, on] of [
+      ["debug", true],
+      ["warn", false],
+      ["info", false],
+      ["error", false],
+    ] as const) {
+      const { host } = advancedHost(advancedPort({ level }));
+      await expect(host.readVerboseLogging(), level).resolves.toBe(on);
+    }
+    const port = advancedPort({ level: "info" });
+    const { host } = advancedHost(port);
+    await expect(host.setVerboseLogging(true)).resolves.toBe(true);
+    await expect(host.setVerboseLogging(false)).resolves.toBe(true);
+    expect(port.levelWrites).toEqual(["debug", "warn"]);
+  });
+
+  it("answers false, writing nothing more, when the log level cannot be written", async () => {
+    const port = advancedPort();
+    port.writeLogLevel = () => {
+      throw new Error("D:\\leak");
+    };
+    const { host, sink } = advancedHost(port);
+    await expect(host.setVerboseLogging(true)).resolves.toBe(false);
+    expect(sink.lines.join("\n")).not.toContain("leak");
+  });
+
+  it("reduces the port's stats with cacheUsage, and answers undefined when the database is not open", async () => {
+    const stats = fakeStats({ summary: [2, 2 * MIB] });
+    await expect(
+      advancedHost(advancedPort({ stats })).host.cacheStats(),
+    ).resolves.toEqual(cacheUsage(stats));
+    await expect(
+      advancedHost(advancedPort({ open: false })).host.cacheStats(),
+    ).resolves.toBeUndefined();
+  });
+
+  it('answers the database\'s path, and "" when it is not open or the read throws — never logging it', async () => {
+    const path = "C:\\Users\\someone\\Zotero\\research-helper.sqlite";
+    await expect(
+      advancedHost(advancedPort({ path })).host.databasePath(),
+    ).resolves.toBe(path);
+    await expect(
+      advancedHost(advancedPort({ open: false })).host.databasePath(),
+    ).resolves.toBe("");
+    const port = advancedPort();
+    port.databasePath = () => Promise.reject(new Error(`no such ${path}`));
+    const { host, sink } = advancedHost(port);
+    await expect(host.databasePath()).resolves.toBe("");
+    await host.revealDatabase();
+    await host.cacheStats();
+    expect(sink.lines.join("\n")).not.toMatch(
+      /someone|research-helper\.sqlite/,
+    );
+  });
+
+  it("reveals through the port, and answers false when it is not open or the reveal throws", async () => {
+    const port = advancedPort();
+    await expect(advancedHost(port).host.revealDatabase()).resolves.toBe(true);
+    expect(port.reveals).toBe(1);
+    await expect(
+      advancedHost(advancedPort({ open: false })).host.revealDatabase(),
+    ).resolves.toBe(false);
+    const failing = advancedPort();
+    failing.revealDatabase = () => Promise.reject(new Error("D:\\leak"));
+    const { host, sink } = advancedHost(failing);
+    await expect(host.revealDatabase()).resolves.toBe(false);
+    expect(sink.lines.join("\n")).not.toContain("leak");
+  });
+});
+
+interface AdvancedController {
+  logic: {
+    cacheLines: (
+      usage: unknown,
+      l10n: unknown,
+    ) => { id: string; args?: Record<string, unknown> }[];
+  };
+  l10n: Record<string, string>;
+  init: (root: unknown) => Promise<void>;
+  refreshCacheUsage: () => Promise<void>;
+  storeVerboseLogging: (on: boolean) => Promise<void>;
+}
+
+function advancedPane(port: MemoryAdvancedPort) {
+  const { host: real } = advancedHost(port);
+  const h = paneHarness({
+    host: {
+      ...fakeHost({}),
+      readVerboseLogging: () => real.readVerboseLogging(),
+      setVerboseLogging: (on: boolean) => real.setVerboseLogging(on),
+      cacheStats: () => real.cacheStats(),
+      databasePath: () => real.databasePath(),
+      revealDatabase: () => real.revealDatabase(),
+    },
+  });
+  return { h, c: h.controller as unknown as AdvancedController };
+}
+
+describe("P7-T09 — the controller's Advanced painting", () => {
+  it("maps a usage to a total line, then one line per row, with numbers as numbers; an absent usage to the unavailable line", () => {
+    const c = paneHarness({}).controller as unknown as AdvancedController;
+    const usage = cacheUsage(
+      fakeStats({ summary: [180, 180 * MIB], embedding: [4, 6 * MIB] }),
+    );
+    expect(c.logic.cacheLines(usage, c.l10n)).toEqual([
+      {
+        id: PREFERENCES_L10N.cacheUsageTotal,
+        args: { megabytes: 186, entries: 184 },
+      },
+      {
+        id: PREFERENCES_L10N.cacheUsageRow,
+        args: { namespace: "summary", megabytes: 180, entries: 180 },
+      },
+      {
+        id: PREFERENCES_L10N.cacheUsageRow,
+        args: { namespace: "embedding", megabytes: 6, entries: 4 },
+      },
+    ]);
+    expect(c.logic.cacheLines(undefined, c.l10n)).toEqual([
+      { id: PREFERENCES_L10N.cacheUsageUnavailable },
+    ]);
+  });
+
+  it("paints the checkbox from logLevel, the cache lines and the data location on open", async () => {
+    for (const [level, on] of [
+      ["debug", true],
+      ["warn", false],
+    ] as const) {
+      const { h, c } = advancedPane(
+        advancedPort({
+          level,
+          stats: fakeStats({ summary: [2, 2 * MIB] }),
+          path: "D:\\Zotero\\research-helper.sqlite",
+        }),
+      );
+      await c.init(h.root);
+      const box = h.byId("rh-verbose-logging") as unknown as {
+        checked?: boolean;
+        disabled: boolean;
+      };
+      expect(box.checked, level).toBe(on);
+      expect(box.disabled).toBe(false);
+      const lines = h.byId("rh-cache-breakdown").children;
+      expect(lines.map((p) => p.getAttribute("data-l10n-id"))).toEqual([
+        PREFERENCES_L10N.cacheUsageTotal,
+        PREFERENCES_L10N.cacheUsageRow,
+      ]);
+      const where = h.byId("rh-data-location");
+      expect(where.getAttribute("data-l10n-id")).toBe(
+        PREFERENCES_L10N.dataLocation,
+      );
+      expect(JSON.parse(where.getAttribute("data-l10n-args")!)).toEqual({
+        path: "D:\\Zotero\\research-helper.sqlite",
+      });
+      expect(h.byId("rh-data-location-show").disabled).toBe(false);
+    }
+  });
+
+  it("writes debug on check and warn on uncheck through the host, and nothing else", async () => {
+    const port = advancedPort({ level: "warn" });
+    const { h, c } = advancedPane(port);
+    await c.init(h.root);
+    const box = h.byId("rh-verbose-logging") as unknown as {
+      checked?: boolean;
+      fire: (type: string) => void;
+    };
+    box.checked = true;
+    box.fire("command");
+    await flush();
+    box.checked = false;
+    box.fire("command");
+    await flush();
+    expect(port.levelWrites).toEqual(["debug", "warn"]);
+  });
+
+  it("repaints the checkbox from the stored value when the write is refused", async () => {
+    const port = advancedPort({ level: "warn" });
+    port.writeLogLevel = () => {
+      throw new Error("refused");
+    };
+    const { h, c } = advancedPane(port);
+    await c.init(h.root);
+    const box = h.byId("rh-verbose-logging") as unknown as {
+      checked?: boolean;
+    };
+    box.checked = true;
+    await c.storeVerboseLogging(true);
+    expect(box.checked).toBe(false);
+  });
+
+  it("refreshes the cache lines on demand (P7-T10's clear), replacing the old ones", async () => {
+    const counts: Partial<Record<CacheNamespace, [number, number]>> = {
+      summary: [2, 2 * MIB],
+      embedding: [1, MIB],
+    };
+    const port = advancedPort();
+    port.cacheStats = () => Promise.resolve(fakeStats(counts));
+    const { h, c } = advancedPane(port);
+    await c.init(h.root);
+    expect(h.byId("rh-cache-breakdown").children).toHaveLength(3);
+    delete counts.summary;
+    delete counts.embedding;
+    await c.refreshCacheUsage();
+    const lines = h.byId("rh-cache-breakdown").children;
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0]!.getAttribute("data-l10n-args")!)).toEqual({
+      megabytes: 0,
+      entries: 0,
+    });
+  });
+
+  it("with the database closed: the unavailable lines, and Show in folder disabled", async () => {
+    const { h, c } = advancedPane(advancedPort({ open: false }));
+    await c.init(h.root);
+    const lines = h.byId("rh-cache-breakdown").children;
+    expect(lines.map((p) => p.getAttribute("data-l10n-id"))).toEqual([
+      PREFERENCES_L10N.cacheUsageUnavailable,
+    ]);
+    expect(h.byId("rh-data-location").getAttribute("data-l10n-id")).toBe(
+      PREFERENCES_L10N.dataLocationUnavailable,
+    );
+    expect(h.byId("rh-data-location-show").disabled).toBe(true);
+  });
+
+  it("with no host: the checkbox disabled and unchecked, nothing written", async () => {
+    const h = paneHarness({});
+    await (h.controller as unknown as AdvancedController).init(h.root);
+    const box = h.byId("rh-verbose-logging") as unknown as {
+      checked?: boolean;
+      disabled: boolean;
+    };
+    expect(box.checked).toBe(false);
+    expect(box.disabled).toBe(true);
+    expect(h.byId("rh-data-location-show").disabled).toBe(true);
+  });
+
+  it("asks the host to reveal the database on Show in folder", async () => {
+    const port = advancedPort();
+    const { h, c } = advancedPane(port);
+    await c.init(h.root);
+    h.byId("rh-data-location-show").fire("command");
+    await flush();
+    expect(port.reveals).toBe(1);
+  });
+});
+
+/* --------------------------------- P7-T17: dated provider-policy lines */
+
+const NOTE = {
+  messageId: PREFERENCES_L10N.retentionOpenai,
+  sourceUrls: ["https://developers.openai.com/api/docs/guides/your-data"],
+  asOf: "2026-11-17",
+};
+
+describe("P7-T17 — policyLines: only a dated, sourced line reaches the pane", () => {
+  it("passes a known message with an ISO date and https sources, as its id and date", () => {
+    expect(policyLines([NOTE])).toEqual([
+      { id: PREFERENCES_L10N.retentionOpenai, date: "2026-11-17" },
+    ]);
+    expect(policyLines(undefined)).toEqual([]);
+  });
+
+  it("drops a row with no date, a non-ISO date, no source, a non-https source or an unknown message", () => {
+    expect(
+      policyLines([
+        { ...NOTE, asOf: "" },
+        { ...NOTE, asOf: "17 November 2026" },
+        { ...NOTE, sourceUrls: [] },
+        { ...NOTE, sourceUrls: ["http://openai.com/policy"] },
+        { ...NOTE, sourceUrls: ["not a url"] },
+        { ...NOTE, messageId: PREFERENCES_L10N.privacyExplain },
+      ]),
+    ).toEqual([]);
+  });
+
+  it("answers the bound rows through the host, and none without them", async () => {
+    const withNotes = createPreferencesHost({
+      secrets: memoryStore(),
+      request: () => Promise.reject(new Error("no request in this test")),
+      getBackendPref: () => OS_KEYSTORE_PREF_VALUE,
+      providerPrefs: {
+        getActiveProvider: () => "openrouter",
+        getBaseUrl: () => "",
+        setBaseUrl: () => undefined,
+      },
+      policyNotes: [NOTE, { ...NOTE, asOf: "" }],
+      clock: createManualClock(1_760_000_000_000),
+    });
+    await expect(withNotes.readPolicyNotes()).resolves.toEqual([
+      { id: PREFERENCES_L10N.retentionOpenai, date: "2026-11-17" },
+    ]);
+    await expect(advancedHost().host.readPolicyNotes()).resolves.toEqual([]);
+  });
+});
+
+describe("P7-T17 — the controller's provider-policy lines", () => {
+  it("paints a heading, then each line with its date, and shows the block", async () => {
+    const h = paneHarness({
+      host: {
+        ...fakeHost({}),
+        readPolicyNotes: () =>
+          Promise.resolve([
+            { id: PREFERENCES_L10N.retentionOpenai, date: "2026-11-17" },
+            { id: PREFERENCES_L10N.retentionGeminiFree, date: "2026-11-17" },
+          ]),
+      },
+    });
+    await (h.controller as unknown as AdvancedController).init(h.root);
+    const block = h.byId("rh-prefs-retention");
+    expect(block.hidden).toBe(false);
+    expect(block.children.map((p) => p.getAttribute("data-l10n-id"))).toEqual([
+      PREFERENCES_L10N.retentionTitle,
+      PREFERENCES_L10N.retentionOpenai,
+      PREFERENCES_L10N.retentionGeminiFree,
+    ]);
+    expect(
+      JSON.parse(block.children[1]!.getAttribute("data-l10n-args")!),
+    ).toEqual({ date: "2026-11-17" });
+  });
+
+  it("keeps the block hidden and empty with no host, no line, or a line without a date", async () => {
+    for (const host of [
+      undefined,
+      { ...fakeHost({}), readPolicyNotes: () => Promise.resolve([]) },
+      {
+        ...fakeHost({}),
+        readPolicyNotes: () =>
+          Promise.resolve([{ id: PREFERENCES_L10N.retentionOpenai, date: "" }]),
+      },
+      {
+        ...fakeHost({}),
+        readPolicyNotes: () => Promise.reject(new Error("no")),
+      },
+    ]) {
+      const h = paneHarness(host === undefined ? {} : { host });
+      await (h.controller as unknown as AdvancedController).init(h.root);
+      const block = h.byId("rh-prefs-retention");
+      expect(block.hidden).toBe(true);
+      expect(block.children).toHaveLength(0);
+    }
+  });
+
+  it("ships the six ids in en-US, on the main-window surface, and only as drafts in ko-KR", () => {
+    const ids = [
+      PREFERENCES_L10N.retentionTitle,
+      PREFERENCES_L10N.retentionOpenai,
+      PREFERENCES_L10N.retentionAnthropic,
+      PREFERENCES_L10N.retentionGeminiPaid,
+      PREFERENCES_L10N.retentionGeminiFree,
+      PREFERENCES_L10N.retentionOpenrouter,
+    ];
+    const declared = new Set<string>(MAIN_WINDOW_MESSAGE_IDS);
+    for (const id of ids) {
+      expect(declared.has(id), id).toBe(true);
+      expect(FTL, id).toMatch(new RegExp(`^${id} =`, "m"));
+      expect(KO_FTL, id).not.toMatch(new RegExp(`^${id} =`, "m"));
+      expect(KO_FTL, id).toMatch(new RegExp(`^# ${id} =`, "m"));
+    }
+    expect(KO_FTL).toContain(
+      "# Draft (coordinator, 2026-11-17, not adopted; G-41, P7-T17):",
+    );
+  });
+});
+
+/* --------------------------------------- P7-T13: the diagnostics actions */
+
+/** A SYNTHETIC path the user "chose": it must reach the port and no log line. */
+const CHOSEN_PATH = "D:\\Someone\\Private\\research-helper-diagnostics.txt";
+const DIAGNOSTICS_TEXT =
+  "Research Helper diagnostics\n== environment ==\nplugin 0.0.2";
+
+interface MemoryDiagnosticsPort extends DiagnosticsPort {
+  saves: { path: string; text: string }[];
+  copies: string[];
+}
+
+function diagnosticsPort(
+  options: { text?: string; saveOk?: boolean; copyOk?: boolean } = {},
+): MemoryDiagnosticsPort {
+  const port: MemoryDiagnosticsPort = {
+    saves: [],
+    copies: [],
+    text: () => Promise.resolve(options.text ?? DIAGNOSTICS_TEXT),
+    save: (path, text) => {
+      port.saves.push({ path, text });
+      return Promise.resolve(options.saveOk ?? true);
+    },
+    copy: (text) => {
+      port.copies.push(text);
+      return options.copyOk ?? true;
+    },
+  };
+  return port;
+}
+
+function diagnosticsHost(port?: DiagnosticsPort) {
+  const sink = recordingSink();
+  const clock = createManualClock(1_760_000_000_000);
+  const host = createPreferencesHost({
+    secrets: memoryStore(),
+    request: () => Promise.reject(new Error("no request in this test")),
+    getBackendPref: () => OS_KEYSTORE_PREF_VALUE,
+    providerPrefs: {
+      getActiveProvider: () => "openrouter",
+      getBaseUrl: () => "",
+      setBaseUrl: () => undefined,
+    },
+    ...(port !== undefined && { diagnostics: port }),
+    clock,
+    logger: createLogger({ sink, clock, level: "debug" }),
+  });
+  return { host, sink };
+}
+
+describe("P7-T13 — the diagnostics markup and strings", () => {
+  it("draws Show, Save and Copy in rh-prefs-advanced, Save and Copy disabled, and a read-only, hidden text box", () => {
+    const box = groupbox("rh-prefs-advanced");
+    for (const id of [
+      "rh-diagnostics-preview",
+      "rh-diagnostics-save",
+      "rh-diagnostics-copy",
+      "rh-diagnostics-text",
+      "rh-diagnostics-status",
+    ]) {
+      expect(box, id).toContain(`id="${id}"`);
+    }
+    expect(box).toMatch(/id="rh-diagnostics-save"[^>]*disabled="true"/);
+    expect(box).toMatch(/id="rh-diagnostics-copy"[^>]*disabled="true"/);
+    expect(box).not.toMatch(/id="rh-diagnostics-preview"[^>]*disabled=/);
+    expect(box).toMatch(/<html:textarea[^>]*readonly="true"[^>]*hidden="true"/);
+    expect(box).toMatch(/id="rh-diagnostics-status"[^>]*role="status"/);
+  });
+
+  it("ships the seven ids in en-US, on the main-window surface, and only as drafts in ko-KR; the note says no key and no paper content", () => {
+    const ids = [
+      PREFERENCES_L10N.diagnosticsTitle,
+      PREFERENCES_L10N.diagnosticsNote,
+      PREFERENCES_L10N.diagnosticsPreview,
+      PREFERENCES_L10N.diagnosticsText,
+      PREFERENCES_L10N.diagnosticsSave,
+      PREFERENCES_L10N.diagnosticsCopy,
+      PREFERENCES_L10N.diagnosticsStatus,
+    ];
+    const declared = new Set<string>(MAIN_WINDOW_MESSAGE_IDS);
+    for (const id of ids) {
+      expect(declared.has(id), id).toBe(true);
+      expect(FTL, id).toMatch(new RegExp(`^${id} =`, "m"));
+      expect(KO_FTL, id).not.toMatch(new RegExp(`^${id} =`, "m"));
+      expect(KO_FTL, id).toMatch(new RegExp(`^# ${id} =`, "m"));
+    }
+    expect(KO_FTL).toContain(
+      "# Draft (coordinator, 2026-11-17, not adopted; G-41, P7-T13):",
+    );
+    expect(FTL).toMatch(
+      /^research-helper-prefs-diagnostics-note = .*No API key and no paper content is included\. Nothing is sent/m,
+    );
+  });
+});
+
+describe("P7-T13 — the host's diagnostics methods", () => {
+  it('with no port: "" and false, and nothing is written or copied', async () => {
+    const { host } = diagnosticsHost();
+    await expect(host.diagnosticsText()).resolves.toBe("");
+    await expect(
+      host.saveDiagnostics(CHOSEN_PATH, DIAGNOSTICS_TEXT),
+    ).resolves.toBe(false);
+    await expect(host.copyDiagnostics(DIAGNOSTICS_TEXT)).resolves.toBe(false);
+  });
+
+  it("builds through the port, saves the text to the chosen path and copies it, logging no path and no text", async () => {
+    const port = diagnosticsPort();
+    const { host, sink } = diagnosticsHost(port);
+    await expect(host.diagnosticsText()).resolves.toBe(DIAGNOSTICS_TEXT);
+    await expect(
+      host.saveDiagnostics(CHOSEN_PATH, DIAGNOSTICS_TEXT),
+    ).resolves.toBe(true);
+    await expect(host.copyDiagnostics(DIAGNOSTICS_TEXT)).resolves.toBe(true);
+    expect(port.saves).toEqual([{ path: CHOSEN_PATH, text: DIAGNOSTICS_TEXT }]);
+    expect(port.copies).toEqual([DIAGNOSTICS_TEXT]);
+    const logged = sink.lines.join("\n");
+    expect(logged).not.toMatch(/Someone|Private|research-helper-diagnostics/);
+    expect(logged).not.toContain("== environment ==");
+  });
+
+  it("refuses an empty path or text without asking the port", async () => {
+    const port = diagnosticsPort();
+    const { host } = diagnosticsHost(port);
+    await expect(host.saveDiagnostics("", DIAGNOSTICS_TEXT)).resolves.toBe(
+      false,
+    );
+    await expect(host.saveDiagnostics(CHOSEN_PATH, "")).resolves.toBe(false);
+    await expect(host.copyDiagnostics("")).resolves.toBe(false);
+    expect(port.saves).toEqual([]);
+    expect(port.copies).toEqual([]);
+  });
+
+  it("answers empty or false when the port throws, logging the error's name only", async () => {
+    const port = diagnosticsPort();
+    port.text = () => Promise.reject(new Error(`no ${CHOSEN_PATH}`));
+    port.save = () => Promise.reject(new Error(`cannot write ${CHOSEN_PATH}`));
+    port.copy = () => {
+      throw new Error(`cannot copy for ${CHOSEN_PATH}`);
+    };
+    const { host, sink } = diagnosticsHost(port);
+    await expect(host.diagnosticsText()).resolves.toBe("");
+    await expect(
+      host.saveDiagnostics(CHOSEN_PATH, DIAGNOSTICS_TEXT),
+    ).resolves.toBe(false);
+    await expect(host.copyDiagnostics(DIAGNOSTICS_TEXT)).resolves.toBe(false);
+    expect(sink.lines.join("\n")).not.toMatch(/Someone|Private/);
+  });
+});
+
+interface DiagnosticsController {
+  init: (root: unknown) => Promise<void>;
+  previewDiagnostics: () => Promise<void>;
+  saveDiagnostics: () => Promise<void>;
+  copyDiagnostics: () => Promise<void>;
+}
+
+function diagnosticsPane(port?: DiagnosticsPort) {
+  const { host: real } = diagnosticsHost(port);
+  const h = paneHarness({
+    host: {
+      ...fakeHost({}),
+      diagnosticsText: () => real.diagnosticsText(),
+      saveDiagnostics: (path: string, text: string) =>
+        real.saveDiagnostics(path, text),
+      copyDiagnostics: (text: string) => real.copyDiagnostics(text),
+    },
+  });
+  return { h, c: h.controller as unknown as DiagnosticsController };
+}
+
+/** A stand-in for Zotero's `FilePicker` module, answering `file`. */
+function fakeChromeUtils(file: string, answer: "ok" | "replace" | "cancel") {
+  const inits: { title: string; mode: number }[] = [];
+  const filters: number[] = [];
+  const defaults: string[] = [];
+  class FakePicker {
+    readonly modeSave = 1;
+    readonly returnOK = 0;
+    readonly returnCancel = 1;
+    readonly returnReplace = 2;
+    readonly filterText = 4;
+    file = "";
+    set defaultString(value: string) {
+      defaults.push(value);
+    }
+    init(_window: unknown, title: string, mode: number) {
+      inits.push({ title, mode });
+    }
+    appendFilters(filter: number) {
+      filters.push(filter);
+    }
+    show() {
+      if (answer !== "cancel") this.file = file;
+      return Promise.resolve(
+        answer === "ok" ? 0 : answer === "replace" ? 2 : 1,
+      );
+    }
+  }
+  return {
+    utils: { importESModule: () => ({ FilePicker: FakePicker }) },
+    inits,
+    filters,
+    defaults,
+  };
+}
+
+describe("P7-T13 — the controller's diagnostics actions", () => {
+  const holder = globalThis as { ChromeUtils?: unknown };
+  afterEach(() => {
+    delete holder.ChromeUtils;
+  });
+
+  it("shows the whole text in the box, and only then enables Save and Copy", async () => {
+    const { h, c } = diagnosticsPane(diagnosticsPort());
+    await c.init(h.root);
+    expect(h.byId("rh-diagnostics-save").disabled).toBe(true);
+    expect(h.byId("rh-diagnostics-copy").disabled).toBe(true);
+    expect(h.byId("rh-diagnostics-text").hidden).toBe(true);
+    await c.previewDiagnostics();
+    expect(h.byId("rh-diagnostics-text").value).toBe(DIAGNOSTICS_TEXT);
+    expect(h.byId("rh-diagnostics-text").hidden).toBe(false);
+    expect(h.byId("rh-diagnostics-save").disabled).toBe(false);
+    expect(h.byId("rh-diagnostics-copy").disabled).toBe(false);
+  });
+
+  it("with no text: keeps Save and Copy disabled and says diagnostics are unavailable", async () => {
+    const { h, c } = diagnosticsPane();
+    await c.init(h.root);
+    await c.previewDiagnostics();
+    expect(h.byId("rh-diagnostics-save").disabled).toBe(true);
+    expect(h.byId("rh-diagnostics-copy").disabled).toBe(true);
+    expect(h.byId("rh-diagnostics-text").hidden).toBe(true);
+    expect(h.l10nCalls).toContainEqual({
+      id: PREFERENCES_L10N.diagnosticsStatus,
+      element: "rh-diagnostics-status",
+      args: { outcome: "unavailable" },
+    });
+  });
+
+  it("Copy hands exactly the text shown to the host, and says copied", async () => {
+    const port = diagnosticsPort();
+    const { h, c } = diagnosticsPane(port);
+    await c.init(h.root);
+    await c.copyDiagnostics();
+    expect(port.copies).toEqual([]);
+    await c.previewDiagnostics();
+    await c.copyDiagnostics();
+    expect(port.copies).toEqual([DIAGNOSTICS_TEXT]);
+    expect(h.l10nCalls).toContainEqual({
+      id: PREFERENCES_L10N.diagnosticsStatus,
+      element: "rh-diagnostics-status",
+      args: { outcome: "copied" },
+    });
+  });
+
+  it("Save asks Zotero's save picker for a text file and writes exactly the text shown to the chosen path", async () => {
+    const port = diagnosticsPort();
+    const picker = fakeChromeUtils(CHOSEN_PATH, "replace");
+    holder.ChromeUtils = picker.utils;
+    const { h, c } = diagnosticsPane(port);
+    await c.init(h.root);
+    await c.previewDiagnostics();
+    await c.saveDiagnostics();
+    expect(picker.inits.map((i) => i.mode)).toEqual([1]);
+    expect(picker.filters).toEqual([4]);
+    expect(picker.defaults).toEqual(["research-helper-diagnostics.txt"]);
+    expect(port.saves).toEqual([{ path: CHOSEN_PATH, text: DIAGNOSTICS_TEXT }]);
+    expect(h.l10nCalls).toContainEqual({
+      id: PREFERENCES_L10N.diagnosticsStatus,
+      element: "rh-diagnostics-status",
+      args: { outcome: "saved" },
+    });
+    expect(h.debugLines.join("\n")).not.toMatch(/Someone|Private/);
+  });
+
+  it("a cancelled picker writes nothing; a failed write says failed", async () => {
+    const port = diagnosticsPort({ saveOk: false });
+    holder.ChromeUtils = fakeChromeUtils(CHOSEN_PATH, "cancel").utils;
+    const { h, c } = diagnosticsPane(port);
+    await c.init(h.root);
+    await c.previewDiagnostics();
+    await c.saveDiagnostics();
+    expect(port.saves).toEqual([]);
+    holder.ChromeUtils = fakeChromeUtils(CHOSEN_PATH, "ok").utils;
+    await c.saveDiagnostics();
+    expect(port.saves).toHaveLength(1);
+    expect(h.l10nCalls).toContainEqual({
+      id: PREFERENCES_L10N.diagnosticsStatus,
+      element: "rh-diagnostics-status",
+      args: { outcome: "failed" },
+    });
+  });
+
+  it("the three buttons are wired to the three actions", async () => {
+    const port = diagnosticsPort();
+    const { h, c } = diagnosticsPane(port);
+    await c.init(h.root);
+    h.byId("rh-diagnostics-preview").fire("command");
+    await flush();
+    expect(h.byId("rh-diagnostics-text").value).toBe(DIAGNOSTICS_TEXT);
+    h.byId("rh-diagnostics-copy").fire("command");
+    await flush();
+    expect(port.copies).toEqual([DIAGNOSTICS_TEXT]);
   });
 });

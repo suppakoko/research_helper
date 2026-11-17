@@ -183,6 +183,16 @@ export function pluginDatabasePath(): string {
   return PathUtils.join(Zotero.DataDirectory.dir, PLUGIN_DATABASE_FILE);
 }
 
+/**
+ * `P7-T09`: the preference pane's "Show in folder" — Zotero's own
+ * `Zotero.File.reveal` on {@link pluginDatabasePath}, which shows the file in
+ * the system's file manager. Caller: `preferencesAdvancedPort` in
+ * `src/bootstrap/registerUI.ts`. The path is never logged.
+ */
+export async function revealPluginDatabase(): Promise<void> {
+  await Zotero.File.reveal(pluginDatabasePath());
+}
+
 /** `docs/07` §8.3's `search_provenance` columns, in the DDL's order. */
 const INSERT_PROVENANCE =
   "INSERT INTO search_provenance " +

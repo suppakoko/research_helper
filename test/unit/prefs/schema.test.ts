@@ -444,7 +444,8 @@ const NO_PREF_LINE: readonly string[] = [
   // says it has no `pref()` line.
   "gemini.paidTier",
   "llm.tokenEstimateCalibration",
-  "summary.fullTextMode",
+  // `summary.fullTextMode` left this list on 2026-11-17: P7-T08 binds it in the
+  // pane, and docs/01 §7.2 gained its line (that section's note of the date).
   "summary.fullTextAutoMaxPapers",
   "summary.confirmAboveCents",
   "summary.minAbstractChars",
@@ -470,8 +471,8 @@ const NO_PREF_LINE: readonly string[] = [
   "related.enabled",
   "recommend.enabled",
   // P6-T02 (2026-11-16): §7.2 lists tts.voice, tts.model, tts.targetMinutes
-  // and tts.outputFormat, and none of these four.
-  "tts.language",
+  // and tts.outputFormat, and none of these four. `tts.language` left this
+  // list on 2026-11-17, with `summary.fullTextMode` above (P7-T08).
   "tts.linkedFileDir",
   "gemini.tierAnswer",
   "audio.enabled",
@@ -1112,19 +1113,26 @@ describe("getPref coerces and falls back", () => {
     expect(doc).toContain("| ~~⚠ `tts.provider`~~ |");
   });
 
-  it("binds no Phase 6 row in the preferences pane: the pane's audio controls are Phase 7's (plan/09 §0.4 line 11)", () => {
+  it("binds exactly three Phase 6 rows in the preferences pane, the audio controls P7-T08 built (plan/09 §0.4 line 11; plan/10 P7-T08)", () => {
+    // Was "binds no Phase 6 row … the pane's audio controls are Phase 7's"
+    // until 2026-11-17, when P7-T08 built them. tts.linkedFileDir is shown in
+    // the pane but written through the host (setLinkedFolder), never bound;
+    // the other four stay out of the pane (docs/08 §7.3's note of that date).
     const pane = readRepoFile("addon/content/preferences.xhtml");
+    const bound = (key: string): boolean =>
+      pane.includes(`preference="extensions.zotero.research-helper.${key}"`);
+    for (const key of ["tts.voice", "tts.language", "tts.targetMinutes"]) {
+      expect(bound(key), key).toBe(true);
+    }
     for (const key of [
-      "tts.voice",
-      "tts.language",
       "tts.model",
-      "tts.targetMinutes",
       "tts.outputFormat",
       "tts.linkedFileDir",
       "gemini.tierAnswer",
       "audio.enabled",
     ]) {
-      expect(pane.includes(key), key).toBe(false);
+      expect(bound(key), key).toBe(false);
+      expect(pane.includes(`research-helper.${key}`), key).toBe(false);
     }
   });
 
@@ -1529,8 +1537,9 @@ describe("addon/prefs.js agrees with PREFS", () => {
     // hidden `report.enabled` (item 307(d)); 30 again since 2026-11-02, when
     // `P4-T20` removed it; 33 the same day: P5-T02's three; 34 the same day:
     // P4-T21's report.pausedNoticeShown; 38 since 2026-11-16: P6-T02's four
-    // (tts.language, tts.linkedFileDir, gemini.tierAnswer, audio.enabled).
-    expect(NO_PREF_LINE).toHaveLength(38);
+    // (tts.language, tts.linkedFileDir, gemini.tierAnswer, audio.enabled); 36
+    // since 2026-11-17: P7-T08 bound tts.language and summary.fullTextMode.
+    expect(NO_PREF_LINE).toHaveLength(36);
     for (const key of NO_PREF_LINE) expect(keys.has(key), key).toBe(true);
   });
 
