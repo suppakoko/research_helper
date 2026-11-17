@@ -2380,6 +2380,10 @@ export async function installServices(
       pipelines
         .list()
         .some((pipeline) => pipeline.id === pipelineId && pipeline.resumable),
+    // docs/07 §12.6's note, point 9 (DECIDED 2026-11-17, coordinator, under
+    // plan/00 §6 item 313): an audio job the app quit during ends cancelled;
+    // its stored script stays. Every other non-resumable job still fails.
+    cancelledAfterRestart: (pipelineId) => pipelineId === "audioReport",
     resumeGuards: {
       skipCached: createSkipCachedGuard({
         logger: logger.child({ surface: "summaryCache" }),

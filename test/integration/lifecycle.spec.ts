@@ -32,10 +32,7 @@
 
 import type Addon from "../../src/addon";
 import { config } from "../../package.json";
-import {
-  L10N_MENU_ROOT,
-  L10N_MENU_SPIKE_CREATE_ITEM,
-} from "../../src/ui/menus/toolsMenu";
+import { L10N_MENU_ROOT } from "../../src/ui/menus/toolsMenu";
 import type { CancellationToken } from "../../src/core/jobQueue/cancellation";
 import { L10N_MENU_SEARCH_IMPORT } from "../../src/i18n/keys";
 import { PREF_KEYS } from "../../src/prefs/keys";
@@ -166,6 +163,10 @@ interface ToolsMenuCount {
  * Build the Tools popup the way Zotero does on `popupshowing`, count this
  * plugin's elements, then hide it again.
  *
+ * The item counted is Search & Import…, the submenu's one entry since
+ * `plan/10` `P7-T04` retired `P0-T10`'s spike command (2026-11-17), which was
+ * the item counted until then.
+ *
  * Counting the raw DOM without an update is wrong: after `unregisterMenu` a
  * stale `<menu>` stays in the popup until its next update (`P0-T32`). And
  * `popuphidden` must be fired on both popups, or the submenu's `popupshowing`
@@ -207,7 +208,7 @@ async function countToolsMenu(
     submenus.push(submenu);
     submenu.dispatchEvent(new win.Event("popupshowing"));
     items += Array.from(submenu.children).filter(
-      (el) => el.getAttribute("data-l10n-id") === L10N_MENU_SPIKE_CREATE_ITEM,
+      (el) => el.getAttribute("data-l10n-id") === L10N_MENU_SEARCH_IMPORT,
     ).length;
   }
   for (const submenu of submenus) {

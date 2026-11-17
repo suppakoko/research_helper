@@ -46,6 +46,7 @@ import type { Usage } from "../../model/usage";
 import type { PromptRegistry } from "../../prompts";
 import { chooseAttachmentMode, type PcmChunk } from "../../tts/audioStore";
 import { chunkScript } from "../../tts/chunk";
+import { GEMINI_TTS_FALLBACK_MODEL } from "../../tts/geminiTts";
 import { ttsPricesFor } from "../../tts/pricing";
 import type { TTSProvider, VoiceInfo } from "../../tts/types";
 import type { CancellationToken } from "../../core/jobQueue/cancellation";
@@ -257,8 +258,16 @@ export interface AudioRunPlan {
   readonly companion: TrendReport | undefined;
   readonly language: AudioLanguage;
   readonly voice: string;
+  /**
+   * The quoted model: `tts.model`, or `GEMINI_TTS_FALLBACK_MODEL` when it is
+   * empty. No request was made for it (`docs/07` §12.6's note, point 3, as
+   * decided 2026-11-17, `plan/00` §6 item 385).
+   */
   readonly ttsModel: string;
+  /** The quoted model's prices: what the first confirmation showed. */
   readonly ttsPrices: ModelPrices | undefined;
+  /** `tts.model` as read, for `execute`'s `resolveModel` after the confirmation. */
+  readonly ttsModelPreference: string;
   /** `script`: no script is stored for the language, so one is written. */
   readonly step: "script" | "audio";
   /** The resolved `TARGET_MINUTES`, for the script call. */
@@ -459,6 +468,37 @@ function unknownPolicyModel(modelId: string): ModelInfo {
   };
 }
 
+/**
+ * The model the first confirmation is priced with, with no request:
+ * `tts.model` trimmed, or the marked fallback id when it is empty (`docs/07`
+ * §12.6's note, point 3, as decided 2026-11-17, `plan/00` §6 item 385).
+ */
+function quotedTtsModel(preference: string): string {
+  const preferred = preference.trim();
+  return preferred === "" ? GEMINI_TTS_FALLBACK_MODEL : preferred;
+}
+
+/**
+ * Whether two price entries charge the same: their figures, not the date or
+ * source of the table (point 3(d), coordinator, under item 313).
+ */
+function samePrices(
+  a: ModelPrices | undefined,
+  b: ModelPrices | undefined,
+): boolean {
+  const figures = (p: ModelPrices | undefined): string =>
+    p === undefined
+      ? "none"
+      : JSON.stringify([
+          p.inputPerMTokUsd ?? null,
+          p.outputPerMTokUsd ?? null,
+          p.cachedInputPerMTokUsd ?? null,
+          p.tiers,
+          p.promotion ?? null,
+        ]);
+  return figures(a) === figures(b);
+}
+
 /** The pause was answered "stop": a cancel, so the script is kept. */
 function stoppedAtPause(): OperationCancelledError {
   return new OperationCancelledError({ kind: "user" });
@@ -627,10 +667,11 @@ export function createAudioReportPipeline(
       input.language,
     );
     const voice = input.voice ?? ctx.config.get("ttsVoice");
-    // Point 3: with `tts.model` empty this reads Gemini's model list.
-    const ttsModel = await deps.tts.resolveModel(ctx.config.get("ttsModel"), {
-      token: ctx.token,
-    });
+    // Point 3, as decided 2026-11-17 (owner, plan/00 §6 item 385): the quoted
+    // model, with no request; `execute` resolves the live one after the
+    // confirmation.
+    const ttsModelPreference = ctx.config.get("ttsModel");
+    const ttsModel = quotedTtsModel(ttsModelPreference);
     const ttsPrices = ttsPricesFor(ttsModel, await deps.priceOverrides());
     const now = ctx.clock.now();
     const stored = report.audioScripts[language];
@@ -768,6 +809,7 @@ export function createAudioReportPipeline(
         voice,
         ttsModel,
         ttsPrices,
+        ttsModelPreference,
         step: request.step,
         targetMinutes,
         plan,
@@ -909,6 +951,70 @@ export function createAudioReportPipeline(
       let plan = run.plan;
       let linkedFolder = run.linkedFolder;
 
+      // Point 3(b), as decided 2026-11-17 (owner, plan/00 §6 item 385): the
+      // live model is resolved only now, after the confirmation; with
+      // `tts.model` empty that reads Gemini's model list, so the record's
+      // egress log is checked first.
+      if (run.ttsModelPreference.trim() === "") await beforeSend();
+      const ttsModel = await deps.tts.resolveModel(run.ttsModelPreference, {
+        token: ctx.token,
+      });
+      const ttsPrices =
+        ttsModel === run.ttsModel
+          ? run.ttsPrices
+          : ttsPricesFor(ttsModel, await deps.priceOverrides());
+
+      if (
+        run.step === "audio" &&
+        plan !== undefined &&
+        ttsModel !== plan.model
+      ) {
+        plan = planFor(
+          report.id,
+          run.language,
+          script?.text ?? "",
+          ttsModel,
+          run.voice,
+          ttsPrices,
+          ctx.clock.now(),
+        );
+        // Point 3(c): a price other than the quoted one is asked again
+        // before any synthesis. On the script path the second confirmation
+        // below is that ask.
+        if (!samePrices(run.ttsPrices, ttsPrices)) {
+          stage = "AwaitingConfirm";
+          show();
+          const answer = await ask(
+            surface,
+            {
+              step: "audio",
+              plan,
+              warnings: [],
+              disclosure: await disclosureFor(
+                ctx,
+                ttsModel,
+                undefined,
+                run.keyFingerprint,
+              ),
+              ceiling: stopFor(ctx)(plan.cost.usd),
+              session: sessionOf(ctx),
+              askTierQuestion: audioTierState(deps.tierPrefs).askTierQuestion,
+              pricesAsOfEpochMs: ttsPrices?.asOfEpochMs,
+            },
+            ctx,
+          );
+          if (answer.kind !== "run") {
+            await endJob("cancelled");
+            return finish("cancelled", {
+              ...(script !== undefined && { script }),
+              report,
+            });
+          }
+          recordTierAnswer(answer.tierAnswer, deps.tierWriter);
+          raise(answer.raise);
+        }
+      }
+
       if (run.step === "script") {
         stage = "Scripting";
         show();
@@ -950,9 +1056,9 @@ export function createAudioReportPipeline(
           report.id,
           run.language,
           written.script.text,
-          run.ttsModel,
+          ttsModel,
           run.voice,
-          run.ttsPrices,
+          ttsPrices,
           ctx.clock.now(),
         );
         const delivery = deliveryDeps(ctx, surface);
@@ -984,14 +1090,14 @@ export function createAudioReportPipeline(
             warnings: written.script.warnings,
             disclosure: await disclosureFor(
               ctx,
-              run.ttsModel,
+              ttsModel,
               undefined,
               run.keyFingerprint,
             ),
             ceiling: stopFor(ctx)(plan.cost.usd),
             session: sessionOf(ctx),
             askTierQuestion: audioTierState(deps.tierPrefs).askTierQuestion,
-            pricesAsOfEpochMs: run.ttsPrices?.asOfEpochMs,
+            pricesAsOfEpochMs: ttsPrices?.asOfEpochMs,
           },
           ctx,
         );
@@ -1017,7 +1123,7 @@ export function createAudioReportPipeline(
           { plan, completed, traceId: jobId },
           {
             tts: deps.tts,
-            prices: run.ttsPrices,
+            prices: ttsPrices,
             clock: ctx.clock,
             onChunk: (index, total) => {
               chunk = { done: index + 1, total };
@@ -1053,12 +1159,7 @@ export function createAudioReportPipeline(
         const now = ctx.clock.now();
         let remainingUsd: number | undefined = 0;
         for (const pending of plan.chunks.slice(result.pendingIndex)) {
-          const cost = chunkReservation(
-            pending,
-            plan,
-            run.ttsPrices,
-            now,
-          ).costUsd;
+          const cost = chunkReservation(pending, plan, ttsPrices, now).costUsd;
           remainingUsd =
             cost === undefined || remainingUsd === undefined
               ? undefined

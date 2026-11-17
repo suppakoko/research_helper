@@ -131,6 +131,7 @@ import {
   KO_PRESENT,
   L10N_MENU_COLLECTION_RECOMMEND,
   L10N_MENU_ITEM_FIND_RELATED,
+  L10N_MENU_SEARCH_IMPORT,
   MAIN_WINDOW_MESSAGE_IDS,
   MESSAGE_IDS_BY_SURFACE,
   MESSAGE_PREFIX,
@@ -148,10 +149,7 @@ import {
   reportLabel,
 } from "../../src/pipeline/trendReport/reportLabels";
 import { SeedUnresolvedError } from "../../src/pipeline/related/seed";
-import {
-  L10N_MENU_ROOT,
-  L10N_MENU_SPIKE_CREATE_ITEM,
-} from "../../src/ui/menus/toolsMenu";
+import { L10N_MENU_ROOT } from "../../src/ui/menus/toolsMenu";
 import type { FluentMessageId as GeneratedMessageId } from "../../typings/i10n";
 import {
   captureUILocale,
@@ -172,6 +170,7 @@ declare const assert: {
   notStrictEqual<T>(actual: T, expected: T, message?: string): void;
   deepEqual<T>(actual: T, expected: T, message?: string): void;
   isTrue(value: unknown, message?: string): void;
+  isFalse(value: unknown, message?: string): void;
   isAtLeast(value: number, floor: number, message?: string): void;
   include(haystack: readonly string[], needle: string, message?: string): void;
   fail(message: string): never;
@@ -243,16 +242,41 @@ const ALL_DECLARED_IDS: readonly FluentMessageId[] = [
   ...REPORT_WINDOW_MESSAGE_IDS,
 ];
 
-/** The expected menu labels, copied from the two `.ftl` files by hand. */
+/**
+ * The expected menu labels, copied from the two `.ftl` files by hand.
+ *
+ * *Changed 2026-11-17 (`plan/10` `P7-T04`):* the second label was `P0-T10`'s
+ * spike command, the one id kept out of `ko-KR` so that the menu showed the
+ * English fallback. The command is retired; the second label is now the
+ * submenu's one entry, Search & Import…, which both bundles translate. The
+ * fallback itself is asserted on the ids awaiting review (layer 3, `plan/00`
+ * §6 item 388(c)).
+ */
 const EN = {
   root: "Research Helper",
-  spike: "Create spike item (P0-T10)",
+  searchImport: "Search & Import…",
 } as const;
-const KO = { root: "리서치 헬퍼" } as const;
+const KO = { root: "리서치 헬퍼", searchImport: "검색 및 가져오기…" } as const;
+
+/** The retired spike command's id, which no bundle and no surface may name. */
+const RETIRED_SPIKE_ID = "research-helper-menu-spike-create-item";
 
 interface MenuLabels {
   readonly root: string | undefined;
-  readonly spike: string | undefined;
+  readonly searchImport: string | undefined;
+}
+
+/**
+ * The ids of `surface` that have no `ko-KR` entry by design: those awaiting
+ * review and those absent on purpose. Empty when nothing waits (as on
+ * 2026-11-17, after `plan/00` §6 item 386 and `P7-T04`).
+ */
+function koGapOf(surface: ShippedSurface): string[] {
+  const gap = new Set<string>([
+    ...KO_PENDING_REVIEW,
+    ...KO_DELIBERATELY_ABSENT,
+  ]);
+  return MESSAGE_IDS_BY_SURFACE[surface].filter((id) => gap.has(id));
 }
 
 function log(line: string): void {
@@ -369,9 +393,9 @@ async function resolvable(
 async function labelsFrom(formatter: FluentFormatter): Promise<MenuLabels> {
   return {
     root: await formatAttribute(formatter, L10N_MENU_ROOT, "label"),
-    spike: await formatAttribute(
+    searchImport: await formatAttribute(
       formatter,
-      L10N_MENU_SPIKE_CREATE_ITEM,
+      L10N_MENU_SEARCH_IMPORT,
       "label",
     ),
   };
@@ -417,7 +441,7 @@ async function toolsMenuLabels(
   submenu?.dispatchEvent(new win.Event("popupshowing"));
   const item = submenu
     ? Array.from(submenu.children).find(
-        (el) => el.getAttribute("data-l10n-id") === L10N_MENU_SPIKE_CREATE_ITEM,
+        (el) => el.getAttribute("data-l10n-id") === L10N_MENU_SEARCH_IMPORT,
       )
     : undefined;
 
@@ -428,7 +452,7 @@ async function toolsMenuLabels(
   await l10n.translateElements(item ? [menu, item] : [menu]);
   const labels: MenuLabels = {
     root: menu.getAttribute("label") ?? undefined,
-    spike: item?.getAttribute("label") ?? undefined,
+    searchImport: item?.getAttribute("label") ?? undefined,
   };
 
   submenu?.dispatchEvent(new win.Event("popuphidden"));
@@ -569,16 +593,16 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
       fluentResourceId("reportWindow"),
       "research-helper-reportWindow.ftl",
     );
-    // The two constants src/ui/menus/toolsMenu.ts declares for itself must be
-    // the same strings keys.ts declares; that file predates keys.ts and is not
-    // in P1-T18's Files list, so this is the only thing holding them together.
+    // The constant src/ui/menus/toolsMenu.ts declares for itself must be the
+    // same string keys.ts declares; that file predates keys.ts and is not in
+    // P1-T18's Files list, so this is the only thing holding them together.
+    // (It declared two until P7-T04 retired the spike command, 2026-11-17.)
     assert.strictEqual(L10N_MENU_ROOT, "research-helper-menu-root");
-    assert.strictEqual(
-      L10N_MENU_SPIKE_CREATE_ITEM,
-      "research-helper-menu-spike-create-item",
-    );
     assert.include(MAIN_WINDOW_MESSAGE_IDS, L10N_MENU_ROOT);
-    assert.include(MAIN_WINDOW_MESSAGE_IDS, L10N_MENU_SPIKE_CREATE_ITEM);
+    assert.isFalse(
+      (all as readonly string[]).includes(RETIRED_SPIKE_ID),
+      "P7-T04: the retired spike command's id is declared by no surface",
+    );
   });
 
   it("splits every id across exactly the two prefixes the corpus disagrees about", async function () {
@@ -786,8 +810,8 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
     // The human gate, as an assertion. KO_PRESENT is what an owner supplied
     // (docs/08 §10.2) plus what docs/08 §10.3 forbids translating;
     // KO_PENDING_REVIEW is what a native speaker still has to write;
-    // KO_DELIBERATELY_ABSENT is the one key that must stay missing so FR-55's
-    // fallback stays observable.
+    // KO_DELIBERATELY_ABSENT is what must stay missing on purpose — empty
+    // since P7-T04 retired its one member, the spike command (2026-11-17).
     const presentActual: string[] = [];
     const absentActual: string[] = [];
     for (const surface of SHIPPED_SURFACES) {
@@ -812,7 +836,7 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
     assert.deepEqual(
       sorted(absentActual),
       sorted([...KO_PENDING_REVIEW, ...KO_DELIBERATELY_ABSENT]),
-      "the ko-KR gap is exactly KO_PENDING_REVIEW plus the one deliberate hole",
+      "the ko-KR gap is exactly KO_PENDING_REVIEW plus KO_DELIBERATELY_ABSENT",
     );
     // The two lists must not overlap: a key cannot both await translation and
     // be required to stay missing.
@@ -823,21 +847,35 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
         `${id} is deliberately absent and must not also be on the review list`,
       );
     }
-    assert.include(
-      KO_DELIBERATELY_ABSENT,
-      L10N_MENU_SPIKE_CREATE_ITEM,
-      "P0-T24's fallback fixture is still the deliberately absent key",
-    );
-    // P0-T24's measured value, still measured rather than assumed.
+    // P0-T24's measured value, still measured rather than assumed: pinned to
+    // ko-KR alone, the menu's labels are Korean.
     const koOnly = await labelsFrom(
       pinnedLocalization("mainWindow", ["ko-KR"]),
     );
     log(`pinned ["ko-KR"] menu labels ${show(koOnly)}`);
     assert.deepEqual(
       koOnly,
-      { root: KO.root, spike: undefined },
-      "ko-KR alone: Korean root, and the spike key really is absent",
+      { root: KO.root, searchImport: KO.searchImport },
+      "ko-KR alone: the Korean root and the Korean Search & Import entry",
     );
+    // And the gap really is a gap: pinned to ko-KR alone, no id of it resolves
+    // (P0-T24 asserted this on the spike key; plan/00 §6 item 388(c)).
+    for (const surface of SHIPPED_SURFACES) {
+      const gap = koGapOf(surface);
+      const { resolved } = await resolvable(
+        pinnedLocalization(surface, ["ko-KR"]),
+        gap,
+      );
+      log(
+        `pinned ["ko-KR"] ${fluentResourceId(surface)}: ${gap.length} gap ` +
+          `id(s), ${resolved.length} resolved ${JSON.stringify(resolved)}`,
+      );
+      assert.deepEqual(
+        resolved,
+        [],
+        `no ${surface} id of the ko-KR gap resolves from ko-KR alone`,
+      );
+    }
   });
 
   it("P2-T34: renders the key-storage badge's indeterminate state in docs/09 §1.9's words, in each bundle", async function () {
@@ -875,11 +913,48 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
       pinnedLocalization("mainWindow", ["ko-KR", "en-US"]),
     );
     log(`pinned ["ko-KR","en-US"] menu labels ${show(chain)}`);
-    assert.deepEqual(chain, { root: KO.root, spike: EN.spike });
-    assert.notStrictEqual(chain.spike, L10N_MENU_SPIKE_CREATE_ITEM);
+    assert.deepEqual(chain, { root: KO.root, searchImport: KO.searchImport });
+
+    // FR-55's per-message fallback, on every id of the ko-KR gap: along the
+    // chain each resolves to exactly the en-US message. Until P7-T04 this was
+    // asserted on the spike key alone; since then the gap is whatever awaits
+    // review, and it can be empty (plan/00 §6 item 388(c)), which is said out
+    // loud rather than passed over.
+    let observed = 0;
+    for (const surface of SHIPPED_SURFACES) {
+      const gap = koGapOf(surface);
+      if (gap.length === 0) continue;
+      const along = await pinnedLocalization(surface, [
+        "ko-KR",
+        "en-US",
+      ]).formatMessages(gap.map((id) => ({ id })));
+      const english = await pinnedLocalization(surface, [
+        "en-US",
+      ]).formatMessages(gap.map((id) => ({ id })));
+      gap.forEach((id, i) => {
+        assert.isTrue(
+          along[i] !== null && along[i] !== undefined,
+          `${id} resolves along the ko-KR, en-US chain`,
+        );
+        assert.deepEqual(
+          along[i],
+          english[i],
+          `${id} falls back to its en-US message, not to the identifier`,
+        );
+      });
+      observed += gap.length;
+    }
+    log(
+      observed === 0
+        ? `per-message fallback: no id is in the ko-KR gap today, so FR-55's ` +
+            `fallback is not observable from the shipped bundles (plan/00 §6 ` +
+            `item 388(c)); every id still resolves along the chain below`
+        : `per-message fallback: ${observed} gap id(s) resolve to their en-US ` +
+            `message along the ko-KR, en-US chain`,
+    );
 
     // The whole ko-KR review gap rests on this layer, so assert it for every
-    // untranslated id, not just the one fixture key.
+    // declared id, translated or not.
     for (const surface of SHIPPED_SURFACES) {
       const { unresolved } = await resolvable(
         pinnedLocalization(surface, ["ko-KR", "en-US"]),
@@ -1315,13 +1390,13 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
   it("renders the Tools menu from Fluent with the UI locale set to en-US", async function () {
     await requestUILocale(["en-US"], log);
     const read = await readUnderCurrentLocale();
-    const expected = { root: EN.root, spike: EN.spike };
+    const expected = { root: EN.root, searchImport: EN.searchImport };
     assert.deepEqual(read.menu, expected, "Tools menu labels");
     assert.deepEqual(read.document, expected, "main window document.l10n");
     assert.deepEqual(read.unpinned, expected, "unpinned Localization");
   });
 
-  it("renders Korean, with English for the missing key, with the UI locale set to ko-KR", async function () {
+  it("renders the Tools menu in Korean, never as an identifier, with the UI locale set to ko-KR", async function () {
     await requestUILocale(["ko-KR"], log);
     assert.deepEqual(
       [...Services.locale.appLocalesAsBCP47].slice(-1),
@@ -1329,7 +1404,9 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
       "Gecko keeps en-US as the last fallback of a Korean UI",
     );
     const read = await readUnderCurrentLocale();
-    const expected = { root: KO.root, spike: EN.spike };
+    // Until P7-T04 the second label was the spike command's English, shown
+    // under a Korean UI; both labels are Korean now (plan/00 §6 item 388(c)).
+    const expected = { root: KO.root, searchImport: KO.searchImport };
     assert.deepEqual(read.menu, expected, "Tools menu labels");
     assert.deepEqual(read.document, expected, "main window document.l10n");
     assert.deepEqual(read.unpinned, expected, "unpinned Localization");
@@ -1337,7 +1414,7 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
       assert.notStrictEqual(label, L10N_MENU_ROOT, "not a raw identifier");
       assert.notStrictEqual(
         label,
-        L10N_MENU_SPIKE_CREATE_ITEM,
+        L10N_MENU_SEARCH_IMPORT,
         "not a raw identifier",
       );
     }

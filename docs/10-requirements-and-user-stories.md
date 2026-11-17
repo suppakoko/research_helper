@@ -401,6 +401,13 @@ The surface is `08-ui-ux-spec.md` §2.5 (the collection submenu entry, labelled 
 - **Given** the user wants to remove all AI content,
   **When** they choose "Research Helper → Remove generated notes from collection",
   **Then** only notes carrying the `research_helper/` tag namespace are deleted, after a confirmation naming the exact count.
+- *Added 2026-11-17 (`plan/10` `P7-T01`; the owner's decision 2 of 2026-11-16, `plan/00` §6 item 380, read by the
+  coordinator as `plan/10` §0.4 line 15):* **Given** the user wants to remove everything the plugin created, **When**
+  they choose "Remove all Research Helper content" in the preferences pane, **Then** the plugin-created notes (tagged in
+  the `research_helper/` namespace), its provenance notes and the audio attachments a stored report names go to the
+  Zotero trash, and the plugin database's rows are deleted, after a confirmation naming the count of each kind;
+  imported items, their tags and Related links, and user-written notes are untouched (`09-security-privacy-and-api-keys.md`
+  §3.7). "Deleted" in the criterion above means moved to the Zotero trash (`plan/10` §0.2 item 28).
 
 ---
 
@@ -897,7 +904,12 @@ The built XPI shall be **≤ 3 MB**. No bundled model weights, no bundled Chromi
 Runtime dependencies shall be minimal and vendored through the bundler; no runtime `npm` fetch, no remote script loading, no `eval` of remote content.
 
 **NFR-20 — Data integrity.** (M)
-The plugin shall never delete or modify user-authored items or notes. Modification is limited to: creating items, adding items to collections, creating child/standalone notes owned by the plugin, adding `research_helper/` tags, and (opt-in) adding Related links. Deletion is limited to plugin-owned, tagged notes after explicit confirmation.
+The plugin shall never delete or modify user-authored items or notes. Modification is limited to: creating items, adding items to collections, creating child/standalone notes owned by the plugin, adding `research_helper/` tags, and (opt-in) adding Related links. Deletion is limited to plugin-owned, tagged notes after explicit confirmation, and, through the remove-all command, plugin-created notes and attachments, to the trash, after a confirmation naming each count.
+
+*Changed 2026-11-17 (`plan/10` `P7-T01`; `plan/10` §0.4 lines 2 and 15, decided 2026-11-16): the clause after "explicit
+confirmation" was added for "Remove all Research Helper content" (FR-20's added criterion;
+`09-security-privacy-and-api-keys.md` §3.7). The plugin-created attachments are the audio attachments a stored report
+names; plugin database rows, which are not Zotero items, are deleted outright.*
 
 ---
 

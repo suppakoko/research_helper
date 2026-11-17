@@ -763,6 +763,8 @@ this approval.
 
 ### G-41 — Review the Phase 1 `ko-KR` UI bundle (`KO_PENDING_REVIEW.length`, 82 as of 2026-10-08)
 
+> *Measured 2026-11-17 in Zotero 10.0.3, in three runs, after the owner approved the batch of 29 in chat (`plan/00` §6 item 386): `[P1-T18] ko-KR totals: 498 present, 1 absent; expected 498 / 1`. All 29 (`P6-T14`'s `rh-error-tts`, `P6-T15`'s 13 and `P6-T17`'s 15) went in byte for byte from the commented drafts, 16 into `research-helper-mainWindow.ftl` and 13 into `research-helper-reportWindow.ftl`, recorded in `plan/reports/ko-review-386.ftl`, and left `KO_PENDING_REVIEW` for `KO_PRESENT`. So `KO_PENDING_REVIEW` is empty again, and the 1 absent is `P0-T24`'s deliberate fallback fixture.*
+>
 > *Re-counted 2026-11-02 (`plan/00` §6 items 333, 334): `P4-T20`'s 25, `P5-T15`'s 12 and `P4-T21`'s 2 left `KO_PENDING_REVIEW` that day. What it still holds is what cards in progress add; `src/i18n/keys.ts` is the count.*
 >
 > *Measured 2026-11-02 in Zotero 10.0.3, in five runs, after `plan/00` §6 item 335(l): `[P1-T18] ko-KR totals: 353 present, 1 absent; expected 353 / 1`. It read 350 / 4 before that item moved its three strings. So `KO_PENDING_REVIEW` is empty, and the 1 absent is `P0-T24`'s deliberate fallback fixture. The two report labels of that item are not Fluent ids and are not in this count; `KO_REPORT_LABELS_PENDING_REVIEW` is empty too. The figures of 2026-10-08 in this section's heading and in the summary table's row are that date's snapshot.*

@@ -852,6 +852,23 @@ describe("P4-T20: the report window runs a mock job to a saved report", function
     }
   });
 
+  it("an audio job the app quit during ends cancelled at the next start, not failed (docs/07 §12.6 point 9; DECIDED 2026-11-17, coordinator, under item 313)", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    const graph = instance.api.services!;
+    // A record left running, as after a quit: no surface, no request.
+    const record = await graph.jobs.enqueue("audioReport", {
+      reportId: "report-gone-at-restart",
+      language: "en",
+    });
+    await graph.jobs.start(record.id);
+    const report = await graph.jobs.recover();
+    assert.isTrue(report.cancelled.includes(record.id), "listed as cancelled");
+    assert.isFalse(report.failed.includes(record.id), "not failed");
+    const after = await graph.jobs.get(record.id);
+    assert.strictEqual(after?.status, "cancelled");
+    assert.strictEqual(after?.error, undefined, "no error is recorded");
+  });
+
   it("a report job left interrupted gets the same one notice, and its window asks: stop cancels it, continue finishes it in its own record (P4-T21; item 334(j))", async function () {
     this.timeout(TEST_TIMEOUT_MS);
     const { collection } = await collectionFor("left-interrupted");

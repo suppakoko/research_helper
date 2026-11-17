@@ -184,7 +184,8 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   // FR-13's "Find Related Papers…" (P5-T15), docs/08 §2.4 and §10.2. The window
   // it opens is SEARCH_DIALOG_MESSAGE_IDS's.
   "research-helper-menu-item-find-related",
-  "research-helper-menu-spike-create-item",
+  // P7-T04 (2026-11-17): the id of P0-T10's
+  // spike command, left with the command.
   // P3-T29: the collection submenu's two LLM-job entries (docs/08 §2.5's
   // note of 2026-10-29), the summarize window and the removal command.
   // See SUMMARIZE_DIALOG_L10N in src/ui/dialogs/summarizeDialog.ts.
@@ -300,6 +301,9 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
   // `TTSError`, the audio run's failures (P6-T14; docs/07 §10.1's note of
   // 2026-11-17), moved here from DEFERRED_ERROR_MESSAGE_IDS.
   "rh-error-tts",
+  // `PolicyViolationError`, a request the privacy mode forbids (P7-T12,
+  // 2026-11-17; plan/00 §6 item 389(e)), moved here from DEFERRED_ERROR_MESSAGE_IDS.
+  "rh-error-policy",
 
   // The preference pane's literature-source credential blocks (docs/08 §7.3,
   // docs/09 §1.8–1.9; P1-T44). On *this* surface rather than a fourth
@@ -543,16 +547,6 @@ export const MAIN_WINDOW_MESSAGE_IDS = [
 ] as const satisfies readonly FluentMessageId[];
 
 export type MainWindowMessageId = (typeof MAIN_WINDOW_MESSAGE_IDS)[number];
-
-/**
- * `P0-T10`'s spike menu item, which `src/ui/menus/toolsMenu.ts` declares for
- * itself. Named here because it is the key the `ko-KR` fallback assertion is
- * built on and the one id that is *deliberately* absent from that bundle
- * (`FR-55`, spike `V-17`, `P0-T24`); `test/integration/l10n.spec.ts` asserts
- * this constant and `toolsMenu.ts`'s are the same string.
- */
-export const L10N_MENU_SPIKE_CREATE_ITEM =
-  "research-helper-menu-spike-create-item";
 
 /** The submenu label, shared by the Tools and collection-context menus. */
 export const L10N_MENU_ROOT = "research-helper-menu-root";
@@ -1304,6 +1298,12 @@ export const ERROR_MESSAGE_IDS = [
   // synthesis loop, and made by `classifyAudioFailure`
   // (`src/pipeline/audioReport/failures.ts`).
   "rh-error-tts",
+  // P7-T12 (2026-11-17): `PolicyViolationError`, thrown by the HTTP client's
+  // parameter rule (`src/core/http/client.ts`), `assertModelAllowed`
+  // (`src/pipeline/shared/privacyPolicy.ts`), the screening, summary and
+  // critique stages, and the audio disclosure; moved here from
+  // DEFERRED_ERROR_MESSAGE_IDS.
+  "rh-error-policy",
 ] as const satisfies readonly MainWindowMessageId[];
 
 /**
@@ -1324,10 +1324,11 @@ export const ERROR_MESSAGE_IDS = [
  * error class, or a Phase 3 card wiring one of these into a Phase 1 path, fails
  * that assertion instead of rendering a blank label.
  */
-export const DEFERRED_ERROR_MESSAGE_IDS = [
-  // `rh-error-tts` left on 2026-11-17 with `P6-T14`'s failure paths.
-  "rh-error-policy",
-] as const;
+// `rh-error-tts` left on 2026-11-17 with `P6-T14`'s failure paths, and
+// `rh-error-policy` the same day with `P7-T12`, so the list is empty: every
+// `messageKey` in `src/core/errors.ts` ships a message. Kept, typed, so the
+// assertion above still catches a new class added without one.
+export const DEFERRED_ERROR_MESSAGE_IDS: readonly string[] = [];
 
 /* ------------------------------------------------------- ko-KR review state */
 
@@ -1438,58 +1439,33 @@ export const KO_PENDING_REVIEW = [
   // --- P5-T26's recommend entry and mode, P5-T27's results and P5-T16's related results ---
   // All 116 left this list on 2026-11-06: the owner reviewed the Korean in chat (`G-41`,
   // plan/00 §6 item 357), so all are on KO_PRESENT.
-  // --- P6-T14's audio failure message (mainWindow) ---
-  // A commented `ko-KR` stub with the English source and the coordinator's
-  // draft (2026-11-17, not adopted); the owner reviews it (`G-41`).
-  "rh-error-tts",
-  // --- P6-T15's audio notice, cost-dialog lines, tier question and refusal
-  // (mainWindow) --- commented `ko-KR` stubs with the English source and the
-  // coordinator's drafts (2026-11-17, not adopted); the owner reviews them (`G-41`).
-  "research-helper-egress-audio-notice",
-  "research-helper-cost-audio-script",
-  "research-helper-cost-audio-provisional",
-  "research-helper-cost-audio-length",
-  "research-helper-cost-audio-length-warning",
-  "research-helper-cost-audio-duration",
-  "research-helper-cost-audio-attach",
-  "research-helper-cost-audio-rate-unmeasured",
-  "research-helper-cost-audio-tier-question",
-  "research-helper-cost-audio-tier-paid",
-  "research-helper-cost-audio-tier-free",
-  "research-helper-cost-audio-tier-unknown",
-  "research-helper-audio-tier-refused",
-  // --- P6-T17's menu entry and attachment title (mainWindow) and the report
-  // window's audio section (reportWindow) --- commented `ko-KR` stubs with the
-  // English source and the coordinator's drafts (2026-11-17, not adopted); the
-  // owner reviews them (`G-41`).
-  "research-helper-menu-collection-audio-report",
-  "research-helper-audio-attachment-title",
-  "research-helper-report-audio-heading",
-  "research-helper-report-audio-language-label",
-  "research-helper-report-audio-voice-label",
-  "research-helper-report-audio-none",
-  "research-helper-report-audio-source",
-  "research-helper-report-audio-generate",
-  "research-helper-report-audio-cancel",
-  "research-helper-report-audio-stage",
-  "research-helper-report-audio-outcome",
-  "research-helper-report-audio-refused",
-  "research-helper-report-audio-save-script",
-  "research-helper-report-audio-save-audio",
-  "research-helper-report-audio-saved",
+  // --- P6-T14's audio failure message, P6-T15's audio notice, cost-dialog lines,
+  // tier question and refusal, P6-T17's menu entry, attachment title and the
+  // report window's audio section ---
+  // All 29 left this list on 2026-11-17: the owner approved the coordinator's Korean in
+  // chat (`G-41`, plan/00 §6 item 386), so all are on KO_PRESENT.
+  // --- P7-T12's privacy-mode refusal (mainWindow) ---
+  // Shipped 2026-11-17 with no live Korean: the `ko-KR` bundle carries the coordinator's
+  // draft commented, "not adopted" (`G-41`, plan/00 §6 item 389(b)), so the id falls back
+  // to English. P7-T12's 22 rewritten error messages keep their reviewed Korean live and
+  // stay on KO_PRESENT; their drafts with the new next action sit beside them.
+  "rh-error-policy",
 ] as const satisfies readonly FluentMessageId[];
 
 /**
- * The one id that is absent from `ko-KR` **permanently and on purpose**, so
- * that `FR-55`'s "falls back to English rather than showing an identifier"
- * stays observable at runtime (spike `V-17`, `P0-T24`).
+ * The ids absent from `ko-KR` **permanently and on purpose**. Kept, empty, as
+ * the third list of the partition `test/unit/i18n/keys.test.ts` checks.
  *
- * It is not on {@link KO_PENDING_REVIEW}: translating it would delete the
- * fixture `test/integration/l10n.spec.ts` is built on.
+ * *Emptied 2026-11-17 (`plan/10` `P7-T04`; `plan/00` §6 item 388(c)).* Its one
+ * member was the id of `P0-T10`'s spike command,
+ * kept missing so that `FR-55`'s "falls back to English rather than showing an
+ * identifier" stayed observable (spike `V-17`, `P0-T24`); it left with the
+ * command. `test/integration/l10n.spec.ts` now observes the fallback on
+ * whatever {@link KO_PENDING_REVIEW} and this list hold, and says so when they
+ * hold nothing.
  */
-export const KO_DELIBERATELY_ABSENT = [
-  "research-helper-menu-spike-create-item",
-] as const satisfies readonly FluentMessageId[];
+export const KO_DELIBERATELY_ABSENT =
+  [] as const satisfies readonly FluentMessageId[];
 
 /**
  * The ids the `ko-KR` bundles are expected to contain today: everything an
@@ -2050,6 +2026,38 @@ export const KO_PRESENT = [
   "research-helper-search-related-target-default",
   "research-helper-search-related-link-failed",
   "research-helper-search-related-seed-gone",
+  // The batch of 29 (`P6-T14`, `P6-T15`, `P6-T17`): Korean drafted by the coordinator and
+  // reviewed by the owner on 2026-11-17 (`G-41`, plan/00 §6 item 386), inserted byte for
+  // byte from the drafts recorded in plan/reports/ko-review-386.ftl.
+  "rh-error-tts",
+  "research-helper-egress-audio-notice",
+  "research-helper-cost-audio-script",
+  "research-helper-cost-audio-provisional",
+  "research-helper-cost-audio-length",
+  "research-helper-cost-audio-length-warning",
+  "research-helper-cost-audio-duration",
+  "research-helper-cost-audio-attach",
+  "research-helper-cost-audio-rate-unmeasured",
+  "research-helper-cost-audio-tier-question",
+  "research-helper-cost-audio-tier-paid",
+  "research-helper-cost-audio-tier-free",
+  "research-helper-cost-audio-tier-unknown",
+  "research-helper-audio-tier-refused",
+  "research-helper-menu-collection-audio-report",
+  "research-helper-audio-attachment-title",
+  "research-helper-report-audio-heading",
+  "research-helper-report-audio-language-label",
+  "research-helper-report-audio-voice-label",
+  "research-helper-report-audio-none",
+  "research-helper-report-audio-source",
+  "research-helper-report-audio-generate",
+  "research-helper-report-audio-cancel",
+  "research-helper-report-audio-stage",
+  "research-helper-report-audio-outcome",
+  "research-helper-report-audio-refused",
+  "research-helper-report-audio-save-script",
+  "research-helper-report-audio-save-audio",
+  "research-helper-report-audio-saved",
 ] as const satisfies readonly FluentMessageId[];
 
 /* ---------------------------------------------------------------- arguments */

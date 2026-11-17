@@ -221,6 +221,11 @@ export function allowedInputScope(
  *   *(Corrected 2026-10-23, owner, `plan/00` §6 item 270: strict refused
  *   Gemini on every tier for its abuse-monitoring retention. Strict judges the
  *   training policy only, as for OpenAI and Anthropic, so that rule is gone.)*
+ * - a free or unknown key (`"yes"`) is refused in **strict** only; in
+ *   balanced and full it is warned, `may-train-on-input`, and needs the
+ *   user's confirmation. *(Added 2026-11-17, `P7-T32`: owner, 2026-11-16,
+ *   `plan/00` §6 item 381. Balanced refused it until then; the audio job's
+ *   `assertAudioAllowed` already followed this rule, item 379(d).)*
  *
  * The adapter's `dataPolicy` is left as the plugin knows it: the declaration
  * is the user's word, applied at this check. Without a `route` the table
@@ -270,7 +275,12 @@ export function assertModelAllowed(
     };
   }
   if (trains === "yes") {
-    if (known !== "full") refuse("it may train on what it is sent");
+    // P7-T32 (owner, 2026-11-16, plan/00 §6 item 381): a free or unknown
+    // Gemini key is refused in strict only. Balanced warns and asks, as full
+    // does and as an audio job already did (`assertAudioAllowed`, item 379(d)).
+    if (known === "strict" || (known === "balanced" && !gemini)) {
+      refuse("it may train on what it is sent");
+    }
     return { warnings: ["may-train-on-input"], requiresConfirmation: true };
   }
   return { warnings: [], requiresConfirmation: false };

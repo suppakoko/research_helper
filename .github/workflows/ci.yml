@@ -10,9 +10,9 @@
 # - NODE_VERSION is the range "^22.13.0", not "22": the card says Node 22 and
 #   package.json's `engines.node` says ">=22.13"; the range is exactly the
 #   intersection of the two.
-# - The contract-test step and the localization-completeness step are
-#   commented placeholders (card steps 3 and 6): their inputs do not exist in
-#   Phase 0.
+# - The contract-test step and the localization-completeness step were
+#   commented placeholders (card steps 3 and 6): their inputs did not exist in
+#   Phase 0. Both are steps now (2026-10-07 and P7-T02, 2026-11-17).
 # - The `integration` job blocks pull requests since 2026-10-20 (docs/13
 #   §5.1; it was `continue-on-error` until V-5 settled and P2-T37 made the
 #   suite green), provisions a pinned Zotero release and
@@ -22,6 +22,13 @@
 #
 # No credential of any kind is referenced in this file, and none may be (card
 # P0-T14, "Do NOT"): CI stays credential-free in Phase 0.
+#
+# P7-T21 (2026-11-17, plan/10): every `uses:` is pinned to the full commit its
+# tag pointed at when read with `git ls-remote --tags` that day, the tag kept
+# as a comment; permissions are granted per job (`contents: read` each) and
+# none at the top; the lint job runs `npm audit --omit=dev --audit-level=high`
+# (docs/09 §7's supply-chain lines). test/unit/scripts/releaseWorkflow.test.ts
+# holds these rules for this file, release.yml and compat.yml.
 
 name: CI
 
@@ -36,8 +43,7 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
+permissions: {}
 
 env:
   # Card: "Node 22". package.json: engines.node ">=22.13". Both hold for any
@@ -48,12 +54,14 @@ jobs:
   lint:
     name: Lint and typecheck
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -66,6 +74,12 @@ jobs:
 
       - name: TypeScript typecheck
         run: npm run typecheck
+
+      # P7-T21: the runtime dependencies' known advisories, high and above.
+      # Reads the public npm advisory database; sends the lockfile's package
+      # names and versions, nothing of the user's.
+      - name: Audit runtime dependencies (P7-T21)
+        run: npm audit --omit=dev --audit-level=high
 
       # P2-T15 — the plugin ships no OpenAlex surface. OpenAlex is out of v1
       # (docs/02 §9.3, on the authority of docs/00 §3 D2 and docs/10 §4 item
@@ -144,23 +158,31 @@ jobs:
           fi
           echo "No OpenAlex surface: no path, no code line, no host name (reserved SourceId member allowed)."
 
-      # Placeholder, not yet a step (P0-T14 step 6). scripts/check-l10n.mjs
-      # does not exist, and docs/11 R-22 keeps the localization gate warn-only
-      # until Phase 7. The en-US / ko-KR Fluent bundles it compares come from
-      # P0-T24. Restore as:
-      #
-      # - name: Verify Korean localization completeness
-      #   run: node scripts/check-l10n.mjs --base en-US --target ko-KR
+      # P7-T02 (2026-11-17): the placeholder P0-T14 step 6 left here is now a
+      # blocking step, as docs/11 R-22 planned (warn-only until Phase 7, then
+      # an error). scripts/check-l10n.mjs compares every en-US bundle with its
+      # ko-KR twin: messages, attributes and values present on one side only,
+      # and empty values, each printed with its file. It never compares the
+      # text. No exception list: an id the owner decides to keep out of ko-KR
+      # on purpose is passed here with `--allow <id>`, visibly, and a stale
+      # `--allow` fails. No network, no credential.
+      # `--allow rh-error-policy` (P7-T12, 2026-11-17; plan/00 §6 item 389(c)):
+      # its Korean is a commented draft awaiting G-41. Remove the allowance when
+      # the draft is adopted; until then a stale-allow failure says so.
+      - name: Verify Korean localization completeness (P7-T02)
+        run: npm run l10n:check -- --allow rh-error-policy
 
   unit:
     name: Unit and contract tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -208,7 +230,7 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: coverage
           path: coverage/
@@ -218,12 +240,14 @@ jobs:
     name: Build XPI
     runs-on: ubuntu-latest
     needs: [lint, unit]
+    permissions:
+      contents: read
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -251,7 +275,7 @@ jobs:
           fi
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: research-helper-xpi
           path: .scaffold/build/*.xpi
@@ -265,6 +289,8 @@ jobs:
     # Pinned so that a future ubuntu-latest image cannot silently skip them.
     runs-on: ubuntu-24.04
     needs: [build]
+    permissions:
+      contents: read
     # docs/13 §5.1, decided 2026-10-20 (plan/00 §6 item 236(e)): V-5 is settled
     # and the suite is green after P2-T37, so a red in-Zotero run now blocks a
     # pull request. The suite is load-sensitive; re-run a red run once before
@@ -279,10 +305,10 @@ jobs:
       ZOTERO_VERSION: "10.0.3"
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -331,7 +357,7 @@ jobs:
       # empty and the upload then only warns.
       - name: Upload Zotero debug logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: zotero-logs
           path: .scaffold/logs/

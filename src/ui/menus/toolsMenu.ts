@@ -51,52 +51,42 @@ const TOOLS_MENU_ID = "rh-menu-tools";
 export const TOOLS_MENU_DESCRIPTION = "Tools menu item";
 
 /**
- * Fluent IDs for the two labels.
+ * The Fluent ID of the submenu's label.
  *
  * Prefixed `research-helper-` because Fluent identifiers share one global
  * namespace per document and an unprefixed ID silently shadows Zotero's own
- * (`docs/01` §9.3, §12 gotcha 16). The messages live in
- * `addon/locale/en-US/research-helper-mainWindow.ftl`; the ko-KR bundle
- * arrives in `P0-T24`.
+ * (`docs/01` §9.3, §12 gotcha 16). The message lives in
+ * `addon/locale/{en-US,ko-KR}/research-helper-mainWindow.ftl`.
  *
  * `MenuData` has no plain `label` property — `l10nID` is the only labelling
  * mechanism `Zotero.MenuManager` offers (`docs/08` §2.1's verbatim typedef),
  * and its `l10nFiles` option is commented out in Zotero 10.0.1's
  * `menuManager.js`, so the FTL has to already be loaded in the window.
+ *
+ * *Changed 2026-11-17 (`plan/10` `P7-T04`, retiring `plan/00` §5 backlog item
+ * 25):* the second id, `P0-T10`'s spike command, is gone with the command; the
+ * test fixture it wrote is `test/integration/support/spikeArticle.ts`.
  */
 export const L10N_MENU_ROOT = "research-helper-menu-root";
-export const L10N_MENU_SPIKE_CREATE_ITEM =
-  "research-helper-menu-spike-create-item";
 
 /**
- * What the menu is allowed to do, injected rather than imported.
- *
- * This is the seam the layering rule creates, and it is a good one: the menu
- * knows there is a command, not what a command is made of. Phase 1 swaps
- * `createSpikeArticle` for a pipeline invocation without touching this file.
- */
-export interface ToolsMenuCommands {
-  /** Runs the `P0-T10` spike command. May reject; see `onError`. */
-  readonly createSpikeArticle: () => Promise<unknown>;
-  /** Where a rejected command goes. Must not throw. */
-  readonly onError: (message: string, error: unknown) => void;
-}
-
-/**
- * Build the `registerMenu` options for Tools ▸ Research Helper.
+ * Build the `registerMenu` options for Tools ▸ Research Helper: the submenu,
+ * with no entries of its own.
  *
  * Inert: it returns a plain object. Nothing is registered until
  * `src/bootstrap/registerUI.ts` hands it to `menuRegistration()` and a `Scope`
  * runs the result.
  *
- * The single spike command sits inside a `"submenu"` rather than directly on
- * the Tools menu, matching `docs/08` §2.4's structure — Phase 1 adds
- * Search & Import, Preferences and About as siblings, and a submenu that
- * already exists is one less thing to restructure then.
+ * The entries are spliced in by `withSearchImportEntry`
+ * (`./registerMenus.ts`), which is the only caller in the product; since
+ * `P7-T04` removed the spike command, the submenu it builds is empty until that
+ * splice fills it, and it is never registered empty. The submenu stays here
+ * rather than moving, because `docs/08` §2.3's one-top-level-item rule is what
+ * `withSearchImportEntry` checks the shape of.
  */
-export function toolsMenuOptions(
-  commands: ToolsMenuCommands,
-): _ZoteroTypes.MenuManager.MenuOptions<typeof TOOLS_TARGET> {
+export function toolsMenuOptions(): _ZoteroTypes.MenuManager.MenuOptions<
+  typeof TOOLS_TARGET
+> {
   return {
     menuID: TOOLS_MENU_ID,
     // D9 (docs/00 §3): the plugin ID is permanent and must be byte-identical
@@ -107,36 +97,8 @@ export function toolsMenuOptions(
       {
         menuType: "submenu",
         l10nID: L10N_MENU_ROOT,
-        menus: [
-          {
-            menuType: "menuitem",
-            l10nID: L10N_MENU_SPIKE_CREATE_ITEM,
-            onCommand: () => {
-              run(commands);
-            },
-          },
-        ],
+        menus: [],
       },
     ],
   };
-}
-
-/**
- * Start the command and return immediately.
- *
- * `onCommand` is declared `(event, context) => void`: Zotero does not await
- * it, and a returned promise would be dropped on the floor together with any
- * rejection. So the promise is consumed here, and *every* failure path ends at
- * `onError` — an unhandled rejection inside the plugin sandbox is exactly the
- * "no error appears in Debug Output" criterion failing.
- */
-function run(commands: ToolsMenuCommands): void {
-  try {
-    commands.createSpikeArticle().catch((error: unknown) => {
-      commands.onError("Tools menu command failed", error);
-    });
-  } catch (error) {
-    // A synchronous throw before the first await inside the command.
-    commands.onError("Tools menu command threw synchronously", error);
-  }
 }

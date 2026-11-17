@@ -19,7 +19,10 @@
  *    `createZoteroLogSink()` composes the two into `core/`'s `LogSink` port.
  * 2. `schemaReady()` — the gate `docs/01` §12 gotcha 29 requires before any
  *    `Zotero.ItemTypes` / `Zotero.ItemFields` lookup.
- * 3. `createSpikeArticle()` — the `P0-T10` spike command itself.
+ * 3. ~~The `P0-T10` spike command itself.~~ *Retired
+ *    2026-11-17 by `plan/10` `P7-T04` (`plan/00` §5 backlog item 25), with
+ *    `SPIKE_COLLECTION_NAME` and the spike's fixed work; the fixture lives on in
+ *    `test/integration/support/spikeArticle.ts`.*
  * 4. {@link createZoteroHttpTransport} — the one place `Zotero.HTTP.request` is
  *    named. `P1-T05` step 1: `src/core/http/client.ts` owns every option, the
  *    header policy, the classification and the retry, and takes this as a port
@@ -34,37 +37,14 @@
  * extended it a third time, for the same reason and after the same grep:
  * `debug` and `reportError` are imported by `src/bootstrap/registerUI.ts` and
  * by seven integration specs, so `reportError` keeps its two-argument shape
- * and `debug`'s new `level` stays optional. `debug`,
- * `reportError`, `schemaReady`, `userLibraryID`, `SPIKE_COLLECTION_NAME` and
- * `createSpikeArticle` have live importers outside this card's `Files` list —
- * `src/bootstrap/registerUI.ts` and `test/integration/zotero/itemCreation.spec.ts`
- * — and `registerUI.ts` is being rewritten concurrently by `P1-T19`. Deleting
- * them here would break a file this card may not touch (`plan/README.md` §5
- * rule 2), so the spike command retires with whichever card retires its menu
- * entry.
- *
- * **`createSpikeArticle()` is deliberately in the wrong layer, and only for
- * this card.** Orchestration belongs in `src/pipeline/` (`docs/07` §2.2), but
- * `P0-T10`'s `Files` list does not include a pipeline path, and the two
- * candidate homes are both closed: `src/ui/**` may not import `src/zotero/**`
- * (the `research-helper/layering/ui` rule) and `src/bootstrap/registerUI.ts`
- * may not name the `Zotero` global. Phase 1 `create`s
- * `src/pipeline/searchImport/searchImportPipeline.ts` and this function's job
- * moves there; `plan/README.md` §4's sixteen-path list already anticipates
- * this file being rewritten then.
+ * and `debug`'s new `level` stays optional. The spike command those cards kept
+ * for the same reason retired with its menu entry, in `P7-T04`.
  */
 
 import type { HttpTransport } from "../core/http/client";
 import { LOG_PREFIX } from "../core/logger";
-import type { CanonicalWork } from "../model/canonicalWork";
-import { normalizeDoi } from "../model/ids";
 
-import { findOrCreateCollection } from "./collectionOps";
-import {
-  RESEARCH_HELPER_TAG,
-  toZoteroItemJSON,
-  type ZoteroItemJSON,
-} from "./itemMapper";
+import type { ZoteroItemJSON } from "./itemMapper";
 
 // ---------------------------------------------------------------------------
 // The HTTP transport port — `P1-T05`
@@ -123,7 +103,7 @@ export type ZoteroDebugLevel = 1 | 2 | 3 | 4;
  * the lines of the other. There is now one constant, imported from the module
  * `docs/07` §10.3 declares it in, and a line that already carries it is passed
  * through untouched: {@link createLogger}'s line arrives here fully formed,
- * while a bare message from a call site such as {@link createSpikeArticle} or
+ * while a bare message from a call site such as a facade helper or
  * an integration spec still gets prefixed.
  *
  * `src/zotero/` may import `core/` (`docs/07` §2.3's arrow,
@@ -218,55 +198,14 @@ export async function schemaReady(): Promise<void> {
   await Zotero.Schema.schemaUpdatePromise;
 }
 
-/** The library this spike writes into. */
+/**
+ * The user library's id. `P0-T10`'s spike command wrote into it; since
+ * `P7-T04` retired that command no product code calls this, and it is kept as
+ * the facade read `src/addon.ts`'s `PlatformReads` note names.
+ */
 export function userLibraryID(): number {
   return Zotero.Libraries.userLibraryID;
 }
-
-/**
- * The collection `createSpikeArticle()` writes into.
- *
- * ASCII and free of path separators on purpose (`docs/01` §12 gotcha 19), and
- * carrying the task ID so it is obvious in a library what put it there.
- */
-export const SPIKE_COLLECTION_NAME = "Research Helper spike (P0-T10)";
-
-/** The spike DOI, through the one normalizer that produces a `Doi` (`docs/02` §11.1). */
-const SPIKE_DOI = normalizeDoi("10.5555/research-helper-p0-t10");
-if (SPIKE_DOI === null) {
-  throw new Error("research_helper: the P0-T10 spike DOI must normalize");
-}
-
-/**
- * The one article the spike creates. Fixed data, not fetched: `docs/01` §5.8
- * and §12 gotcha 13 forbid network I/O inside a transaction, and `P0-T10`
- * establishes the pattern even though it has nothing to fetch.
- *
- * **A `CanonicalWork`, since `P1-T24`.** `P0-T10` wrote a `JournalArticleRecord`
- * — a spike shape with four fields — and `P1-T24` retired it, so the spike's
- * fixed data is now expressed in the one shape the shipped mapper takes
- * (`docs/07` §5.1) and goes through `docs/07` §6.2's real mapping.
- *
- * `provenance.seenIn` is **empty on purpose**: this record came from no
- * literature source, so there is no `SourceId` that honestly belongs there.
- * The consequence is visible and intended — {@link toZoteroItemJSON} writes no
- * `rh-sources` line and no `libraryCatalog`, and `extra` carries exactly
- * §6.3's mandatory `rh-work-key`.
- */
-const SPIKE_WORK: CanonicalWork = {
-  workKey: `doi:${SPIKE_DOI}`,
-  ids: { doi: SPIKE_DOI },
-  type: "journal-article",
-  title: "Research Helper spike article (P0-T10)",
-  abstract:
-    "Created by the research_helper P0-T10 toolchain spike to prove that the " +
-    "plugin can write a journalArticle, its creator, its DOI and its " +
-    "collection membership into a Zotero library.",
-  authors: [{ family: "Lovelace", given: "Ada" }],
-  provenance: { recordIds: [], fieldOrigin: {}, seenIn: [] },
-  normalizedAtEpochMs: 0,
-};
-
 /**
  * Turn one of {@link toZoteroItemJSON}'s mappings into an unsaved
  * `Zotero.Item`.
@@ -305,106 +244,6 @@ export function newItemFromMapping(
   // Ship non-strict, develop strict (docs/01 §5.2.1).
   item.fromJSON(itemJSON, { strict: __env__ === "development" });
   return item;
-}
-
-/** What one run of the spike command produced. */
-export interface SpikeArticleResult {
-  readonly itemID: number;
-  readonly itemKey: string;
-  readonly collectionID: number;
-  readonly collectionName: string;
-  /** False when an earlier run's collection was reused. */
-  readonly collectionCreated: boolean;
-}
-
-/**
- * The Tools-menu command: create one `journalArticle` inside a named
- * collection.
- *
- * **Transaction shape (`P0-T10` step 4).** One `Zotero.DB.executeTransaction`
- * covers both writes — the collection and the item — and both use `save()`.
- * `saveTx()` is never called inside it (`docs/01` §12 gotcha 12: it deadlocks
- * or throws). Taking the collection inside rather than outside is what makes
- * the pair atomic: a failure while saving the item cannot leave an orphan
- * collection behind, and `collection.save()` assigns `collection.id`
- * synchronously enough for `item.setCollections([id])` in the next statement.
- *
- * **Collection membership.** Set on the *item* side with `setCollections()`
- * before its single `save()`, which `docs/01` §5.2 recommends "at creation
- * time". `Zotero.Collection.prototype.addItems()` does exist on Zotero 10.0.1
- * (see `collectionOps.ts`), but it is the wrong tool here: it re-saves an
- * already-saved item, so using it would mean two `save()` calls for one new
- * item.
- *
- * **No `undoAction`.** `docs/01` §5.2 marks `'undo-action-add-item'`
- * unverified; it does not exist in Zotero 10.0.1's `zotero.ftl` (grepped —
- * see the card report), and `P0-T10` says omit rather than invent. `save()`
- * inside a transaction takes no undo option in any case.
- *
- * **Second click.** Deliberately creates a *second* item and reuses the
- * existing collection. There is no de-duplication in this spike: dedupe is
- * Phase 2 (`docs/07` §6, `src/sources/shared/dedupe.ts`), and a spike that
- * silently did nothing on the second click would hide the very failure
- * `P0-T11` cycles looking for.
- */
-export async function createSpikeArticle(): Promise<SpikeArticleResult> {
-  // Gate first, and outside the transaction: the schema promise can involve a
-  // network fetch, and docs/01 §12 gotcha 13 forbids that inside one.
-  await schemaReady();
-
-  const libraryID = userLibraryID();
-  logFieldSupport();
-
-  const result = await Zotero.DB.executeTransaction(
-    async (): Promise<SpikeArticleResult> => {
-      const { collection, created } = await findOrCreateCollection(
-        SPIKE_COLLECTION_NAME,
-        libraryID,
-      );
-
-      const item = newItemFromMapping(toZoteroItemJSON(SPIKE_WORK), libraryID);
-      item.setCollections([collection.id]);
-      // save(), not saveTx(): docs/01 §5.8 / §12 gotcha 12.
-      await item.save();
-
-      return {
-        itemID: item.id,
-        itemKey: item.key,
-        collectionID: collection.id,
-        collectionName: collection.name,
-        collectionCreated: created,
-      };
-    },
-  );
-
-  debug(
-    `P0-T10 created item ${result.itemID} (key ${result.itemKey}) tagged ` +
-      `"${RESEARCH_HELPER_TAG}" in collection ${result.collectionID} ` +
-      `"${result.collectionName}" (${result.collectionCreated ? "created" : "reused"})`,
-  );
-  return result;
-}
-
-/**
- * Feature-detect the field keys this card writes, rather than trusting a
- * hand-copied list (`docs/01` §12 gotcha 28).
- *
- * Purely diagnostic: `fromJSON()` in strict mode is what actually fails the
- * run if a key is wrong. This exists so the debug log says *which* key, which
- * is the difference between a five-minute and a one-hour diagnosis when a
- * schema bump moves something.
- *
- * Must run after {@link schemaReady} (gotcha 29).
- */
-function logFieldSupport(): void {
-  const fields = ["title", "abstractNote", "DOI"];
-  const missing = fields.filter((field) => !Zotero.ItemFields.getID(field));
-  if (missing.length > 0) {
-    debug(
-      `schema ${String(Zotero.Schema.globalSchemaVersion)} has no field key ` +
-        `for: ${missing.join(", ")}`,
-    );
-  }
 }
 
 // ---------------------------------------------------------------------------

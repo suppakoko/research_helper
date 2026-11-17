@@ -64,10 +64,11 @@
 # complete one: a plugin shipping only `ko-KR` shows Korean to every user on
 # the pre-Zotero-10 path (`docs/08` §10.1).
 #
-# `research-helper-menu-spike-create-item` is absent from the `ko-KR` bundle
-# **on purpose** and must stay so: it is the key `test/integration/l10n.spec.ts`
-# uses to prove that a Korean UI falls back to this file's English rather than
-# to the identifier (`FR-55`, spike `V-17`, `P0-T24`).
+# Until 2026-11-17 one id of this file was absent from the `ko-KR` bundle on
+# purpose, so that `FR-55`'s fallback to this file's English stayed observable:
+# `P0-T10`'s spike command. `plan/10` `P7-T04` retired the command and its id;
+# `test/integration/l10n.spec.ts` now observes the fallback on the ids awaiting
+# Korean review (`plan/00` §6 item 388(c)).
 
 
 ## Tools ▸ Research Helper, and the collection context menu (docs/08 §2.4, §2.5)
@@ -130,12 +131,6 @@ research-helper-menu-item-find-related =
             [yes] { "" }
            *[no] Select a single item to find papers related to it.
         }
-
-# `P0-T10`'s spike command. Kept deliberately: `src/ui/menus/toolsMenu.ts`
-# names this id, and it is the key the ko-KR fallback assertion is built on
-# (see the header). Removing it breaks both.
-research-helper-menu-spike-create-item =
-    .label = Create spike item (P0-T10)
 
 
 ## Literature source display names — `LiteratureSource.displayNameKey`
@@ -288,51 +283,55 @@ research-helper-progress-headline = Research Helper
 ## audio failure paths, and its entry closes this block; one remains.)* Until 2026-10-20 the list also held the four LLM keys, which `P3-T05`
 ## added at the end of this block. *(Updated 2026-10-23, `P3-T16`:
 ## `rh-error-budget` left the list, and its entry closes this block; two remain.)*
+## *(Updated 2026-11-17, `P7-T12`: `rh-error-policy` left the list, and its entry closes this
+## block; the list is empty. The same card appended one next action to each message that lacked
+## one, so each now says what failed, which service, and what to do (NFR-14); the audit table is
+## `test/unit/i18n/errorMessages.test.ts`, `plan/00` §6 item 389.)*
 ## `src/i18n/keys.ts` exports that list as `DEFERRED_ERROR_MESSAGE_IDS` and
 ## `test/integration/l10n.spec.ts` asserts it is exactly the set missing, so a
 ## new error class cannot be added without this file noticing.
 
-rh-error-configuration = Research Helper is not configured correctly for this action.
+rh-error-configuration = Research Helper is not configured correctly for this action. Check Research Helper's preferences, then try again.
 
 # `MissingCredentialError`. §8.3's NO_KEY row. Action: Open Preferences.
-rh-error-missing-credential = No API key configured for { $provider }.
+rh-error-missing-credential = No API key configured for { $provider }. Add the key in Research Helper's preferences.
 
-rh-error-network = Could not reach { $host }.
+rh-error-network = Could not reach { $host }. Check your internet connection, then try again.
 
 # §8.3's OFFLINE row reads "Zotero is offline."; `docs/07` §10.2's summary
 # table reads "No internet connection." for the same class. §8.3 wins here and
 # the divergence is reported.
-rh-error-offline = Zotero is offline.
+rh-error-offline = Zotero is offline. Connect to the internet, then try again.
 
-rh-error-timeout = { $host } did not respond within { $seconds }s.
+rh-error-timeout = { $host } did not respond within { $seconds }s. Try again in a few minutes.
 
 # §8.3 folds 401 and 403 into one AUTH row; `docs/07` §10.1 gives each its own
 # key, so the 403 wording below is derived from the row rather than quoted.
-rh-error-auth = { $provider } rejected the API key (HTTP { $status }).
+rh-error-auth = { $provider } rejected the API key (HTTP { $status }). Check the key in Research Helper's preferences.
 
-rh-error-forbidden = { $provider } refused the request (HTTP { $status }).
+rh-error-forbidden = { $provider } refused the request (HTTP { $status }). Check the key's permissions in your { $provider } account.
 
 rh-error-rate-limit = { $provider } rate limit reached. Retrying in { $seconds }s.
 
-rh-error-quota = { $provider } reports the account is out of credit.
+rh-error-quota = { $provider } reports the account is out of credit. Add credit in your { $provider } account, then try again.
 
-rh-error-upstream = { $database } is temporarily unavailable (HTTP { $status }). Other databases were still searched.
+rh-error-upstream = { $database } is temporarily unavailable (HTTP { $status }). Other databases were still searched. Try this database again later.
 
 # `BadRequestError` carries `userFacing = false` ("almost always our bug",
 # `docs/07` §10.1), so this should never be rendered. It exists because the
 # `messageKey` contract is unconditional: every class has one, and a key with
 # no message is a blank label if the flag is ever wrong.
-rh-error-bad-request = Research Helper sent a request { $database } could not accept.
+rh-error-bad-request = Research Helper sent a request { $database } could not accept. Try again, and report the problem if it happens again.
 
-rh-error-source = { $database } could not complete the search.
+rh-error-source = { $database } could not complete the search. Try again later.
 
 # `ParseError` is also `userFacing = false` — §10.2: "Logged; item counted as
 # failed with a generic message".
-rh-error-parse = Could not read the response from { $database }.
+rh-error-parse = Could not read the response from { $database }. Try again later, and report the problem if it happens again.
 
-rh-error-zotero = Zotero could not complete the change.
+rh-error-zotero = Zotero could not complete the change. Try again, or restart Zotero if it happens again.
 
-rh-error-storage = Research Helper could not write to storage.
+rh-error-storage = Research Helper could not write to storage. Check that the disk has free space, then try again.
 
 # §8.3's CANCELLED row. `OperationCancelledError` is `userFacing = false`
 # because cancellation is not a failure, but `P1-T22` step 4 renders this text
@@ -351,23 +350,23 @@ rh-error-cancelled =
 # `$model` are untranslated names (`docs/08` §10.3).
 
 # `LLMError` itself: a provider failure no narrower class describes.
-rh-error-llm = { $provider } could not complete the request.
+rh-error-llm = { $provider } could not complete the request. Try again, or choose another model in Research Helper's preferences.
 
 # `ContextLengthExceededError` is `userFacing = false`: the pipeline re-chunks
 # and retries before the user would see it.
-rh-error-context-length = The text is too long for { $model } to read in one request.
+rh-error-context-length = The text is too long for { $model } to read in one request. Choose a model that reads longer text in Research Helper's preferences.
 
 # `docs/07` §10.2: the item is marked skipped and the job continues.
-rh-error-content-filter = The model declined to summarize this paper.
+rh-error-content-filter = The model declined to summarize this paper. The paper was skipped; to summarize it, choose a model from another AI provider in Research Helper's preferences.
 
-rh-error-structured-output = { $provider } returned a summary Research Helper could not read.
+rh-error-structured-output = { $provider } returned a summary Research Helper could not read. Try again, or choose another model in Research Helper's preferences.
 
 # `OutputTruncatedError` (owner, 2026-10-21, `plan/00` §6 item 265(c);
 # `docs/07` §10.1): the answer stopped at the output length limit
 # (`finishReason` "length"), so the summary is incomplete. The item counts as
 # failed and the job continues. `$model` is the model ID, untranslated
 # (`docs/08` §10.3).
-rh-error-output-truncated = The summary was cut off by the output length limit of { $model }.
+rh-error-output-truncated = The summary was cut off by the output length limit of { $model }. Try again, or choose a model with a larger output limit in Research Helper's preferences.
 
 # `PrivacyRoutingError` (owner, 2026-10-21, `plan/00` §6 item 262(c);
 # `docs/07` §10.1): OpenRouter's guardrail 404, which `docs/09` §3.4 rule 2
@@ -383,16 +382,16 @@ rh-error-privacy-routing = OpenRouter has no provider for { $model } that meets 
 # (owner, 2026-10-20, plan/00 §6 item 234). `$limit` and `$spent` are dollar
 # amounts the caller formatted with Intl (docs/08 §10.3). The question that
 # follows ("Continue" / "Stop") is the cost dialog's ceiling moment.
-rh-error-budget = Paused at the { $limit } spending limit. { $spent } is spent so far, and summaries already made are kept.
+rh-error-budget = Paused at the { $limit } spending limit. { $spent } is spent so far, and summaries already made are kept. Raise Research Helper's limit to continue, or stop.
 
 # `SeedUnresolvedError` (docs/07 §10.1; P5-T11; FR-13 scenario 3, FR-14). The
 # remedy is an edit to the item, so the message names what to add.
-rh-error-seed-gone = This item is no longer in your library, so related papers cannot be looked up.
+rh-error-seed-gone = This item is no longer in your library, so related papers cannot be looked up. Choose another item, then try again.
 rh-error-seed-no-identifier = This item has no DOI, PMID, arXiv ID or title, so related papers cannot be looked up. Add one of them to the item and try again.
 rh-error-seed-no-match = No paper matched this item's title closely enough, and the item has no DOI, PMID or arXiv ID. Add one of them to the item, or correct its title, and try again.
 rh-error-recommend-too-few-items = { $count ->
-    [one] This collection has { $count } item. Recommendations need at least 5.
-   *[other] This collection has { $count } items. Recommendations need at least 5.
+    [one] This collection has { $count } item. Recommendations need at least 5. Add items to the collection, then try again.
+   *[other] This collection has { $count } items. Recommendations need at least 5. Add items to the collection, then try again.
 }
 
 # `TTSError` (docs/07 §10.1 and its note of 2026-11-17; P6-T14; FR-43, FR-40).
@@ -412,6 +411,12 @@ rh-error-tts = { $reason ->
     [rate-limited] Gemini text-to-speech is receiving too many requests, so no audio was made. Your report is unchanged. Try again in a few minutes, or save the spoken script as text.
    *[other] Gemini text-to-speech could not make the audio. Your report is unchanged. Try again, or save the spoken script as text.
 }
+
+# `PolicyViolationError` (`docs/07` §10.1): a request the privacy mode forbids, refused
+# before anything is sent. Shipped by `P7-T12` (2026-11-17, `plan/00` §6 item 389(e)): no
+# argument, because its throw sites span the HTTP client, three pipeline stages and the
+# audio disclosure, so it names Research Helper's privacy mode as the service.
+rh-error-policy = Research Helper stopped this request before sending it, because your privacy mode does not allow it. Check the privacy mode in Research Helper's preferences.
 
 
 ## The preference pane — literature-source credentials (docs/08 §7.3–7.5,

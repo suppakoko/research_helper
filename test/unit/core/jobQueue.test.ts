@@ -695,6 +695,44 @@ describe("P3-T34 — recover(): docs/07 §7.6's table", () => {
     });
   });
 
+  // docs/07 §12.6's note, point 9: DECIDED 2026-11-17 (coordinator, under
+  // plan/00 §6 item 313).
+  it("cancels, not fails, an interrupted job of a pipeline cancelledAfterRestart names; others still fail", async () => {
+    const { connection, clock, queue } = await harness();
+    const audio = await queue.enqueue("audioReport", {});
+    await queue.start(audio.id);
+    const search = await queue.enqueue("searchImport", {});
+    await queue.start(search.id);
+    const resumable = await crashedMidJob(queue);
+
+    const report = await queueOver(connection, clock, {
+      cancelledAfterRestart: (pipelineId) => pipelineId === "audioReport",
+    }).recover();
+    expect(report.cancelled).toStrictEqual([audio.id]);
+    expect(report.failed).toStrictEqual([search.id]);
+    expect(rawRow(connection, audio.id)).toMatchObject({
+      status: "cancelled",
+      error_json: null,
+    });
+    expect(rawRow(connection, audio.id)["finished_at"]).not.toBeNull();
+    expect(rawRow(connection, search.id)["status"]).toBe("failed");
+    // A resumable pipeline the predicate names is not cancelled.
+    const named = await queueOver(connection, clock, {
+      cancelledAfterRestart: () => true,
+    }).recover();
+    expect(named.cancelled).toStrictEqual([]);
+    expect(rawRow(connection, resumable.id)["status"]).toBe("interrupted");
+  });
+
+  it("without cancelledAfterRestart every non-resumable interrupted job fails", async () => {
+    const { connection, clock, queue } = await harness();
+    const audio = await queue.enqueue("audioReport", {});
+    await queue.start(audio.id);
+    const report = await queueOver(connection, clock).recover();
+    expect(report.cancelled).toStrictEqual([]);
+    expect(report.failed).toStrictEqual([audio.id]);
+  });
+
   it("leaves a job from another plugin version, or with no checkpoint, for the user", async () => {
     const { connection, clock, queue } = await harness();
     const other = await crashedMidJob(queue);

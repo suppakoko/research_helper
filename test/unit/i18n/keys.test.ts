@@ -152,7 +152,8 @@ const ID_CONSTANTS = {
   L10N_MENU_COLLECTION_REPORT: keys.L10N_MENU_COLLECTION_REPORT,
   // `P5-T15`: the item context menu's one entry.
   L10N_MENU_ITEM_FIND_RELATED: keys.L10N_MENU_ITEM_FIND_RELATED,
-  L10N_MENU_SPIKE_CREATE_ITEM: keys.L10N_MENU_SPIKE_CREATE_ITEM,
+  // `P7-T04` (2026-11-17): `L10N_MENU_SPIKE_CREATE_ITEM` left with the spike
+  // command; the test at the end of this block asserts it stays gone.
   L10N_PROGRESS_HEADLINE: keys.L10N_PROGRESS_HEADLINE,
   // `P3-T34`: the notice that interrupted jobs resumed (`docs/07` §7.6).
   L10N_JOB_RESUMED: keys.L10N_JOB_RESUMED,
@@ -195,8 +196,21 @@ const NON_ID_L10N_CONSTANTS = ["L10N_EXPORT_TAKES_NO_PATH"];
  * again. *Later on 2026-10-29:* `P4-T05`'s and `P4-T19`'s eleven strings
  * put it back (item 306(b)); the owner reviewed them (item 307(f)), and
  * `P4-T05`'s stop when no theme is left (item 307(c)) is its one member.
+ *
+ * `KO_DELIBERATELY_ABSENT` joined on 2026-11-17 (`plan/10` `P7-T04`, which
+ * keeps the list and empties it): its one member was the retired spike
+ * command's id. The partition assertions still read it through the guard.
+ *
+ * `DEFERRED_ERROR_MESSAGE_IDS` joined the same day (`plan/10` `P7-T12`, whose
+ * `Done when` is that list empty): `rh-error-policy`, its last member, ships.
+ * The tests of `P3-T05`'s and `P7-T12`'s error messages below assert the list
+ * is empty, so the vacuous-truth guard does not hide a member coming back.
  */
-const MAY_BE_EMPTY: readonly ListName[] = ["KO_PENDING_REVIEW"];
+const MAY_BE_EMPTY: readonly ListName[] = [
+  "KO_PENDING_REVIEW",
+  "KO_DELIBERATELY_ABSENT",
+  "DEFERRED_ERROR_MESSAGE_IDS",
+];
 
 /**
  * A list from {@link LISTS}, having first failed the test if it is empty.
@@ -552,15 +566,22 @@ describe("src/i18n/keys.ts — the relations between its lists", () => {
         `is in no bundle and the caller renders a blank label rather than ` +
         `failing to compile; not members: ${show(strays)}`,
     ).toEqual([]);
+  });
 
-    expect(
-      read("KO_DELIBERATELY_ABSENT"),
-      `L10N_MENU_SPIKE_CREATE_ITEM must stay the deliberately absent ko-KR ` +
-        `key: FR-55's "falls back to English rather than showing an ` +
-        `identifier" is observable only while exactly this id is missing ` +
-        `from the ko-KR bundle, and it is the fixture the integration ` +
-        `spec's fallback layer is built on`,
-    ).toContain(keys.L10N_MENU_SPIKE_CREATE_ITEM);
+  it("P7-T04: keeps KO_DELIBERATELY_ABSENT, empty, and names the retired spike id nowhere", () => {
+    // `plan/10` `P7-T04`: the spike command and its id are retired. The list
+    // stays, as the third list of the partition above, and is empty; a
+    // member added later must be a real en-US id kept out of ko-KR on purpose.
+    expect(Object.hasOwn(keys, "KO_DELIBERATELY_ABSENT")).toBe(true);
+    expect(read("KO_DELIBERATELY_ABSENT")).toEqual([]);
+    expect(Object.hasOwn(keys, "L10N_MENU_SPIKE_CREATE_ITEM")).toBe(false);
+    const retired = "research-helper-menu-spike-create-item";
+    for (const name of Object.keys(LISTS) as ListName[]) {
+      expect(
+        read(name),
+        `${name} must not name the retired spike command's id`,
+      ).not.toContain(retired);
+    }
   });
 });
 
@@ -579,7 +600,7 @@ describe("src/i18n/keys.ts — the LLM error messages P3-T05 ships", () => {
     new StructuredOutputError("openai", "m", "x"),
   ].map((error) => error.messageKey);
 
-  it("ships the four LLM messageKeys and defers only policy (budget shipped with P3-T16, TTS with P6-T14)", () => {
+  it("ships the four LLM messageKeys and defers nothing (budget shipped with P3-T16, TTS with P6-T14, policy with P7-T12)", () => {
     expect(llmKeys).toEqual([
       "rh-error-llm",
       "rh-error-context-length",
@@ -589,30 +610,39 @@ describe("src/i18n/keys.ts — the LLM error messages P3-T05 ships", () => {
     expect(notIn(llmKeys, read("ERROR_MESSAGE_IDS"))).toEqual([]);
     expect(notIn(llmKeys, read("MAIN_WINDOW_MESSAGE_IDS"))).toEqual([]);
     expect(sharedBy(llmKeys, read("DEFERRED_ERROR_MESSAGE_IDS"))).toEqual([]);
-    expect(sorted(read("DEFERRED_ERROR_MESSAGE_IDS"))).toEqual(
-      sorted([new PolicyViolationError("x").messageKey]),
-    );
+    expect(read("DEFERRED_ERROR_MESSAGE_IDS")).toEqual([]);
   });
 
-  it("ships rh-error-tts with P6-T14: an argument message, Korean pending G-41", () => {
+  it("ships rh-error-policy with P7-T12: no argument, Korean awaiting review (G-41, item 389)", () => {
+    const policy = new PolicyViolationError("x").messageKey;
+    expect(policy).toBe("rh-error-policy");
+    expect(read("ERROR_MESSAGE_IDS")).toContain(policy);
+    expect(read("MAIN_WINDOW_MESSAGE_IDS")).toContain(policy);
+    expect(read("ARGUMENT_MESSAGE_IDS")).not.toContain(policy);
+    expect(read("KO_PENDING_REVIEW")).toContain(policy);
+    expect(read("KO_PRESENT")).not.toContain(policy);
+    expect(read("DEFERRED_ERROR_MESSAGE_IDS")).toEqual([]);
+  });
+
+  it("ships rh-error-tts with P6-T14: an argument message, Korean reviewed (G-41, item 386)", () => {
     const tts = new TTSError("x").messageKey;
     expect(read("ERROR_MESSAGE_IDS")).toContain(tts);
     expect(read("MAIN_WINDOW_MESSAGE_IDS")).toContain(tts);
     expect(read("ARGUMENT_MESSAGE_IDS")).toContain(tts);
-    expect(read("KO_PENDING_REVIEW")).toContain(tts);
+    expect(read("KO_PENDING_REVIEW")).not.toContain(tts);
     expect(read("DEFERRED_ERROR_MESSAGE_IDS")).not.toContain(tts);
-    expect(read("KO_PRESENT")).not.toContain(tts);
+    expect(read("KO_PRESENT")).toContain(tts);
   });
 
-  it("ships P6-T15's thirteen audio strings in mainWindow, Korean pending G-41", () => {
+  it("ships P6-T15's thirteen audio strings in mainWindow, Korean reviewed (G-41, item 386)", () => {
     const audio = [
       ...Object.values(AUDIO_COST_L10N),
       keys.L10N_AUDIO_TIER_REFUSED,
     ];
     expect(audio).toHaveLength(13);
     expect(notIn(audio, read("MAIN_WINDOW_MESSAGE_IDS"))).toEqual([]);
-    expect(notIn(audio, read("KO_PENDING_REVIEW"))).toEqual([]);
-    expect(sharedBy(audio, read("KO_PRESENT"))).toEqual([]);
+    expect(notIn(audio, read("KO_PRESENT"))).toEqual([]);
+    expect(sharedBy(audio, read("KO_PENDING_REVIEW"))).toEqual([]);
     expect(
       audio.filter((id) => read("ARGUMENT_MESSAGE_IDS").includes(id)),
     ).toEqual([
@@ -624,11 +654,11 @@ describe("src/i18n/keys.ts — the LLM error messages P3-T05 ships", () => {
       AUDIO_COST_L10N.duration,
       AUDIO_COST_L10N.attach,
     ]);
-    // `rh-error-policy` stays deferred: the refusal has its own message.
-    expect(read("DEFERRED_ERROR_MESSAGE_IDS")).toEqual(["rh-error-policy"]);
+    // The refusal has its own message; `rh-error-policy` shipped with P7-T12.
+    expect(read("DEFERRED_ERROR_MESSAGE_IDS")).toEqual([]);
   });
 
-  it("ships P6-T17's fifteen strings, each a commented ko-KR draft pending G-41", () => {
+  it("ships P6-T17's fifteen strings, each a live ko-KR entry reviewed by the owner (G-41, item 386)", () => {
     const ftl = (locale: string, surface: string): string =>
       readFileSync(
         resolve(
@@ -647,8 +677,8 @@ describe("src/i18n/keys.ts — the LLM error messages P3-T05 ships", () => {
     expect(notIn(main, read("MAIN_WINDOW_MESSAGE_IDS"))).toEqual([]);
     expect(notIn(report, read("REPORT_WINDOW_MESSAGE_IDS"))).toEqual([]);
     const all = [...main, ...report];
-    expect(notIn(all, read("KO_PENDING_REVIEW"))).toEqual([]);
-    expect(sharedBy(all, read("KO_PRESENT"))).toEqual([]);
+    expect(notIn(all, read("KO_PRESENT"))).toEqual([]);
+    expect(sharedBy(all, read("KO_PENDING_REVIEW"))).toEqual([]);
     expect(
       all.filter((id) => read("ARGUMENT_MESSAGE_IDS").includes(id)).sort(),
     ).toEqual(
@@ -672,19 +702,20 @@ describe("src/i18n/keys.ts — the LLM error messages P3-T05 ships", () => {
           english.filter((line) => line.startsWith(`${id} =`)),
           id,
         ).toHaveLength(1);
-        // No live Korean message until the owner adopts one (G-41)…
+        // One live Korean message, adopted 2026-11-17 (G-41, item 386), with
+        // its provenance line and no commented draft left behind.
+        const at = korean.findIndex((line) => line.startsWith(`${id} =`));
         expect(
           korean.filter((line) => line.startsWith(`${id} =`)),
           id,
-        ).toHaveLength(0);
-        // …but a commented draft marked not adopted.
-        const at = korean.indexOf(`# ${id}`);
-        const draft = korean.findIndex((line) => line.startsWith(`# ${id} =`));
-        expect(at, id).toBeGreaterThanOrEqual(0);
-        expect(draft, id).toBeGreaterThan(at);
-        expect(korean.slice(at, draft).join("\n"), id).toContain(
-          "Draft (coordinator, 2026-11-17, not adopted):",
+        ).toHaveLength(1);
+        expect(korean[at - 1], id).toContain(
+          "reviewed by the owner on 2026-11-17 (G-41, plan/00 §6 item 386)",
         );
+        expect(
+          korean.filter((line) => line.startsWith(`# ${id}`)),
+          id,
+        ).toHaveLength(0);
       }
     }
   });
@@ -818,10 +849,11 @@ describe("src/i18n/keys.ts — P3-T15's two egress notices (docs/09 §3.6)", () 
     }
   });
 
-  it("keeps rh-error-policy deferred: PolicyViolationError gains no message with P3-T15", () => {
+  it("keeps rh-error-policy apart from P3-T15's notices: it shipped later, with P7-T12, as an error id", () => {
     const key = new PolicyViolationError("x").messageKey;
-    expect(read("DEFERRED_ERROR_MESSAGE_IDS")).toContain(key);
-    expect(read("ERROR_MESSAGE_IDS")).not.toContain(key);
+    expect(notices).not.toContain(key);
+    expect(read("DEFERRED_ERROR_MESSAGE_IDS")).not.toContain(key);
+    expect(read("ERROR_MESSAGE_IDS")).toContain(key);
   });
 });
 
@@ -871,10 +903,11 @@ describe("src/i18n/keys.ts — P3-T16's budget error, cost dialog and Usage read
     expect(sharedBy(unique, read("KO_PENDING_REVIEW"))).toEqual([]);
   });
 
-  it("still defers rh-error-policy: the cost dialog renders no refusal (P3-T15 finding 4)", () => {
-    expect(read("DEFERRED_ERROR_MESSAGE_IDS")).toContain(
-      new PolicyViolationError("x").messageKey,
-    );
+  it("keeps rh-error-policy out of the cost dialog's ids: the dialog renders no refusal (P3-T15 finding 4), and the message shipped with P7-T12", () => {
+    const policy = new PolicyViolationError("x").messageKey;
+    expect(unique).not.toContain(policy);
+    expect(read("DEFERRED_ERROR_MESSAGE_IDS")).not.toContain(policy);
+    expect(read("ERROR_MESSAGE_IDS")).toContain(policy);
   });
 });
 

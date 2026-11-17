@@ -1318,9 +1318,9 @@ describe("P1-T32: the real LogSink reaches both of §10.3's channels", () => {
   });
 
   it("criterion 5: a bare facade call is still prefixed once", () => {
-    // The other half of the idempotent prefix: `createSpikeArticle()` and the
-    // integration specs call `debug()` with an unprefixed message and must
-    // keep getting one prefix, not zero.
+    // The other half of the idempotent prefix: the integration specs (and,
+    // until `P7-T04` retired it, `createSpikeArticle()`) call `debug()` with an
+    // unprefixed message and must keep getting one prefix, not zero.
     zoteroDebug("a bare message");
     const calls = zoteroDebugCalls();
     expect(calls).toHaveLength(1);

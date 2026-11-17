@@ -1,0 +1,129 @@
+# Zotero-beta compatibility watch for research_helper — P7-T22, following
+# docs/13 §5.3's `zotero-beta` job (2026-11-17).
+#
+# Once a week, and on demand, this runs the in-Zotero integration suite
+# against the current Zotero beta, so a Zotero change is seen before users see
+# it (docs/11 R-1; docs/13 §6.2's upgrade drill, step 2). When the run fails it
+# opens one issue, or comments on the one already open, with the run's link.
+#
+# How the beta build is chosen (plan/10 P7-T22 step 1). docs/13 §5.3's
+# `ZOTERO_CHANNEL: beta` is marked Unverified there: nothing on file shows that
+# zotero-plugin-scaffold reads it. So this file does not use it. It downloads
+# the beta explicitly by URL from Zotero's published beta channel,
+#   https://www.zotero.org/download/client/dl?channel=beta&platform=linux-x86_64
+# which answers with a redirect to the current beta tarball (measured
+# 2026-11-17: a 302 to `Zotero-11.0-beta.4+045d52044_linux-x86_64.tar.xz` on
+# download.zotero.org), and points ZOTERO_PLUGIN_ZOTERO_BIN_PATH at the binary,
+# exactly as ci.yml's integration job does for its pinned release. The URL the
+# redirect resolved to is printed and named in any issue, so a failure says
+# which beta it was.
+#
+# Deliberate differences from docs/13 §5.3:
+#
+# - No `live-contract` job (plan/10 §0.4 line 18): it needs keys, and this
+#   file uses no key and no secret.
+# - Not `continue-on-error`: a red run must be red, because the issue step
+#   below runs on `failure()`.
+# - The job is otherwise ci.yml's `integration` job: ubuntu-24.04, the
+#   20-minute limit, `npm ci`, the same scaffold provisioning.
+# - The issue is opened with the `gh` CLI the runner image provides, so no
+#   further action is added; it carries no label.
+#
+# Permissions. `permissions: {}` at the top; the one job holds `contents: read`
+# (to check the repository out) and `issues: write` (to open or comment on the
+# issue), nothing else. The only token used is the run's own automatic
+# GITHUB_TOKEN, passed to `gh` as GH_TOKEN in the issue step alone. Every
+# `uses:` is pinned to a full commit, with its tag as a comment; the commits
+# were read on 2026-11-17 with `git ls-remote --tags`.
+
+name: Zotero beta compatibility
+
+on:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: compat-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "^22.13.0"
+  ZOTERO_BETA_URL: "https://www.zotero.org/download/client/dl?channel=beta&platform=linux-x86_64"
+
+jobs:
+  zotero-beta:
+    name: Integration tests against the Zotero beta
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Provision the current Zotero beta (Linux x86_64)
+        id: zotero
+        run: |
+          set -euo pipefail
+          dir="${RUNNER_TEMP}/zotero"
+          mkdir -p "$dir"
+          resolved="$(curl --fail --silent --show-error --location --retry 3 \
+            --output "${RUNNER_TEMP}/zotero.tar.xz" --write-out '%{url_effective}' \
+            "$ZOTERO_BETA_URL")"
+          echo "Zotero beta tarball: $resolved"
+          echo "resolved=$resolved" >> "$GITHUB_OUTPUT"
+          tar -xJf "${RUNNER_TEMP}/zotero.tar.xz" -C "$dir"
+          bin="$(find "$dir" -maxdepth 2 -type f -name zotero -perm -u+x -print -quit)"
+          if [ -z "$bin" ]; then
+            echo "::error::No zotero executable found in the beta tarball"
+            exit 1
+          fi
+          echo "Zotero binary: $bin"
+          echo "ZOTERO_PLUGIN_ZOTERO_BIN_PATH=$bin" >> "$GITHUB_ENV"
+
+      - name: Run in-Zotero tests against the beta (headless)
+        run: npm run test:integration -- --exit-on-finish --abort-on-fail
+
+      - name: Upload Zotero debug logs on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: zotero-beta-logs
+          path: .scaffold/logs/
+          retention-days: 14
+
+      - name: Open or update the compatibility issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BETA: ${{ steps.zotero.outputs.resolved }}
+        run: |
+          set -euo pipefail
+          title="Zotero beta compatibility run failed"
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          body="The scheduled integration run against the Zotero beta failed: ${run_url}
+          Beta tarball: ${BETA:-not resolved}
+          See docs/13 §6.2's upgrade drill; the debug logs are attached to the run."
+          number="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "\"${title}\" in:title" --json number,title \
+            --jq "map(select(.title == \"${title}\")) | .[0].number // empty")"
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          fi

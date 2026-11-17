@@ -1416,11 +1416,11 @@ describe("P6-T15 — the audio strings in both bundles", () => {
     return enUS.slice(start, start + 1 + next);
   };
 
-  it("declares each in en-US and leaves each a commented ko-KR stub with a draft (G-41)", () => {
+  it("declares each in en-US and in ko-KR, the Korean reviewed by the owner (G-41, plan/00 §6 item 386)", () => {
     for (const id of audioIds) {
       expect(enUS, id).toMatch(new RegExp(`^${id} =`, "m"));
-      expect(koKR, id).not.toMatch(new RegExp(`^${id} =`, "m"));
-      expect(koKR, id).toMatch(new RegExp(`^# ${id} =`, "m"));
+      expect(koKR, id).toMatch(new RegExp(`^${id} =`, "m"));
+      expect(koKR, id).not.toMatch(new RegExp(`^# ${id} =`, "m"));
     }
   });
 

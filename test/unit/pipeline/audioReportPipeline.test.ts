@@ -92,6 +92,7 @@ import {
   type AudioFileSystem,
 } from "../../../src/tts/audioStore";
 import { chunkScript } from "../../../src/tts/chunk";
+import { GEMINI_TTS_FALLBACK_MODEL } from "../../../src/tts/geminiTts";
 import type {
   AudioArtifact,
   SynthesisRequest,
@@ -356,14 +357,22 @@ function library(): Library {
   return lib;
 }
 
-function fakeTts(fail?: Error) {
+/**
+ * A fake TTS client. As `createGeminiTts`'s `resolveModel` does, a set
+ * preference is returned with no request, and an empty one reads the model
+ * list (counted in `listReads`, a request to Google) and returns `liveModel`.
+ */
+function fakeTts(fail?: Error, liveModel: string = TTS_MODEL) {
   const requests: SynthesisRequest[] = [];
   const models: string[] = [];
+  const listReads: number[] = [];
   const voiceLanguages: string[] = [];
   const tts: Pick<TTSProvider, "resolveModel" | "synthesize" | "listVoices"> = {
     resolveModel(preferred) {
       models.push(preferred);
-      return Promise.resolve(TTS_MODEL);
+      if (preferred.trim() !== "") return Promise.resolve(preferred.trim());
+      listReads.push(1);
+      return Promise.resolve(liveModel);
     },
     listVoices(language) {
       voiceLanguages.push(language);
@@ -392,7 +401,7 @@ function fakeTts(fail?: Error) {
       });
     },
   };
-  return { tts, requests, models, voiceLanguages };
+  return { tts, requests, models, listReads, voiceLanguages };
 }
 
 // ---------------------------------------------------------------------------
@@ -413,6 +422,8 @@ interface HarnessOptions {
   readonly refuseReservation?: number;
   /** The script model's description; a zero-retention, no-training one by default. */
   readonly model?: ModelInfo;
+  /** The model the list read returns when `tts.model` is empty. */
+  readonly liveModel?: string;
 }
 
 async function harness(options: HarnessOptions = {}) {
@@ -470,7 +481,7 @@ async function harness(options: HarnessOptions = {}) {
     },
   };
   const lib = library();
-  const tts = fakeTts(options.ttsFail);
+  const tts = fakeTts(options.ttsFail, options.liveModel);
   const tierWrites: string[] = [];
   let tierAnswer = options.tierAnswer ?? "";
   let paid = options.paid ?? false;
@@ -515,7 +526,9 @@ async function harness(options: HarnessOptions = {}) {
     audioEnabled: true,
     ttsLanguage: "auto",
     ttsVoice: "Charon",
-    ttsModel: "",
+    // Set, so the quoted model is the one used; the empty case (the shipped
+    // value) has its own tests (plan/00 §6 item 385).
+    ttsModel: TTS_MODEL,
     ttsTargetMinutes: 1,
     ...options.config,
   };
@@ -575,6 +588,12 @@ async function harness(options: HarnessOptions = {}) {
   };
 
   const confirms: AudioConfirmRequest[] = [];
+  const atConfirm: {
+    listReads: number;
+    resolves: number;
+    synthesis: number;
+    chats: number;
+  }[] = [];
   const asks: SummarizeQuestion[] = [];
   const views: AudioReportRunView[] = [];
 
@@ -599,6 +618,13 @@ async function harness(options: HarnessOptions = {}) {
       update: (view) => views.push(view),
       confirm: (request) => {
         confirms.push(request);
+        // What had left the machine when this confirmation was asked.
+        atConfirm.push({
+          listReads: tts.listReads.length,
+          resolves: tts.models.length,
+          synthesis: tts.requests.length,
+          chats: chats.length,
+        });
         return Promise.resolve(replies.shift() ?? { kind: "run" });
       },
       ask: (question) => {
@@ -644,6 +670,7 @@ async function harness(options: HarnessOptions = {}) {
     chats,
     citationReads,
     confirms,
+    atConfirm,
     asks,
     views,
     tierWrites,
@@ -868,6 +895,205 @@ describe("P6-T16 — refusals before any request", () => {
 // ---------------------------------------------------------------------------
 // 7. Cancel, decline and failures
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// 6a. Item 385: resolve after confirmation (owner, 2026-11-17)
+// ---------------------------------------------------------------------------
+
+describe("plan/00 §6 item 385 — the TTS model is resolved after the first confirmation", () => {
+  const STORED = [report({ audioScripts: { en: LONG_SCRIPT } })];
+  /** The fallback's documented figures, as a user override on another id. */
+  const sameAsFallback = (modelId: string): UserPriceOverride => ({
+    providerId: "gemini",
+    modelId,
+    inputPerMTokUsd: 0.5,
+    outputPerMTokUsd: 10,
+    asOfEpochMs: 0,
+  });
+
+  it("with tts.model empty, nothing reaches Google before the first confirmation is answered (script path)", async () => {
+    const h = await harness({ config: { ttsModel: "" } });
+    const { output } = await h.run();
+    expect(output.outcome).toBe("succeeded");
+    // Asked first with nothing sent: no list read, no model call, no audio.
+    expect(h.atConfirm[0]).toEqual({
+      listReads: 0,
+      resolves: 0,
+      synthesis: 0,
+      chats: 0,
+    });
+    // Priced with the marked fallback id, which no request produced.
+    expect(h.confirms[0]?.disclosure.modelId).toBe(GEMINI_TTS_FALLBACK_MODEL);
+    // Resolved once, after it; the second confirmation is priced on the
+    // live model, before any synthesis.
+    expect(h.tts.listReads).toHaveLength(1);
+    expect(h.atConfirm[1]?.listReads).toBe(1);
+    expect(h.atConfirm[1]?.synthesis).toBe(0);
+    const second = h.confirms[1];
+    if (second?.step !== "audio") throw new Error("no audio step");
+    expect(second.plan.model).toBe(TTS_MODEL);
+    expect(second.disclosure.modelId).toBe(TTS_MODEL);
+    expect(h.tts.requests.every((r) => r.model === TTS_MODEL)).toBe(true);
+  });
+
+  it("with tts.model empty and a stored script, nothing reaches Google before the confirmation is answered", async () => {
+    const h = await harness({
+      config: { ttsModel: "" },
+      reports: STORED,
+      liveModel: GEMINI_TTS_FALLBACK_MODEL,
+    });
+    const { output } = await h.run();
+    expect(output.outcome).toBe("succeeded");
+    expect(h.atConfirm[0]).toEqual({
+      listReads: 0,
+      resolves: 0,
+      synthesis: 0,
+      chats: 0,
+    });
+    const first = h.confirms[0];
+    if (first?.step !== "audio") throw new Error("no audio step");
+    expect(first.plan.model).toBe(GEMINI_TTS_FALLBACK_MODEL);
+    // The live model is the quoted one: asked once only.
+    expect(h.confirms).toHaveLength(1);
+    expect(h.tts.listReads).toHaveLength(1);
+    expect(h.tts.requests).toHaveLength(CHUNKS);
+  });
+
+  it("declining the first confirmation with tts.model empty sends nothing at all, the list read included", async () => {
+    for (const reports of [undefined, STORED]) {
+      const h = await harness({
+        config: { ttsModel: "" },
+        ...(reports !== undefined && { reports }),
+      });
+      const { output } = await h.run({ answers: [{ kind: "cancelled" }] });
+      expect(output.outcome).toBe("declined");
+      expect(h.tts.listReads).toHaveLength(0);
+      expect(h.tts.models).toHaveLength(0);
+      expectNothingSent(h);
+    }
+  });
+
+  it("with tts.model set, the first confirmation is priced on it and nothing is sent before it", async () => {
+    const h = await harness({
+      config: { ttsModel: " set-tts-model " },
+      reports: STORED,
+    });
+    const { output } = await h.run();
+    expect(output.outcome).toBe("succeeded");
+    expect(h.atConfirm[0]).toEqual({
+      listReads: 0,
+      resolves: 0,
+      synthesis: 0,
+      chats: 0,
+    });
+    const first = h.confirms[0];
+    if (first?.step !== "audio") throw new Error("no audio step");
+    expect(first.plan.model).toBe("set-tts-model");
+    expect(h.confirms).toHaveLength(1);
+    expect(h.tts.listReads).toHaveLength(0);
+    expect(h.tts.models).toEqual([" set-tts-model "]);
+    expect(h.tts.requests.every((r) => r.model === "set-tts-model")).toBe(true);
+  });
+
+  it("estimate() with tts.model empty prices the fallback and sends nothing", async () => {
+    const h = await harness({ config: { ttsModel: "" }, reports: STORED });
+    const estimate = await h.pipeline.estimate(
+      { reportId: "report-en-1", language: "en" },
+      h.context("estimate", createCancellationTokenSource()),
+    );
+    expect(estimate.externalRequests).toBe(CHUNKS);
+    expect(estimate.estimatedCostUsd).toBeGreaterThan(0);
+    expect(h.tts.listReads).toHaveLength(0);
+    expect(h.tts.models).toHaveLength(0);
+    expectNothingSent(h);
+  });
+
+  it("a live model priced differently from the quoted one is asked again before any synthesis", async () => {
+    const h = await harness({
+      config: { ttsModel: "" },
+      reports: STORED,
+      liveModel: "other-tts-model",
+      overrides: [
+        {
+          providerId: "gemini",
+          modelId: "other-tts-model",
+          inputPerMTokUsd: 2,
+          outputPerMTokUsd: 40,
+          asOfEpochMs: 0,
+        },
+      ],
+    });
+    const { output, jobId } = await h.run();
+    expect(output.outcome).toBe("succeeded");
+    expect(h.confirms.map((c) => c.step)).toEqual(["audio", "audio"]);
+    const [first, again] = h.confirms;
+    if (first?.step !== "audio" || again?.step !== "audio") {
+      throw new Error("no audio steps");
+    }
+    expect(first.plan.model).toBe(GEMINI_TTS_FALLBACK_MODEL);
+    expect(again.plan.model).toBe("other-tts-model");
+    expect(again.disclosure.modelId).toBe("other-tts-model");
+    expect(again.plan.cost.usd).toBeGreaterThan(first.plan.cost.usd ?? 0);
+    // The re-ask came after the list read and before any synthesis.
+    expect(h.atConfirm[1]).toMatchObject({ listReads: 1, synthesis: 0 });
+    expect(h.tts.requests.every((r) => r.model === "other-tts-model")).toBe(
+      true,
+    );
+    expect((await h.jobs.get(jobId ?? ""))?.status).toBe("succeeded");
+  });
+
+  it("declining the re-ask cancels the record, synthesizes nothing and keeps the stored script", async () => {
+    const h = await harness({
+      config: { ttsModel: "" },
+      reports: STORED,
+      liveModel: "unpriced-tts-model",
+    });
+    const { output, jobId } = await h.run({
+      answers: [{ kind: "run" }, { kind: "cancelled" }],
+    });
+    expect(output.outcome).toBe("cancelled");
+    expect(h.confirms).toHaveLength(2);
+    expect(h.tts.requests).toHaveLength(0);
+    expect(h.lib.imports).toHaveLength(0);
+    expect((await h.jobs.get(jobId ?? ""))?.status).toBe("cancelled");
+    expect((await h.store.get("report-en-1"))?.audioScripts.en).toBe(
+      LONG_SCRIPT,
+    );
+  });
+
+  it("a live model with the quoted model's prices is used without asking again", async () => {
+    const h = await harness({
+      config: { ttsModel: "" },
+      reports: STORED,
+      liveModel: "same-price-tts-model",
+      overrides: [sameAsFallback("same-price-tts-model")],
+    });
+    const { output } = await h.run();
+    expect(output.outcome).toBe("succeeded");
+    expect(h.confirms).toHaveLength(1);
+    expect(
+      h.tts.requests.every((r) => r.model === "same-price-tts-model"),
+    ).toBe(true);
+  });
+
+  it("a resolved model that cannot be read fails after the confirmation, with nothing synthesized", async () => {
+    const h = await harness({ config: { ttsModel: "" }, reports: STORED });
+    h.tts.tts.resolveModel = () =>
+      Promise.reject(new AuthenticationError(401, "HTTP 401 from gemini"));
+    const { output } = await h.run();
+    expect(output.outcome).toBe("failed");
+    expect(h.confirms).toHaveLength(1);
+    expect(h.tts.requests).toHaveLength(0);
+  });
+
+  it("the list read goes through the egress-log check", async () => {
+    const h = await harness({ config: { ttsModel: "" }, reports: STORED });
+    const { output } = await h.run({ enqueueWithoutLog: true });
+    expect(output.outcome).toBe("failed");
+    expect(h.tts.listReads).toHaveLength(0);
+    expectNothingSent(h);
+  });
+});
 
 describe("P6-T16 — declined, cancelled and failed runs", () => {
   it("declining the first confirmation sends nothing and makes no record", async () => {

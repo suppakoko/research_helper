@@ -478,6 +478,7 @@ export function installPluginDatabase(
             pausedByGuard: recovery.pausedByGuard.length,
             awaitingUserDecision: recovery.awaitingUserDecision.length,
             failed: recovery.failed.length,
+            cancelled: recovery.cancelled.length,
           });
         } catch (error) {
           logger.warn("job recovery failed", { reason: reasonOf(error) });

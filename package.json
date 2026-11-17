@@ -33,6 +33,7 @@
     "test:contract": "vitest run --dir test/contract --passWithNoTests",
     "test:integration": "zotero-plugin test",
     "test": "npm run test:unit && npm run test:contract",
+    "l10n:check": "node scripts/check-l10n.mjs --base en-US --target ko-KR",
     "fixtures:record": "tsx scripts/record-fixtures.ts",
     "dedup:report": "tsx scripts/dedup-report.ts",
     "bench:search": "tsx scripts/bench-search.ts",
@@ -40,7 +41,7 @@
     "index:derive": "tsx scripts/derive-task-index.ts"
   },
   "dependencies": {
-    "zotero-plugin-toolkit": "^5.2.0"
+    "zotero-plugin-toolkit": "5.2.0"
   },
   "devDependencies": {
     "@types/node": "^24.10.0",

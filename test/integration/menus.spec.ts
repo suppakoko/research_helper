@@ -49,7 +49,6 @@ import {
   L10N_MENU_ITEM_FIND_RELATED,
   L10N_MENU_ROOT,
   L10N_MENU_SEARCH_IMPORT,
-  L10N_MENU_SPIKE_CREATE_ITEM,
 } from "../../src/i18n/keys";
 import { PREF_KEYS } from "../../src/prefs/keys";
 import { PREFS } from "../../src/prefs/schema";
@@ -466,15 +465,9 @@ function menubarContext(
   };
 }
 
-/** The Tools options the product registers: the spike menu, extended. */
+/** The Tools options the product registers: the empty submenu, extended. */
 function toolsOptions(commands: SearchMenuCommands) {
-  return withSearchImportEntry(
-    toolsMenuOptions({
-      createSpikeArticle: () => Promise.resolve(undefined),
-      onError: () => undefined,
-    }),
-    commands,
-  );
+  return withSearchImportEntry(toolsMenuOptions(), commands);
 }
 
 /* ------------------------------------------------------------ chrome probes */
@@ -654,7 +647,7 @@ describe("menu entry points and the window opener (P1-T19)", function () {
     await initializedInstance();
   });
 
-  it("puts Search & Import first in one Tools submenu, above the spike item", async function () {
+  it("puts Search & Import alone in one Tools submenu, with no spike item and no trailing separator (P7-T04)", async function () {
     await initializedInstance();
     const win = Zotero.getMainWindow();
     const shape = await readMenu(win, TOOLS_POPUP_ID, TOOLS_TARGET);
@@ -662,17 +655,20 @@ describe("menu entry points and the window opener (P1-T19)", function () {
 
     // One top-level item, per docs/08 §2.3's grouping budget.
     assert.strictEqual(shape.roots, 1, "exactly one Tools submenu of ours");
-    // Order is docs/08 §2.5's: Search & Import…, then the separator §2.4 puts
-    // there, then what P0-T10 already had.
+    // docs/08 §2.5's first entry. Until 2026-11-17 P0-T10's spike command
+    // followed below §2.4's separator; P7-T04 retired it (plan/00 §5 backlog
+    // item 25), and with nothing below, the separator goes too (plan/00 §6
+    // item 388(a)).
     assert.deepEqual(
       [...shape.entries],
-      [L10N_MENU_SEARCH_IMPORT, "", L10N_MENU_SPIKE_CREATE_ITEM],
+      [L10N_MENU_SEARCH_IMPORT],
       "the Tools submenu entries, in order",
     );
-    assert.deepEqual(
-      [...shape.kinds],
-      ["menuitem", "menuseparator", "menuitem"],
-      "separators are legal INSIDE a submenu (docs/08 §2.3)",
+    assert.deepEqual([...shape.kinds], ["menuitem"], "one menuitem, no rule");
+    // The retired id, spelled out: nothing in src/ or addon/ names it any more.
+    assert.isFalse(
+      [...shape.entries].includes("research-helper-menu-spike-create-item"),
+      "the developer spike command is absent from v1.0's Tools menu",
     );
   });
 

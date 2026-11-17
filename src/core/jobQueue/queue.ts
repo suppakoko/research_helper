@@ -202,6 +202,12 @@ export interface RecoveryReport {
   readonly pausedByGuard: readonly string[];
   /** Moved to `failed`: a resume loop, or a pipeline that cannot resume. */
   readonly failed: readonly string[];
+  /**
+   * Moved to `cancelled`: a pipeline that cannot resume and that
+   * {@link JobQueueDeps.cancelledAfterRestart} names (`docs/07` §12.6's note,
+   * point 9; DECIDED 2026-11-17, coordinator, under `plan/00` §6 item 313).
+   */
+  readonly cancelled: readonly string[];
 }
 
 /** What {@link JobQueue.enqueue} is told besides the input. */
@@ -294,6 +300,12 @@ export interface JobQueueDeps {
   readonly pluginVersion: string;
   /** Whether a pipeline's checkpointed job can resume (`Pipeline.resumable`). */
   readonly isResumable: (pipelineId: string) => boolean;
+  /**
+   * A pipeline that cannot resume whose interrupted job ends `cancelled`, not
+   * `failed`: the audio job, whose paid state is chunks in memory and whose
+   * stored script stays (`docs/07` §12.6's note, point 9). Absent: none.
+   */
+  readonly cancelledAfterRestart?: (pipelineId: string) => boolean;
   /** The guards that exist so far; an absent one holds resumption back. */
   readonly resumeGuards?: Partial<ResumeGuards>;
   /** The notices; absent holds resumption back and drops pause notices. */
@@ -439,6 +451,7 @@ export function createJobQueue(deps: JobQueueDeps): JobQueue {
       waitingForGuards: [] as string[],
       pausedByGuard: [] as string[],
       failed: [] as string[],
+      cancelled: [] as string[],
     };
 
     // The crash path: nothing ran a shutdown hook under these.
@@ -460,6 +473,12 @@ export function createJobQueue(deps: JobQueueDeps): JobQueue {
           ),
         );
         report.failed.push(record.id);
+      } else if (
+        !deps.isResumable(record.pipelineId) &&
+        deps.cancelledAfterRestart?.(record.pipelineId) === true
+      ) {
+        await save(transition(record, "cancelled", now));
+        report.cancelled.push(record.id);
       } else if (!deps.isResumable(record.pipelineId)) {
         await save(
           failed(

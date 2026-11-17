@@ -154,7 +154,8 @@ export const REPORT_COST_L10N = {
  * The audio run's own ids (`P6-T15`), placed only by
  * {@link buildAudioDialogModel}: its notice, FR-42's lines, the provisional
  * TTS line of the script step, the length warning, the tier question and its
- * three choices. Korean pending review (`G-41`, `KO_PENDING_REVIEW`).
+ * three choices. Korean reviewed by the owner on 2026-11-17 (`G-41`,
+ * `plan/00` §6 item 386).
  */
 export const AUDIO_COST_L10N = {
   notice: L10N_EGRESS_AUDIO_NOTICE,

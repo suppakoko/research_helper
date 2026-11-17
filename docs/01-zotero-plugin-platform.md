@@ -2401,7 +2401,7 @@ From JS, to get a string imperatively, the template provides a `getString()` hel
 
 The `Localization` constructor **is** available in the plugin sandbox — `plugins.js#_loadScope()` assigns it into the sandbox globals (verified 2026-09-08, §5.6).
 
-**Verified 2026-09-14 (`P0-T32`):** for a plugin's own files the resource id is the **bare filename**, and both forms work — `new Localization(["research-helper-mainWindow.ftl"], true).formatMessagesSync(…)` from the plugin sandbox, and `document.l10n.formatMessages(…)` from a window the bundle has been inserted into. The sync flag works; Mozilla still discourages the sync form outside of probes and tests.
+*Noted 2026-11-17 (`plan/10` `P7-T01` step 4): `plan/10` §0's V-17 row called this section's `Localization` argument form a marker still `Unverified`; it is not — the paragraph below records it verified.* **Verified 2026-09-14 (`P0-T32`):** for a plugin's own files the resource id is the **bare filename**, and both forms work — `new Localization(["research-helper-mainWindow.ftl"], true).formatMessagesSync(…)` from the plugin sandbox, and `document.l10n.formatMessages(…)` from a window the bundle has been inserted into. The sync flag works; Mozilla still discourages the sync form outside of probes and tests.
 
 ### 9.3 The two namespace rules (both are footguns)
 
@@ -2606,6 +2606,8 @@ Three constraints decide whether you can use it:
 3. ⚠️ **There is no `remove`/`destroy`.** A plugin-created queue leaks for the rest of the session.
 
 > **Unverified:** whether `Zotero.ftl.addResourceIds(['research-helper.ftl'])` makes plugin FTL keys resolvable from `Zotero.getString()`. This is inferred from `intl.js` + `plugins.js` and an in-source comment, not executed.
+>
+> *Noted 2026-11-17 (`plan/10` `P7-T01` step 4): still unverified, and nothing in v1.0 depends on it.* No measurement of `Zotero.getString()` on a plugin key is on file (`plan/01` `P0-T24` answered V-17 through Fluent, and `P0-T32` verified the `Localization` form of §9.2, not this path). The plugin never calls `Zotero.getString()` for its own strings: `src/i18n/ftl.ts` is the one place that registers the bundles (`insertFTLIfNeeded`) and resolves every plugin string through Fluent. So the marker stays, as a question for anyone who later wants this path.
 >
 > **Decision:** `research_helper` does **not** use `ProgressQueue`. The fixed three-column layout cannot express per-database status, there is no Cancel button, and the session leak is real. Use a custom window with our own status list (see `08-ui-ux-spec.md` §4, §6) plus `Zotero.ProgressWindow` toasts.
 

@@ -1,15 +1,21 @@
 /* eslint-disable no-restricted-globals -- an integration spec runs inside a live Zotero (docs/13 §2.3) and asserts on the platform's own state; there is no src/zotero/ facade to go through from outside the plugin bundle. */
 /**
- * The `P0-T10` Tools-menu command, automated (`P0-T13`).
+ * `P0-T10`'s item round trip, automated (`P0-T13`; spike `V-2`).
  *
- * `P0-T10` verified by hand, then by SQL with Zotero closed, that
- * Tools ▸ Research Helper ▸ Create spike item writes one `journalArticle` with
- * `title`, a first author, `DOI` and `abstractNote`, inside the collection
- * `SPIKE_COLLECTION_NAME`, tagged `research_helper` as an automatic tag. This
- * spec asserts the same thing through Zotero's own dispatch: it builds the real
- * menu with `Zotero.MenuManager.updateMenuPopup()` and fires the real
- * `<menuitem>`'s command, so the path is `menuCommandListener` → the plugin's
- * `onCommand`, not a direct call into the bundle.
+ * `P0-T10` verified by hand, then by SQL with Zotero closed, that the plugin
+ * writes one `journalArticle` with `title`, a first author, `DOI` and
+ * `abstractNote`, inside the collection `SPIKE_COLLECTION_NAME`, tagged
+ * `research_helper` as an automatic tag. This spec asserts the same thing.
+ *
+ * **Changed 2026-11-17 (`plan/10` `P7-T04`).** Until then the write was the
+ * Tools ▸ Research Helper ▸ "Create spike item (P0-T10)" command, fired through
+ * Zotero's own menu dispatch. `P7-T04` retired that developer command
+ * (`plan/00` §5 backlog item 25), so the spec now writes the same fixture work
+ * into the same collection through `test/integration/support/spikeArticle.ts`,
+ * which uses the shipped writer, `importWorks` (`plan/00` §6 item 388(b)).
+ * Every assertion on the item is unchanged; only the menu click before it is
+ * gone. The Tools menu's own shape is `menus.spec.ts`'s and
+ * `lifecycle.spec.ts`'s.
  *
  * The runner gives Zotero a temporary data directory that it empties before
  * every run (`.scaffold/test/data`, `docs/13` §2.3), so nothing here touches
@@ -18,37 +24,31 @@
  * Zotero.
  *
  * **Cleanup** (`plan/00` §6 items 264 and 266, added 2026-10-22): an `after`
- * hook inside this file's `describe` erases the item(s) the click wrote and,
- * only when the click created it, the `SPIKE_COLLECTION_NAME` collection, so
+ * hook inside this file's `describe` erases the item(s) the write made and,
+ * only when the write created it, the `SPIKE_COLLECTION_NAME` collection, so
  * later specs never see them. A failure there is reported, never thrown.
  *
- * No network, no LLM (`docs/13` §2.3): the command writes fixed local data.
+ * No network, no LLM (`docs/13` §2.3): the write is fixed local data.
  *
- * **`P1-T24` changed what is under the menu item, not what it must produce.**
- * `createSpikeArticle()` built its item with `P0-T10`'s `buildJournalArticle()`
- * until that spike surface was retired; it now maps a `CanonicalWork` through
- * `docs/07` §6.2's shipped mapper. Every assertion below is unchanged — the
- * command still has to write one `journalArticle` with those four fields, in
- * that collection, with that automatic tag. One assertion is **added**, on
- * `extra`'s `rh-work-key`, because §6.3 makes it mandatory and its presence is
- * the cheapest proof that the shipped mapper, and not a spike, produced the
- * item. This spec's imports never referenced the spike surface:
+ * **`P1-T24` changed the mapping, not what it must produce.** The item is
+ * mapped from a `CanonicalWork` through `docs/07` §6.2's shipped mapper. One
+ * assertion, on `extra`'s `rh-work-key`, is the cheapest proof that the shipped
+ * mapper produced the item, because §6.3 makes it mandatory.
  * {@link AUTOMATIC_TAG_TYPE} and {@link RESEARCH_HELPER_TAG} are declared in
  * `itemMapper.ts` §1 and the shipped mapper needs both.
  */
 
 import type Addon from "../../../src/addon";
 import { config } from "../../../package.json";
-import {
-  L10N_MENU_ROOT,
-  L10N_MENU_SPIKE_CREATE_ITEM,
-} from "../../../src/ui/menus/toolsMenu";
-import { SPIKE_COLLECTION_NAME } from "../../../src/zotero/zoteroApi";
 import { readWorkKey } from "../../../src/zotero/extraField";
 import {
   AUTOMATIC_TAG_TYPE,
   RESEARCH_HELPER_TAG,
 } from "../../../src/zotero/itemMapper";
+import {
+  SPIKE_COLLECTION_NAME,
+  writeSpikeArticle,
+} from "../support/spikeArticle";
 
 // Mocha and Chai globals injected by the scaffold runner's index.xhtml. Typed
 // locally, to exactly what this file uses: no Mocha types are installed.
@@ -67,15 +67,11 @@ declare function debug(line: string): void;
 
 const LOG_PREFIX = "[P0-T10]";
 
-/** What the click wrote, for the cleanup hook; see the file header. */
+/** What the write made, for the cleanup hook; see the file header. */
 const writtenItemIDs = new Set<number>();
 const writtenCollectionIDs = new Set<number>();
 
-const TOOLS_POPUP_ID = "menu_ToolsPopup";
-const TOOLS_TARGET = "main/menubar/tools";
 const STEP_TIMEOUT_MS = 20_000;
-/** How long to keep watching for a second, unwanted item. */
-const SETTLE_MS = 1_500;
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -104,62 +100,7 @@ function spikeItemIDs(): number[] {
   return spikeCollection()?.getChildItems(true) ?? [];
 }
 
-/**
- * Fire Tools ▸ Research Helper ▸ Create spike item through Zotero's own menu
- * machinery, then hide the popups again so no `popupshowing` listener is left
- * behind (`P0-T10`).
- *
- * Waits for the window to go idle first. Zotero 10.0.1's `menuManager.js`
- * removes the menuitem's previous command listener only in a
- * `requestIdleCallback` after `popuphidden`, so a submenu shown by an earlier
- * spec and re-shown before that callback runs carries two command listeners,
- * and one `doCommand()` creates two items. Measured: without this wait, this
- * spec failed with "expected 2 to equal 1" when it ran straight after
- * `lifecycle.spec.ts`.
- */
-async function clickSpikeMenuItem(win: _ZoteroTypes.MainWindow): Promise<void> {
-  await idle(win);
-  const doc = win.document;
-  const popup = doc.getElementById(TOOLS_POPUP_ID) as XULPopupElement | null;
-  if (!popup) {
-    assert.fail(`#${TOOLS_POPUP_ID} not found in the main window`);
-  }
-  Zotero.MenuManager.updateMenuPopup(popup, TOOLS_TARGET, {
-    tabType: "library",
-  });
-
-  const menu = popup.querySelector(
-    `:scope > .zotero-custom-menu-item[data-l10n-id="${L10N_MENU_ROOT}"]`,
-  );
-  const submenu = menu?.querySelector(":scope > menupopup");
-  if (!submenu) {
-    popup.dispatchEvent(new win.Event("popuphidden"));
-    assert.fail("the Research Helper submenu is not in the Tools menu");
-  }
-  submenu.dispatchEvent(new win.Event("popupshowing"));
-  const menuitem = submenu.querySelector(
-    `:scope > [data-l10n-id="${L10N_MENU_SPIKE_CREATE_ITEM}"]`,
-  ) as XULElement | null;
-
-  try {
-    if (!menuitem) {
-      assert.fail("the spike menu item is not in the Research Helper submenu");
-    }
-    menuitem.doCommand();
-  } finally {
-    submenu.dispatchEvent(new win.Event("popuphidden"));
-    popup.dispatchEvent(new win.Event("popuphidden"));
-  }
-  await idle(win);
-}
-
-function idle(win: _ZoteroTypes.MainWindow): Promise<void> {
-  return new Promise((resolve) => {
-    win.requestIdleCallback(() => resolve());
-  });
-}
-
-describe("Tools-menu spike command (P0-T10)", function () {
+describe("P0-T10's item round trip (V-2)", function () {
   // plan/00 §6 items 264 and 266: inside the describe, so it runs when this
   // spec ends; a failure here is reported, never thrown.
   after(async function () {
@@ -193,27 +134,27 @@ describe("Tools-menu spike command (P0-T10)", function () {
     );
 
     const before = new Set(spikeItemIDs());
-    const collectionExistedBefore = spikeCollection() !== undefined;
-    await clickSpikeMenuItem(Zotero.getMainWindow());
-
-    // onCommand does not await the command (src/ui/menus/toolsMenu.ts), so
-    // the write lands asynchronously.
-    const newIDs = (): number[] =>
-      spikeItemIDs().filter((id) => !before.has(id));
-    await waitUntil(
-      () => newIDs().length > 0,
-      `a new item in "${SPIKE_COLLECTION_NAME}"`,
-    );
-    await delay(SETTLE_MS);
-
-    const created = newIDs();
+    const report = await writeSpikeArticle();
     // Bookkeeping first, so the cleanup hook has it even if an assertion fails.
-    for (const id of created) writtenItemIDs.add(id);
-    const collectionAfter = spikeCollection();
-    if (!collectionExistedBefore && collectionAfter !== undefined) {
-      writtenCollectionIDs.add(collectionAfter.id);
-    }
-    assert.strictEqual(created.length, 1, "exactly one item per click");
+    for (const id of report.createdItemIDs) writtenItemIDs.add(id);
+    if (report.collectionCreated)
+      writtenCollectionIDs.add(report.collection.id);
+    debug(
+      `${LOG_PREFIX} created ${String(report.created)} item(s) ` +
+        `${JSON.stringify(report.createdItemIDs)} tagged "${RESEARCH_HELPER_TAG}" ` +
+        `in collection ${String(report.collection.id)} ` +
+        `(${report.collectionCreated ? "created" : "reused"}); ` +
+        `linked ${String(report.linkedExisting)}, skipped ${String(report.skipped)}, ` +
+        `failed ${String(report.failed.length)}`,
+    );
+
+    const created = spikeItemIDs().filter((id) => !before.has(id));
+    assert.strictEqual(created.length, 1, "exactly one item per write");
+    assert.deepEqual(
+      [...report.createdItemIDs],
+      created,
+      "the writer's report names the item the collection gained",
+    );
 
     const item = Zotero.Items.get(created[0]!);
     if (!item) {
@@ -255,8 +196,8 @@ describe("Tools-menu spike command (P0-T10)", function () {
     );
 
     // P1-T24: the item came through docs/07 §6.2's shipped mapper, so §6.3's
-    // mandatory `rh-work-key` is in `extra` and matches the DOI the command
-    // wrote. A spike-built item would have an empty `extra`.
+    // mandatory `rh-work-key` is in `extra` and matches the DOI the write
+    // carried. A spike-built item would have an empty `extra`.
     assert.strictEqual(
       readWorkKey(item.getField("extra")),
       `doi:${item.getField("DOI")}`,

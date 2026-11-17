@@ -43,15 +43,13 @@
 # from this file are exactly that list — so a new en-US string cannot be added
 # without either a Korean entry or an explicit entry on the review list.
 #
-# ## One key is absent permanently, not pending
+# ## No key is absent permanently any more
 #
-# `research-helper-menu-spike-create-item` exists in `en-US` and is absent here
-# **on purpose**, so that `FR-55`'s English fallback for a missing key stays
-# observable. `test/integration/l10n.spec.ts` asserts both that it is absent
-# from this bundle and that it still resolves to the English label under a
-# Korean UI (spike `V-17`, `P0-T24`). It is on `KO_DELIBERATELY_ABSENT`, not on
-# the review list. Do not "fix" the gap without moving the fallback assertion
-# to another key.
+# Until 2026-11-17 one `en-US` id was absent here on purpose, so that `FR-55`'s
+# English fallback for a missing key stayed observable: `P0-T10`'s spike
+# command. `plan/10` `P7-T04` retired the command and its id, so
+# `KO_DELIBERATELY_ABSENT` is empty; `test/integration/l10n.spec.ts` now
+# observes the fallback on the ids awaiting review (`plan/00` §6 item 388(c)).
 
 
 ## Tools ▸ Research Helper, and the collection context menu (docs/08 §2.4, §2.5)
@@ -83,12 +81,9 @@ research-helper-menu-collection-summarize-all =
 research-helper-menu-collection-report =
     .label = 최신 연구 동향 보고서 생성…
 
-# research-helper-menu-collection-audio-report
-# English source:
-#   .label = Generate Audio Report…
-# Draft (coordinator, 2026-11-17, not adopted):
-# research-helper-menu-collection-audio-report =
-#     .label = 오디오 보고서 생성…
+# Korean drafted by the coordinator and reviewed by the owner on 2026-11-17 (G-41, plan/00 §6 item 386).
+research-helper-menu-collection-audio-report =
+    .label = 오디오 보고서 생성…
 
 # P5-T15: FR-13's entry. Korean drafted by the coordinator and reviewed by the owner on 2026-11-02 (G-41, plan/00 §6 item 334).
 research-helper-menu-item-find-related =
@@ -181,15 +176,25 @@ research-helper-import-fallback-reason =
 # coordinator and reviewed by the owner on 2026-10-20 (G-41); nothing was
 # machine-translated. `{ $provider }` and `{ $model }` stay untranslated
 # (`docs/08` §10.3).
+# Draft (coordinator, 2026-11-17, not adopted; G-41, plan/00 §6 item 389), with the P7-T12 next action:
+#     rh-error-llm = { $provider }에서 요청을 처리하지 못했습니다. 다시 시도하거나, Research Helper 설정에서 다른 모델을 고르세요.
 rh-error-llm = { $provider }에서 요청을 처리하지 못했습니다.
+# Draft (coordinator, 2026-11-17, not adopted; G-41, plan/00 §6 item 389), with the P7-T12 next action:
+#     rh-error-context-length = 글이 너무 길어 { $model } 모델이 한 번에 읽을 수 없습니다. Research Helper 설정에서 더 긴 글을 읽을 수 있는 모델을 고르세요.
 rh-error-context-length = 글이 너무 길어 { $model } 모델이 한 번에 읽을 수 없습니다.
+# Draft (coordinator, 2026-11-17, not adopted; G-41, plan/00 §6 item 389), with the P7-T12 next action:
+#     rh-error-content-filter = 모델이 이 논문의 요약을 거절했습니다. 이 논문은 건너뛰었습니다. 요약하려면 Research Helper 설정에서 다른 AI 제공자의 모델을 고르세요.
 rh-error-content-filter = 모델이 이 논문의 요약을 거절했습니다.
+# Draft (coordinator, 2026-11-17, not adopted; G-41, plan/00 §6 item 389), with the P7-T12 next action:
+#     rh-error-structured-output = { $provider }에서 받은 요약을 Research Helper가 읽지 못했습니다. 다시 시도하거나, Research Helper 설정에서 다른 모델을 고르세요.
 rh-error-structured-output = { $provider }에서 받은 요약을 Research Helper가 읽지 못했습니다.
 
 # Item 265(c) (owner, 2026-10-21): `OutputTruncatedError`, a truncated answer.
 # The coordinator drafts the Korean and the owner reviews it (G-41); nothing
 # was machine-translated. `{ $model }` stays untranslated (`docs/08` §10.3).
 # Korean drafted by the coordinator and reviewed by the owner on 2026-10-21 (G-41).
+# Draft (coordinator, 2026-11-17, not adopted; G-41, plan/00 §6 item 389), with the P7-T12 next action:
+#     rh-error-output-truncated = { $model } 모델의 출력 길이 한도에 걸려 요약이 잘렸습니다. 다시 시도하거나, Research Helper 설정에서 출력 한도가 더 큰 모델을 고르세요.
 rh-error-output-truncated = { $model } 모델의 출력 길이 한도에 걸려 요약이 잘렸습니다.
 
 # Item 262(c) (owner, 2026-10-21): OpenRouter's guardrail 404. The coordinator
@@ -204,154 +209,106 @@ rh-error-privacy-routing = OpenRouter에는 개인정보 모드 조건에 맞게
 # by the caller.
 # Korean drafted by the coordinator and reviewed by the owner on 2026-10-23 (G-41,
 # plan/00 §6 item 274).
+# Draft (coordinator, 2026-11-17, not adopted; G-41, plan/00 §6 item 389), with the P7-T12 next action:
+#     rh-error-budget = 지출 한도({ $limit })에 도달해 멈췄습니다. 지금까지 쓴 금액: { $spent }. 이미 만든 요약은 그대로 있습니다. 계속하려면 Research Helper의 한도를 올리고, 아니면 멈추세요.
 rh-error-budget = 지출 한도({ $limit })에 도달해 멈췄습니다. 지금까지 쓴 금액: { $spent }. 이미 만든 요약은 그대로 있습니다.
 
 # `SeedUnresolvedError` (docs/07 §10.1; P5-T11) and P5-T25's refusal below 5 items.
 # Korean drafted by the coordinator and reviewed by the owner on 2026-11-06 (G-41, plan/00 §6 item 357).
+# Draft (coordinator, 2026-11-17, not adopted; G-41, plan/00 §6 item 389), with the P7-T12 next action:
+#     rh-error-seed-gone = 이 항목이 더 이상 라이브러리에 없어 관련 논문을 찾을 수 없습니다. 다른 항목을 고른 뒤 다시 시도하세요.
 rh-error-seed-gone = 이 항목이 더 이상 라이브러리에 없어 관련 논문을 찾을 수 없습니다.
 rh-error-seed-no-identifier = 이 항목에는 DOI, PMID, arXiv ID, 제목이 모두 없어 관련 논문을 찾을 수 없습니다. 이 중 하나를 항목에 추가한 뒤 다시 시도하세요.
 rh-error-seed-no-match = 이 항목의 제목과 충분히 일치하는 논문을 찾지 못했고, 항목에 DOI, PMID, arXiv ID도 없습니다. 이 중 하나를 항목에 추가하거나 제목을 고친 뒤 다시 시도하세요.
+# Draft (coordinator, 2026-11-17, not adopted; G-41, plan/00 §6 item 389), with the P7-T12 next action:
+#     rh-error-recommend-too-few-items = 이 컬렉션에는 항목이 { $count }개 있습니다. 추천을 받으려면 항목이 5개 이상 필요합니다. 컬렉션에 항목을 추가한 뒤 다시 시도하세요.
 rh-error-recommend-too-few-items = 이 컬렉션에는 항목이 { $count }개 있습니다. 추천을 받으려면 항목이 5개 이상 필요합니다.
 
-# `TTSError` (P6-T14). On KO_PENDING_REVIEW: a commented stub, so a Korean UI
-# shows the en-US text until the owner reviews it (G-41). The English source
-# is the en-US entry; below it, the coordinator's draft, not adopted.
-# English source:
-#   unentitled: This Gemini key cannot use Gemini text-to-speech, so no audio was made. Your report is unchanged. Check the key's access in Google AI Studio, or save the spoken script as text.
-#   model-gone: The Gemini text-to-speech model is no longer available, so no audio was made. Your report is unchanged. Try again later, or save the spoken script as text.
-#   no-audio: Gemini answered without audio, so no audio was made. Your report is unchanged. Try again, or save the spoken script as text.
-#   sample-rate: Gemini returned the parts of the audio at different sample rates, so they could not be joined. Your report is unchanged. Try again, or save the spoken script as text.
-#   script-rejected: The spoken script still contained written formatting after one retry, so no audio was made and nothing was sent to Gemini. Your report is unchanged. Save the script as text, or try again.
-#   rate-limited: Gemini text-to-speech is receiving too many requests, so no audio was made. Your report is unchanged. Try again in a few minutes, or save the spoken script as text.
-#   other: Gemini text-to-speech could not make the audio. Your report is unchanged. Try again, or save the spoken script as text.
-# Draft (coordinator, 2026-11-17, not adopted):
-# rh-error-tts = { $reason ->
-#     [unentitled] 이 Gemini 키로는 Gemini 음성 합성을 쓸 수 없어 오디오를 만들지 못했습니다. 보고서는 그대로입니다. Google AI Studio에서 키의 사용 권한을 확인하거나, 음성 대본을 텍스트로 저장하세요.
-#     [model-gone] Gemini 음성 합성 모델을 더 이상 쓸 수 없어 오디오를 만들지 못했습니다. 보고서는 그대로입니다. 나중에 다시 시도하거나, 음성 대본을 텍스트로 저장하세요.
-#     [no-audio] Gemini가 오디오 없이 응답해 오디오를 만들지 못했습니다. 보고서는 그대로입니다. 다시 시도하거나, 음성 대본을 텍스트로 저장하세요.
-#     [sample-rate] Gemini가 보낸 오디오 조각들의 샘플링 레이트가 서로 달라 하나로 합칠 수 없었습니다. 보고서는 그대로입니다. 다시 시도하거나, 음성 대본을 텍스트로 저장하세요.
-#     [script-rejected] 한 번 다시 시도한 뒤에도 음성 대본에 문서 서식이 남아 있어 오디오를 만들지 않았고, Gemini에는 아무것도 보내지 않았습니다. 보고서는 그대로입니다. 대본을 텍스트로 저장하거나 다시 시도하세요.
-#     [rate-limited] Gemini 음성 합성에 요청이 너무 많아 오디오를 만들지 못했습니다. 보고서는 그대로입니다. 몇 분 뒤 다시 시도하거나, 음성 대본을 텍스트로 저장하세요.
-#    *[other] Gemini 음성 합성이 오디오를 만들지 못했습니다. 보고서는 그대로입니다. 다시 시도하거나, 음성 대본을 텍스트로 저장하세요.
-# }
+# `TTSError` (P6-T14). Korean drafted by the coordinator and reviewed by the owner on 2026-11-17 (G-41, plan/00 §6 item 386).
+rh-error-tts = { $reason ->
+    [unentitled] 이 Gemini 키로는 Gemini 음성 합성을 쓸 수 없어 오디오를 만들지 못했습니다. 보고서는 그대로입니다. Google AI Studio에서 키의 사용 권한을 확인하거나, 음성 대본을 텍스트로 저장하세요.
+    [model-gone] Gemini 음성 합성 모델을 더 이상 쓸 수 없어 오디오를 만들지 못했습니다. 보고서는 그대로입니다. 나중에 다시 시도하거나, 음성 대본을 텍스트로 저장하세요.
+    [no-audio] Gemini가 오디오 없이 응답해 오디오를 만들지 못했습니다. 보고서는 그대로입니다. 다시 시도하거나, 음성 대본을 텍스트로 저장하세요.
+    [sample-rate] Gemini가 보낸 오디오 조각들의 샘플링 레이트가 서로 달라 하나로 합칠 수 없었습니다. 보고서는 그대로입니다. 다시 시도하거나, 음성 대본을 텍스트로 저장하세요.
+    [script-rejected] 한 번 다시 시도한 뒤에도 음성 대본에 문서 서식이 남아 있어 오디오를 만들지 않았고, Gemini에는 아무것도 보내지 않았습니다. 보고서는 그대로입니다. 대본을 텍스트로 저장하거나 다시 시도하세요.
+    [rate-limited] Gemini 음성 합성에 요청이 너무 많아 오디오를 만들지 못했습니다. 보고서는 그대로입니다. 몇 분 뒤 다시 시도하거나, 음성 대본을 텍스트로 저장하세요.
+   *[other] Gemini 음성 합성이 오디오를 만들지 못했습니다. 보고서는 그대로입니다. 다시 시도하거나, 음성 대본을 텍스트로 저장하세요.
+}
 
-# P6-T15's audio notice, cost-dialog lines, tier question and refusal. On
-# KO_PENDING_REVIEW: commented stubs, so a Korean UI shows the en-US text until
-# the owner reviews them (G-41). For each: the English source, then the
-# coordinator's draft (2026-11-17, not adopted).
-# research-helper-egress-audio-notice
-# English source:
-#   { $script ->
-#   [due] To make the audio, the report's sections, the collection's name, its counts and year range, and one line for each cited paper (its Zotero item key, first author's surname and year) are sent to { $scriptModel } at { $scriptHost } to write a spoken script. The spoken script, which can name the collection and cited authors aloud, is then sent to { $ttsModel } at { $ttsHost } to be read aloud.
-#   *[stored] The spoken script already written for this report, which can name the collection and cited authors aloud, is sent to { $ttsModel } at { $ttsHost } to be read aloud. No script is written this time, so nothing else is sent.
-#   }
-# Draft (coordinator, 2026-11-17, not adopted):
-# research-helper-egress-audio-notice =
-#     { $script ->
-#         [due] 오디오를 만들기 위해 보고서의 각 절, 컬렉션 이름, 항목 수와 연도 범위, 그리고 인용된 논문마다 한 줄(Zotero 항목 키, 제1저자의 성, 연도)이 음성 대본 작성을 위해 { $scriptHost }의 { $scriptModel }(으)로 전송됩니다. 그런 다음 컬렉션 이름과 인용된 저자를 소리 내어 언급할 수 있는 음성 대본이 낭독을 위해 { $ttsHost }의 { $ttsModel }(으)로 전송됩니다.
-#        *[stored] 이 보고서용으로 이미 작성된 음성 대본(컬렉션 이름과 인용된 저자를 소리 내어 언급할 수 있음)이 낭독을 위해 { $ttsHost }의 { $ttsModel }(으)로 전송됩니다. 이번에는 대본을 새로 작성하지 않으므로 그 밖의 내용은 전송되지 않습니다.
-#     }
-# research-helper-cost-audio-script
-# English source:
-#   { $calls ->
-#   [one] Writing the spoken script: 1 call to { $model }, for about { $minutes } of audio.
-#   *[other] Writing the spoken script: up to { $calls } calls to { $model }, for about { $minutes } of audio.
-#   }
-# Draft (coordinator, 2026-11-17, not adopted):
-# research-helper-cost-audio-script =
-#     { $calls ->
-#        *[other] 음성 대본 작성: 약 { $minutes } 분량의 오디오를 위해 { $model }에 최대 { $calls }회 호출.
-#     }
-# research-helper-cost-audio-provisional
-# English source:
-#   Then reading it aloud with { $model }: about { $duration }, estimated from the target length. Once the script is written you confirm again, with its real length, before any audio is made.
-# Draft (coordinator, 2026-11-17, not adopted):
-# research-helper-cost-audio-provisional = 이어서 { $model }(으)로 낭독: 목표 길이로 추정한 약 { $duration }. 대본이 작성되면 오디오를 만들기 전에 실제 길이로 다시 확인합니다.
-# research-helper-cost-audio-length
-# English source:
-#   { $chunks ->
-#   [one] Spoken script: { $chars } characters, read aloud in 1 part.
-#   *[other] Spoken script: { $chars } characters, read aloud in { $chunks } parts.
-#   }
-# Draft (coordinator, 2026-11-17, not adopted):
-# research-helper-cost-audio-length =
-#     { $chunks ->
-#        *[other] 음성 대본: { $chars }자, { $chunks }개 부분으로 나누어 낭독.
-#     }
-# research-helper-cost-audio-length-warning
-# English source:
-#   { $unit ->
-#   [syllables] The script is { $count } Hangul syllables long, against a target of about { $target }, so the audio will be longer or shorter than planned.
-#   *[words] The script is { $count } words long, against a target of about { $target }, so the audio will be longer or shorter than planned.
-#   }
-# Draft (coordinator, 2026-11-17, not adopted):
-# research-helper-cost-audio-length-warning =
-#     { $unit ->
-#         [syllables] 대본 길이가 한글 { $count }음절로, 목표인 약 { $target }음절과 차이가 있어 오디오가 계획보다 길거나 짧아집니다.
-#        *[words] 대본 길이가 { $count }단어로, 목표인 약 { $target }단어와 차이가 있어 오디오가 계획보다 길거나 짧아집니다.
-#     }
-# research-helper-cost-audio-duration
-# English source:
-#   Audio: about { $duration }, about { $size } as a WAV file.
-# Draft (coordinator, 2026-11-17, not adopted):
-# research-helper-cost-audio-duration = 오디오: 약 { $duration }, WAV 파일로 약 { $size }.
-# research-helper-cost-audio-attach
-# English source:
-#   { $mode ->
-#   [linked] The file is too large to store in Zotero, so it is saved in a folder you choose and linked from the report's collection. Zotero does not sync a linked file.
-#   *[imported] The file is stored in Zotero, in the report's collection, and syncs like your other attachments.
-#   }
-# Draft (coordinator, 2026-11-17, not adopted):
-# research-helper-cost-audio-attach =
-#     { $mode ->
-#         [linked] 파일이 Zotero에 저장하기에는 너무 커서, 직접 고른 폴더에 저장하고 보고서의 컬렉션에서 링크합니다. Zotero는 링크된 파일을 동기화하지 않습니다.
-#        *[imported] 파일은 Zotero의 보고서 컬렉션에 저장되며 다른 첨부 파일처럼 동기화됩니다.
-#     }
-# research-helper-cost-audio-rate-unmeasured
-# English source:
-#   This cost uses an audio token rate measured on a different Gemini text-to-speech model, so it may be less accurate.
-# Draft (coordinator, 2026-11-17, not adopted):
-# research-helper-cost-audio-rate-unmeasured = 이 비용은 다른 Gemini 음성 합성 모델에서 측정한 오디오 토큰 비율을 사용하므로 덜 정확할 수 있습니다.
-# research-helper-cost-audio-tier-question
-# English source:
-#   Is this Google API key's Google Cloud project billing-linked (Google's paid tier)? Research Helper cannot check this itself, so it asks once. "Don't know" counts as the free tier. You can change the answer later in Research Helper's settings, under the Gemini key.
-# Draft (coordinator, 2026-11-17, not adopted):
-# research-helper-cost-audio-tier-question = 이 Google API 키의 Google Cloud 프로젝트에 결제가 연결되어 있나요(Google 유료 등급)? Research Helper는 이를 직접 확인할 수 없어 한 번만 묻습니다. "모름"은 무료 등급으로 취급됩니다. 답은 나중에 Research Helper 설정의 Gemini 키 항목에서 바꿀 수 있습니다.
-# research-helper-cost-audio-tier-paid
-# English source:
-#   .label = Yes, billing is linked (paid tier)
-# Draft (coordinator, 2026-11-17, not adopted):
-# research-helper-cost-audio-tier-paid =
-#     .label = 예, 결제가 연결되어 있습니다(유료 등급)
-# research-helper-cost-audio-tier-free
-# English source:
-#   .label = No, it is on the free tier
-# Draft (coordinator, 2026-11-17, not adopted):
-# research-helper-cost-audio-tier-free =
-#     .label = 아니요, 무료 등급입니다
-# research-helper-cost-audio-tier-unknown
-# English source:
-#   .label = Don't know
-# Draft (coordinator, 2026-11-17, not adopted):
-# research-helper-cost-audio-tier-unknown =
-#     .label = 모름
-# research-helper-audio-tier-refused
-# English source:
-#   Strict privacy mode makes no audio with this Google API key, because it may be on the free tier, where Google may use what you send to improve its products. To make audio, mark the key as paid in Research Helper's settings if its Google Cloud project is billing-linked, or choose a less strict privacy mode.
-# Draft (coordinator, 2026-11-17, not adopted):
-# research-helper-audio-tier-refused = 엄격 개인정보 보호 모드에서는 이 Google API 키로 오디오를 만들지 않습니다. 이 키가 무료 등급일 수 있고, 무료 등급에서는 Google이 전송된 내용을 자사 제품 개선에 사용할 수 있기 때문입니다. 오디오를 만들려면 Google Cloud 프로젝트에 결제가 연결된 경우 Research Helper 설정에서 이 키를 유료로 표시하거나, 덜 엄격한 개인정보 보호 모드를 선택하세요.
-# research-helper-audio-attachment-title
-# English source:
-#   { $language ->
-#   [ko] Audio report (Korean), { $date }
-#   *[en] Audio report (English), { $date }
-#   }
-# Draft (coordinator, 2026-11-17, not adopted):
-# research-helper-audio-attachment-title =
-#     { $language ->
-#         [ko] 오디오 보고서 (한국어), { $date }
-#        *[en] 오디오 보고서 (영어), { $date }
-#     }
+# `rh-error-policy` has no live Korean yet (P7-T12, 2026-11-17): it is on KO_PENDING_REVIEW
+# and falls back to English until the draft below is adopted (G-41, plan/00 §6 item 389(b)).
+# Draft (coordinator, 2026-11-17, not adopted; G-41, plan/00 §6 item 389), with the P7-T12 next action:
+# rh-error-policy = 개인정보 모드에서 허용하지 않는 요청이라 Research Helper가 보내기 전에 멈췄습니다. Research Helper 설정에서 개인정보 모드를 확인하세요.
+
+## P6-T15's audio notice, cost-dialog lines, tier question and refusal, then
+## P6-T17's attachment title.
+
+# Korean drafted by the coordinator and reviewed by the owner on 2026-11-17 (G-41, plan/00 §6 item 386).
+research-helper-egress-audio-notice =
+    { $script ->
+        [due] 오디오를 만들기 위해 보고서의 각 절, 컬렉션 이름, 항목 수와 연도 범위, 그리고 인용된 논문마다 한 줄(Zotero 항목 키, 제1저자의 성, 연도)이 음성 대본 작성을 위해 { $scriptHost }의 { $scriptModel }(으)로 전송됩니다. 그런 다음 컬렉션 이름과 인용된 저자를 소리 내어 언급할 수 있는 음성 대본이 낭독을 위해 { $ttsHost }의 { $ttsModel }(으)로 전송됩니다.
+       *[stored] 이 보고서용으로 이미 작성된 음성 대본(컬렉션 이름과 인용된 저자를 소리 내어 언급할 수 있음)이 낭독을 위해 { $ttsHost }의 { $ttsModel }(으)로 전송됩니다. 이번에는 대본을 새로 작성하지 않으므로 그 밖의 내용은 전송되지 않습니다.
+    }
+
+# Korean drafted by the coordinator and reviewed by the owner on 2026-11-17 (G-41, plan/00 §6 item 386).
+research-helper-cost-audio-script =
+    { $calls ->
+       *[other] 음성 대본 작성: 약 { $minutes } 분량의 오디오를 위해 { $model }에 최대 { $calls }회 호출.
+    }
+
+# Korean drafted by the coordinator and reviewed by the owner on 2026-11-17 (G-41, plan/00 §6 item 386).
+research-helper-cost-audio-provisional = 이어서 { $model }(으)로 낭독: 목표 길이로 추정한 약 { $duration }. 대본이 작성되면 오디오를 만들기 전에 실제 길이로 다시 확인합니다.
+
+# Korean drafted by the coordinator and reviewed by the owner on 2026-11-17 (G-41, plan/00 §6 item 386).
+research-helper-cost-audio-length =
+    { $chunks ->
+       *[other] 음성 대본: { $chars }자, { $chunks }개 부분으로 나누어 낭독.
+    }
+
+# Korean drafted by the coordinator and reviewed by the owner on 2026-11-17 (G-41, plan/00 §6 item 386).
+research-helper-cost-audio-length-warning =
+    { $unit ->
+        [syllables] 대본 길이가 한글 { $count }음절로, 목표인 약 { $target }음절과 차이가 있어 오디오가 계획보다 길거나 짧아집니다.
+       *[words] 대본 길이가 { $count }단어로, 목표인 약 { $target }단어와 차이가 있어 오디오가 계획보다 길거나 짧아집니다.
+    }
+
+# Korean drafted by the coordinator and reviewed by the owner on 2026-11-17 (G-41, plan/00 §6 item 386).
+research-helper-cost-audio-duration = 오디오: 약 { $duration }, WAV 파일로 약 { $size }.
+
+# Korean drafted by the coordinator and reviewed by the owner on 2026-11-17 (G-41, plan/00 §6 item 386).
+research-helper-cost-audio-attach =
+    { $mode ->
+        [linked] 파일이 Zotero에 저장하기에는 너무 커서, 직접 고른 폴더에 저장하고 보고서의 컬렉션에서 링크합니다. Zotero는 링크된 파일을 동기화하지 않습니다.
+       *[imported] 파일은 Zotero의 보고서 컬렉션에 저장되며 다른 첨부 파일처럼 동기화됩니다.
+    }
+
+# Korean drafted by the coordinator and reviewed by the owner on 2026-11-17 (G-41, plan/00 §6 item 386).
+research-helper-cost-audio-rate-unmeasured = 이 비용은 다른 Gemini 음성 합성 모델에서 측정한 오디오 토큰 비율을 사용하므로 덜 정확할 수 있습니다.
+
+# Korean drafted by the coordinator and reviewed by the owner on 2026-11-17 (G-41, plan/00 §6 item 386).
+research-helper-cost-audio-tier-question = 이 Google API 키의 Google Cloud 프로젝트에 결제가 연결되어 있나요(Google 유료 등급)? Research Helper는 이를 직접 확인할 수 없어 한 번만 묻습니다. "모름"은 무료 등급으로 취급됩니다. 답은 나중에 Research Helper 설정의 Gemini 키 항목에서 바꿀 수 있습니다.
+
+# Korean drafted by the coordinator and reviewed by the owner on 2026-11-17 (G-41, plan/00 §6 item 386).
+research-helper-cost-audio-tier-paid =
+    .label = 예, 결제가 연결되어 있습니다(유료 등급)
+
+# Korean drafted by the coordinator and reviewed by the owner on 2026-11-17 (G-41, plan/00 §6 item 386).
+research-helper-cost-audio-tier-free =
+    .label = 아니요, 무료 등급입니다
+
+# Korean drafted by the coordinator and reviewed by the owner on 2026-11-17 (G-41, plan/00 §6 item 386).
+research-helper-cost-audio-tier-unknown =
+    .label = 모름
+
+# Korean drafted by the coordinator and reviewed by the owner on 2026-11-17 (G-41, plan/00 §6 item 386).
+research-helper-audio-tier-refused = 엄격 개인정보 보호 모드에서는 이 Google API 키로 오디오를 만들지 않습니다. 이 키가 무료 등급일 수 있고, 무료 등급에서는 Google이 전송된 내용을 자사 제품 개선에 사용할 수 있기 때문입니다. 오디오를 만들려면 Google Cloud 프로젝트에 결제가 연결된 경우 Research Helper 설정에서 이 키를 유료로 표시하거나, 덜 엄격한 개인정보 보호 모드를 선택하세요.
+
+# Korean drafted by the coordinator and reviewed by the owner on 2026-11-17 (G-41, plan/00 §6 item 386).
+research-helper-audio-attachment-title =
+    { $language ->
+        [ko] 오디오 보고서 (한국어), { $date }
+       *[en] 오디오 보고서 (영어), { $date }
+    }
 
 
 ## The preference pane's key-storage badge (docs/09 §1.9; P1-T44, P2-T34)
@@ -677,30 +634,58 @@ research-helper-provenance-note-title = Research Helper — 검색 출처 기록
 research-helper-import-summary = 가져옴 { $imported } · 연결됨 { $linked } · 중복 건너뜀 { $skipped } · 실패 { $failed }
 research-helper-import-abstract-coverage = 가져온 항목 중 초록이 있는 비율: { $percent }%
 research-helper-progress-headline = Research Helper
+# Draft (coordinator, 2026-11-17, not adopted; G-41, plan/00 §6 item 389), with the P7-T12 next action:
+#     rh-error-configuration = 이 작업에 필요한 Research Helper 설정이 올바르지 않습니다. Research Helper 설정을 확인한 뒤 다시 시도하세요.
 rh-error-configuration = 이 작업에 필요한 Research Helper 설정이 올바르지 않습니다.
+# Draft (coordinator, 2026-11-17, not adopted; G-41, plan/00 §6 item 389), with the P7-T12 next action:
+#     rh-error-missing-credential = { $provider }의 API 키가 설정되어 있지 않습니다. Research Helper 설정에서 키를 추가하세요.
 rh-error-missing-credential =
     { $provider }의 API 키가 설정되어 있지 않습니다.
+# Draft (coordinator, 2026-11-17, not adopted; G-41, plan/00 §6 item 389), with the P7-T12 next action:
+#     rh-error-network = { $host }에 연결할 수 없습니다. 인터넷 연결을 확인한 뒤 다시 시도하세요.
 rh-error-network =
     { $host }에 연결할 수 없습니다.
+# Draft (coordinator, 2026-11-17, not adopted; G-41, plan/00 §6 item 389), with the P7-T12 next action:
+#     rh-error-offline = Zotero가 오프라인 상태입니다. 인터넷에 연결한 뒤 다시 시도하세요.
 rh-error-offline = Zotero가 오프라인 상태입니다.
+# Draft (coordinator, 2026-11-17, not adopted; G-41, plan/00 §6 item 389), with the P7-T12 next action:
+#     rh-error-timeout = { $host }에서 { $seconds }초 안에 응답이 없습니다. 몇 분 뒤에 다시 시도하세요.
 rh-error-timeout =
     { $host }에서 { $seconds }초 안에 응답이 없습니다.
+# Draft (coordinator, 2026-11-17, not adopted; G-41, plan/00 §6 item 389), with the P7-T12 next action:
+#     rh-error-auth = { $provider }에서 API 키를 거부했습니다(HTTP { $status }). Research Helper 설정에서 키를 확인하세요.
 rh-error-auth =
     { $provider }에서 API 키를 거부했습니다(HTTP { $status }).
+# Draft (coordinator, 2026-11-17, not adopted; G-41, plan/00 §6 item 389), with the P7-T12 next action:
+#     rh-error-forbidden = { $provider }에서 요청을 거절했습니다(HTTP { $status }). { $provider } 계정에서 키의 권한을 확인하세요.
 rh-error-forbidden =
     { $provider }에서 요청을 거절했습니다(HTTP { $status }).
 rh-error-rate-limit =
     { $provider } 요청 한도에 도달했습니다. { $seconds }초 뒤에 다시 시도합니다.
+# Draft (coordinator, 2026-11-17, not adopted; G-41, plan/00 §6 item 389), with the P7-T12 next action:
+#     rh-error-quota = { $provider } 계정의 크레딧이 모두 소진되었습니다. { $provider } 계정에 크레딧을 추가한 뒤 다시 시도하세요.
 rh-error-quota =
     { $provider } 계정의 크레딧이 모두 소진되었습니다.
+# Draft (coordinator, 2026-11-17, not adopted; G-41, plan/00 §6 item 389), with the P7-T12 next action:
+#     rh-error-upstream = { $database } 서비스를 일시적으로 사용할 수 없습니다(HTTP { $status }). 다른 데이터베이스는 계속 검색했습니다. 이 데이터베이스는 나중에 다시 시도하세요.
 rh-error-upstream =
     { $database } 서비스를 일시적으로 사용할 수 없습니다(HTTP { $status }). 다른 데이터베이스는 계속 검색했습니다.
+# Draft (coordinator, 2026-11-17, not adopted; G-41, plan/00 §6 item 389), with the P7-T12 next action:
+#     rh-error-bad-request = Research Helper가 보낸 요청을 { $database }에서 받아들이지 못했습니다. 다시 시도하고, 같은 문제가 반복되면 알려 주세요.
 rh-error-bad-request = Research Helper가 보낸 요청을 { $database }에서 받아들이지 못했습니다.
+# Draft (coordinator, 2026-11-17, not adopted; G-41, plan/00 §6 item 389), with the P7-T12 next action:
+#     rh-error-source = { $database }에서 검색을 끝내지 못했습니다. 나중에 다시 시도하세요.
 rh-error-source =
     { $database }에서 검색을 끝내지 못했습니다.
+# Draft (coordinator, 2026-11-17, not adopted; G-41, plan/00 §6 item 389), with the P7-T12 next action:
+#     rh-error-parse = { $database }의 응답을 읽을 수 없습니다. 나중에 다시 시도하고, 같은 문제가 반복되면 알려 주세요.
 rh-error-parse =
     { $database }의 응답을 읽을 수 없습니다.
+# Draft (coordinator, 2026-11-17, not adopted; G-41, plan/00 §6 item 389), with the P7-T12 next action:
+#     rh-error-zotero = Zotero에서 변경을 완료하지 못했습니다. 다시 시도하고, 같은 문제가 반복되면 Zotero를 다시 시작하세요.
 rh-error-zotero = Zotero에서 변경을 완료하지 못했습니다.
+# Draft (coordinator, 2026-11-17, not adopted; G-41, plan/00 §6 item 389), with the P7-T12 next action:
+#     rh-error-storage = Research Helper가 저장소에 쓰지 못했습니다. 디스크에 여유 공간이 있는지 확인한 뒤 다시 시도하세요.
 rh-error-storage = Research Helper가 저장소에 쓰지 못했습니다.
 rh-error-cancelled =
     { $imported ->

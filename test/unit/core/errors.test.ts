@@ -39,7 +39,11 @@ import {
   UpstreamServerError,
   ZoteroApiError,
 } from "../../../src/core/errors";
-import { L10N_PROGRESS_HEADLINE } from "../../../src/i18n/keys";
+import {
+  DEFERRED_ERROR_MESSAGE_IDS,
+  ERROR_MESSAGE_IDS,
+  L10N_PROGRESS_HEADLINE,
+} from "../../../src/i18n/keys";
 
 /**
  * `P1-T02`. Layer 1 (`docs/13` §2.1): plain Node, no Zotero, no network.
@@ -309,6 +313,18 @@ describe("docs/07 §10.1 hierarchy", () => {
     for (const { messageKey } of HIERARCHY) {
       expect(messageKey).toMatch(/^rh-error-[a-z-]+$/);
     }
+  });
+
+  it("ships a message for every class's messageKey, deferring none (P7-T12)", () => {
+    // `plan/10` `P7-T12`'s `Done when`: `DEFERRED_ERROR_MESSAGE_IDS` is empty,
+    // so every key in this table is a shipped error id. Its wording is held by
+    // test/unit/i18n/errorMessages.test.ts.
+    expect(DEFERRED_ERROR_MESSAGE_IDS).toEqual([]);
+    const shipped: readonly string[] = ERROR_MESSAGE_IDS;
+    const unshipped = HIERARCHY.map((row) => row.messageKey).filter(
+      (key) => !shipped.includes(key),
+    );
+    expect(unshipped).toEqual([]);
   });
 
   describe("inheritance §10.1 declares", () => {

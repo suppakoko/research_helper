@@ -284,7 +284,7 @@ human-gated, and six of those sit on the path: the calendar time of `P7-T15`, `P
 | Field | Value |
 |---|---|
 | **ID** | `P7-T01` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T01.md`. |
 | **Depends on** | none |
 | **Blocks** | `P7-T08`, `P7-T09`, `P7-T11`, `P7-T13` |
 | **Retires** | none |
@@ -356,7 +356,7 @@ grep -n "2026-11-16" docs/07-architecture-and-data-model.md docs/08-ui-ux-spec.m
 | Field | Value |
 |---|---|
 | **ID** | `P7-T02` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T02.md`. |
 | **Depends on** | `P7-T04` |
 | **Blocks** | `P7-T05`, `P7-T24` |
 | **Retires** | `R-22` |
@@ -475,7 +475,7 @@ section. Callers of `format.ts`: the dialogs, panes and view models it is wired 
 | Field | Value |
 |---|---|
 | **ID** | `P7-T04` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T04.md`. |
 | **Depends on** | none |
 | **Blocks** | `P7-T02` |
 | **Retires** | `plan/00` §5 backlog item 25 |
@@ -945,7 +945,7 @@ host in `registerUI.ts`.
 | Field | Value |
 |---|---|
 | **ID** | `P7-T12` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T12.md`. Korean for 23 ids awaits `G-41` (`plan/00` §6 item 389(b)). |
 | **Depends on** | none |
 | **Blocks** | `P7-T03`, `P7-T18` |
 | **Retires** | none |
@@ -1417,7 +1417,7 @@ npm run test:integration -- offline
 | Field | Value |
 |---|---|
 | **ID** | `P7-T21` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T21.md`. |
 | **Depends on** | none |
 | **Blocks** | `P7-T16`, `P7-T26` |
 | **Retires** | none |
@@ -1473,7 +1473,7 @@ npm ci && npm run test:unit -- releaseWorkflow && npm run build
 | Field | Value |
 |---|---|
 | **ID** | `P7-T22` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T22.md`. |
 | **Depends on** | none |
 | **Blocks** | `P7-T24` |
 | **Retires** | moves `R-1` to ongoing handling |
@@ -1911,7 +1911,7 @@ npm run typecheck && npm run lint:check && npm run test:unit && npm run l10n:che
 | Field | Value |
 |---|---|
 | **ID** | `P7-T32` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T32.md`. |
 | **Depends on** | none |
 | **Blocks** | `P7-T16` |
 | **Retires** | none |

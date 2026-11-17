@@ -28,12 +28,11 @@
  *   placement stays stable whatever else the user has installed.
  *
  * That second rule is why {@link withSearchImportEntry} *extends* the options
- * `./toolsMenu.ts` builds instead of registering a second Tools menu:
- * `P0-T10`'s spike item is still registered, still asserted by
- * `test/integration/lifecycle.spec.ts` and still invoked by
- * `test/integration/zotero/itemCreation.spec.ts` — none of which is in
- * `P1-T19`'s `Files` list — and a second `main/menubar/tools` registration
- * would be two top-level items.
+ * `./toolsMenu.ts` builds instead of registering a second Tools menu: a second
+ * `main/menubar/tools` registration would be two top-level items. (`P1-T19`
+ * extended rather than replaced because `P0-T10`'s spike item was still
+ * registered; `P7-T04` removed that item on 2026-11-17, and the submenu
+ * `./toolsMenu.ts` builds is now empty until this splice fills it.)
  *
  * ### The handlers take their window from the element that was clicked
  *
@@ -372,12 +371,14 @@ function searchImportItem(
  *
  * Non-mutating: `base` is read, never written, so `toolsMenuOptions()` stays
  * the pure factory it documents itself as. The entry goes **first**, which is
- * where §2.5's Tools wireframe puts it, followed by §2.4's separator; what
- * `base` already held — `P0-T10`'s spike command — follows below the rule.
+ * where §2.5's Tools wireframe puts it. What `base` already holds follows below
+ * §2.4's separator; when `base` holds nothing, as since `P7-T04` it does, there
+ * is no separator, so the submenu does not end in a rule (DECIDED 2026-11-17,
+ * coordinator, under item 313; `plan/00` §6 item 388(a)).
  *
  * @throws if `base` is not exactly one top-level `submenu`. That is the shape
  *   `docs/08` §2.3 requires and the shape this function has to splice into; a
- *   silent mis-splice would either drop the spike item or register two
+ *   silent mis-splice would either drop what `base` holds or register two
  *   top-level items, and both are failures a disable/enable cycle would not
  *   catch.
  */
@@ -393,6 +394,7 @@ export function withSearchImportEntry(
         `entr(ies), the first of type "${root?.menuType ?? "none"}".`,
     );
   }
+  const below = root.menus ?? [];
   return {
     ...base,
     menus: [
@@ -401,9 +403,10 @@ export function withSearchImportEntry(
         menus: [
           searchImportItem(commands),
           // Allowed here: §2.3 rejects only *top-level* separators, and
-          // §2.4's own Tools block carries one in this position.
-          { menuType: "separator" },
-          ...(root.menus ?? []),
+          // §2.4's own Tools block carries one in this position. Only when
+          // something follows it (item 388(a)).
+          ...(below.length > 0 ? [{ menuType: "separator" as const }] : []),
+          ...below,
         ],
       },
     ],

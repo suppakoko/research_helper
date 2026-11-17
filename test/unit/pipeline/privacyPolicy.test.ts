@@ -38,6 +38,7 @@ import {
   L10N_EGRESS_REPORT_NOTICE,
 } from "../../../src/i18n/keys";
 import { readModelList } from "../../../src/llm/gemini/mapper";
+import { assertAudioAllowed } from "../../../src/pipeline/audioReport/disclosure";
 import { createOpenRouterProvider } from "../../../src/llm/openrouter/openRouterProvider";
 import { createBaseUrlResolver } from "../../../src/llm/shared/baseUrl";
 import type { ChatRequest, ModelInfo } from "../../../src/llm/types";
@@ -1219,14 +1220,17 @@ describe("assertModelAllowed — a Gemini key the user declares paid (item 269(b
     }
   });
 
-  it("allows a declared-paid key in balanced mode with no warning, and still refuses a free or unknown one", () => {
+  it("allows a declared-paid key in balanced mode with no warning, and warns and asks for a free or unknown one (P7-T32)", () => {
     expect(
       assertModelAllowed(geminiModel(), "balanced", route(true)),
     ).toStrictEqual({ warnings: [], requiresConfirmation: false });
     for (const declared of [false, undefined]) {
-      expect(() =>
+      expect(
         assertModelAllowed(geminiModel(), "balanced", route(declared)),
-      ).toThrow(PolicyViolationError);
+      ).toStrictEqual({
+        warnings: ["may-train-on-input"],
+        requiresConfirmation: true,
+      });
     }
   });
 
@@ -1433,6 +1437,123 @@ describe("the declared-paid reminder's string (docs/09 §3.6 item 3; G-41)", () 
     expect(new RegExp(`^${id} =`, "m").test(koKR)).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// 10b. P7-T32: Gemini in balanced mode warns and asks, not refuses (owner,
+//      2026-11-16, plan/00 §6 item 381; docs/07 §4.5's note of 2026-11-17)
+// ---------------------------------------------------------------------------
+
+describe("assertModelAllowed — Gemini, mode by tier by route (P7-T32)", () => {
+  const ASKS = {
+    warnings: ["may-train-on-input"],
+    requiresConfirmation: true,
+  } as const;
+  const PASSES = { warnings: [], requiresConfirmation: false } as const;
+  type Outcome = typeof ASKS | typeof PASSES | "refused";
+
+  /** The key's tier as `gemini.paidTier` carries it: declared false, absent, declared true. */
+  const TIERS = {
+    free: false,
+    unknown: undefined,
+    "declared paid": true,
+  } as const;
+  type Tier = keyof typeof TIERS;
+
+  /**
+   * The table, row by row: `[mode, tier, with a route, outcome]`. Without a
+   * route the declaration cannot reach the check, so all three tiers read the
+   * model's own policy (`"yes"`), and balanced still refuses.
+   */
+  const TABLE: readonly (readonly [PrivacyMode, Tier, boolean, Outcome])[] = [
+    ["strict", "free", true, "refused"],
+    ["strict", "unknown", true, "refused"],
+    ["strict", "declared paid", true, PASSES],
+    ["balanced", "free", true, ASKS],
+    ["balanced", "unknown", true, ASKS],
+    ["balanced", "declared paid", true, PASSES],
+    ["full", "free", true, ASKS],
+    ["full", "unknown", true, ASKS],
+    ["full", "declared paid", true, PASSES],
+    ["strict", "free", false, "refused"],
+    ["strict", "unknown", false, "refused"],
+    ["strict", "declared paid", false, "refused"],
+    ["balanced", "free", false, "refused"],
+    ["balanced", "unknown", false, "refused"],
+    ["balanced", "declared paid", false, "refused"],
+    ["full", "free", false, ASKS],
+    ["full", "unknown", false, ASKS],
+    ["full", "declared paid", false, ASKS],
+  ];
+
+  const routeOf = (tier: Tier, withRoute: boolean): ModelRoute | undefined => {
+    if (!withRoute) return undefined;
+    const paid = TIERS[tier];
+    return paid === undefined
+      ? { providerId: "gemini" }
+      : { providerId: "gemini", geminiPaidTier: paid };
+  };
+
+  it.each(TABLE)(
+    "%s, %s key, route %s: %j",
+    (mode, tier, withRoute, outcome) => {
+      const check = (): unknown =>
+        assertModelAllowed(geminiModel(), mode, routeOf(tier, withRoute));
+      if (outcome === "refused") {
+        expect(check).toThrow(PolicyViolationError);
+      } else {
+        expect(check()).toStrictEqual(outcome);
+      }
+    },
+  );
+
+  it("covers every mode, tier and route once", () => {
+    const cells = new Set(TABLE.map(([m, t, r]) => `${m}/${t}/${String(r)}`));
+    expect(cells.size).toBe(3 * 3 * 2);
+    expect(TABLE).toHaveLength(18);
+  });
+
+  it("still refuses a non-Gemini model that may train on input in balanced mode, with or without a route", () => {
+    for (const route of [undefined, { providerId: "openai" } as const]) {
+      expect(() => assertModelAllowed(model("yes"), "balanced", route)).toThrow(
+        PolicyViolationError,
+      );
+    }
+    expect(() =>
+      assertModelAllowed(model("yes"), "balanced", {
+        providerId: "openrouter",
+      }),
+    ).toThrow(PolicyViolationError);
+  });
+
+  it("refuses in exactly the cells the audio job's assertAudioAllowed refuses (one rule, plan/10 P7-T32's Do NOT)", () => {
+    // The audio rule knows the tier only as `paid` or `free-or-unknown`, and
+    // always has its route; it asks for confirmation on every tier, because a
+    // declared-paid key gets its reminder (P6-T15). The two must agree on
+    // which cells are refused.
+    for (const mode of ["strict", "balanced", "full"] as const) {
+      for (const tier of Object.keys(TIERS) as Tier[]) {
+        const audioTier = TIERS[tier] === true ? "paid" : "free-or-unknown";
+        const refusedByAudio = refuses(() =>
+          assertAudioAllowed(mode, audioTier),
+        );
+        const refusedByModel = refuses(() =>
+          assertModelAllowed(geminiModel(), mode, routeOf(tier, true)),
+        );
+        expect(refusedByModel, `${mode}, ${tier}`).toBe(refusedByAudio);
+      }
+    }
+  });
+});
+
+function refuses(check: () => unknown): boolean {
+  try {
+    check();
+    return false;
+  } catch (error) {
+    if (error instanceof PolicyViolationError) return true;
+    throw error;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // 11. A trend-report run's own notice (P4-T16; docs/09 §3 row 3b; docs/07

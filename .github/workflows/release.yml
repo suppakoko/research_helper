@@ -1,13 +1,45 @@
-# Release for research_helper — P0-T27, following docs/13 §5.2.
+# Release for research_helper — P0-T27, following docs/13 §5.2; hardened by
+# P7-T21 (2026-11-17).
 #
 # What this does, in order: on a `v*.*.*` tag push it checks the tag out,
-# refuses to continue if the tag and package.json disagree, lints, typechecks,
-# tests, builds the XPI and the scaffold-generated update manifests, creates
-# the GitHub Release for that tag with the XPI attached, and then commits the
-# generated `update.json` to the long-lived `release` branch — which is the ref
+# installs exactly the lockfile with `npm ci`, refuses to continue if the tag
+# and package.json disagree, lints, typechecks, runs the unit and contract
+# tests, checks the en-US / ko-KR bundles for key parity and audits the
+# runtime dependencies, builds the XPI and the scaffold-generated update
+# manifests, refuses to continue if the built manifest's version or the update
+# manifest's hash disagree with what was built, creates the GitHub Release for
+# that tag with the XPI attached, and then commits the generated `update.json`
+# to the long-lived `release` branch — which is the ref
 # `applications.zotero.update_url` in `addon/manifest.json` points at
 # (`https://raw.githubusercontent.com/suppakoko/research_helper/release/update.json`,
 # docs/13 §6.3, docs/01 §11.3).
+#
+# P7-T21's hardening (plan/10 P7-T21; docs/09 §6.3 and §7; docs/13 §5.2):
+#
+# - Two jobs. `build` runs every check and the build with a read-only token;
+#   `publish` alone holds `contents: write`, and only to create the release
+#   and push the update manifest (DECIDED 2026-11-17, coordinator, under item
+#   313: the card's "contents: write only where the release is created" read
+#   as a separate job, so no test, script or dependency ever runs with a write
+#   token). The workflow-level `permissions: {}` grants nothing by default.
+# - Every `uses:` is pinned to a full 40-hex commit, with the tag it was taken
+#   from as a comment. The commits were read on 2026-11-17 with
+#   `git ls-remote --tags https://github.com/<owner>/<repo>`; each tag named is
+#   a lightweight tag on that commit. A tag can be moved; a commit cannot.
+# - `FIXTURE_MODE: replay` is removed: nothing reads it (ci.yml's note of
+#   2026-10-07 measured that `replay` is not a mode anything recognises).
+# - `npm run l10n:check` (P7-T02) and `npm audit --omit=dev --audit-level=high`
+#   run before the build; a high-severity advisory in a runtime dependency is
+#   a release blocker (docs/09 §6.3, §7).
+# - The update hash. DECIDED 2026-11-16 (owner, plan/00 §6 item 381; plan/10
+#   §0.4 line 19): the scaffold's CI-generated `sha512:` hash meets docs/09 §7's
+#   blocker, so no `sha256:` step is added. The `Check the built manifests`
+#   step only checks that the hash in each generated `update*.json` is the
+#   SHA-512 of the XPI this run built — the hash is generated here, never
+#   transcribed. SHA256SUMS.txt stays as a release asset for users who check
+#   by hand (docs/09 §6.2).
+# - The tag reaches the shell through an environment variable, never through
+#   `${{ }}` inside a script, so a dispatched tag name cannot inject a command.
 #
 # Deliberate deviations from the docs/13 §5.2 listing, each with its source:
 #
@@ -27,10 +59,13 @@
 #   `update.json`. docs/13 §5.2 already copies it when present; this spells out
 #   that a stable release regenerates both (docs/01 §4.5), which is what lets a
 #   beta tester roll forward onto stable.
+# - `strict_max_version` stays `10.0.*` (docs/13 §6.2); this file does not set
+#   it, `addon/manifest.json` does.
 #
 # No credential is referenced here beyond the workflow's own automatic
-# GITHUB_TOKEN, and none may be: the repository is public and Phase 0 CI is
-# credential-free (P0-T14).
+# GITHUB_TOKEN, and none may be: the repository is public and CI is
+# credential-free (P0-T14). Pushing a tag, running this workflow and pushing to
+# `release` are the owner's (G-35; plan/10 P7-T26, P7-T30).
 
 name: Release
 
@@ -45,25 +80,33 @@ on:
         required: true
         type: string
 
-permissions:
-  contents: write
+permissions: {}
 
 env:
   NODE_VERSION: "^22.13.0"
 
 jobs:
-  release:
-    name: Build and publish release
+  build:
+    name: Check and build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      update_manifest: ${{ steps.version.outputs.update_manifest }}
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -71,25 +114,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint and typecheck
-        run: |
-          npm run lint:check
-          npm run typecheck
-
-      - name: Run tests
-        env:
-          FIXTURE_MODE: replay
-        run: npm test
-
       - name: Resolve version from tag
         id: version
         run: |
           set -euo pipefail
-          tag="${{ inputs.tag || github.ref_name }}"
-          version="${tag#v}"
+          version="${RELEASE_TAG#v}"
           pkg_version="$(node -p "require('./package.json').version")"
           if [ "$version" != "$pkg_version" ]; then
-            echo "::error::Tag $tag does not match package.json version $pkg_version"
+            echo "::error::Tag $RELEASE_TAG does not match package.json version $pkg_version"
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -101,11 +133,24 @@ jobs:
             echo "update_manifest=update.json" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Lint and typecheck
+        run: |
+          npm run lint:check
+          npm run typecheck
+
+      - name: Run unit and contract tests
+        run: npm test
+
+      - name: Verify Korean localization completeness (P7-T02)
+        run: npm run l10n:check
+
+      - name: Audit runtime dependencies
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Build XPI and update manifest
         run: npm run build
 
       - name: Collect release assets
-        id: assets
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -115,12 +160,89 @@ jobs:
           ( cd dist && sha256sum *.xpi > SHA256SUMS.txt )
           cat dist/SHA256SUMS.txt
 
+      # The tag, package.json and the built manifest must name one version, and
+      # every generated update manifest must carry this run's own SHA-512 of
+      # the XPI (plan/00 §6 item 381): generated here, never transcribed.
+      - name: Check the built manifests
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          UPDATE_MANIFEST: ${{ steps.version.outputs.update_manifest }}
+        run: |
+          set -euo pipefail
+          node --input-type=module - <<'NODE'
+          import { createHash } from "node:crypto";
+          import { readdirSync, readFileSync } from "node:fs";
+
+          const version = process.env.VERSION;
+          const fail = (message) => {
+            console.log(`::error::${message}`);
+            process.exitCode = 1;
+          };
+          const built = JSON.parse(readFileSync(".scaffold/build/addon/manifest.json", "utf8"));
+          if (built.version !== version) {
+            fail(`built manifest.json says ${built.version}, the tag says ${version}`);
+          }
+          const xpis = readdirSync("dist").filter((name) => name.endsWith(".xpi"));
+          if (xpis.length !== 1) fail(`expected one XPI in dist/, found ${xpis.length}`);
+          const hash = `sha512:${createHash("sha512").update(readFileSync(`dist/${xpis[0]}`)).digest("hex")}`;
+          const manifests = readdirSync("dist").filter((name) => /^update.*\.json$/.test(name));
+          if (!manifests.includes(process.env.UPDATE_MANIFEST)) {
+            fail(`dist/${process.env.UPDATE_MANIFEST} was not generated`);
+          }
+          for (const name of manifests) {
+            const addons = JSON.parse(readFileSync(`dist/${name}`, "utf8")).addons ?? {};
+            for (const [id, addon] of Object.entries(addons)) {
+              for (const entry of addon.updates ?? []) {
+                if (entry.version !== version) continue;
+                if (!/^sha512:[0-9a-f]{128}$/.test(entry.update_hash ?? "")) {
+                  fail(`${name}: ${id} ${version} has no sha512 update_hash`);
+                } else if (entry.update_hash !== hash) {
+                  fail(`${name}: ${id} ${version}'s update_hash is not this run's XPI`);
+                }
+              }
+              if (!(addon.updates ?? []).some((entry) => entry.version === version)) {
+                fail(`${name}: ${id} has no entry for ${version}`);
+              }
+            }
+          }
+          if (process.exitCode !== 1) {
+            console.log(`version ${version} agrees; update hash generated in this run: ${hash.slice(0, 23)}…`);
+          }
+          NODE
+
+      - name: Upload release assets for the publish job
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-assets
+          path: dist/
+          retention-days: 7
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    runs-on: ubuntu-latest
+    needs: [build]
+    permissions:
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Download release assets
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-assets
+          path: dist/
+
       - name: Create GitHub Release and attach assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
-          name: research_helper ${{ steps.version.outputs.version }}
-          prerelease: ${{ steps.version.outputs.prerelease }}
+          name: research_helper ${{ needs.build.outputs.version }}
+          prerelease: ${{ needs.build.outputs.prerelease }}
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: |
@@ -129,12 +251,14 @@ jobs:
             dist/SHA256SUMS.txt
 
       - name: Publish update manifest to the release branch
-        if: steps.version.outputs.prerelease == 'false'
+        if: needs.build.outputs.prerelease == 'false'
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          UPDATE_MANIFEST: ${{ needs.build.outputs.update_manifest }}
         run: |
           set -euo pipefail
-          manifest="${{ steps.version.outputs.update_manifest }}"
           tmp="$(mktemp -d)"
-          cp "dist/${manifest}" "$tmp/"
+          cp "dist/${UPDATE_MANIFEST}" "$tmp/"
           # A stable release regenerates update-beta.json too (docs/01 §4.5),
           # so beta testers roll forward onto stable.
           [ -f "dist/update-beta.json" ] && cp dist/update-beta.json "$tmp/" || true
@@ -147,6 +271,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "Update manifest unchanged; nothing to publish."
           else
-            git commit -m "chore(release): update manifest for v${{ steps.version.outputs.version }}"
+            git commit -m "chore(release): update manifest for v${VERSION}"
             git push origin release
           fi

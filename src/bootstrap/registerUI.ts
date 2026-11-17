@@ -46,9 +46,8 @@
  * The Tools ▸ Research Helper ▸ Search & Import… entry and the collection
  * context-menu entry are described in `src/ui/menus/registerMenus.ts` and
  * registered from {@link APP_REGISTRATIONS} below. Their one command —
- * `openSearchWindow` from `src/ui/dialogs/searchDialog.ts` — is injected here
- * for the same reason `createSpikeArticle` is: the menu knows there is a
- * command, not what a command is made of.
+ * `openSearchWindow` from `src/ui/dialogs/searchDialog.ts` — is injected here,
+ * because the menu knows there is a command, not what a command is made of.
  *
  * ## It also chooses the platform halves of the object graph (`P1-T25`)
  *
@@ -363,11 +362,7 @@ import {
   type TrendReportSurface,
 } from "../pipeline/trendReport/trendReportPipeline";
 import { collectionNameOfKey, writeReportNote } from "../zotero/notes";
-import {
-  createSpikeArticle,
-  createZoteroHttpTransport,
-  reportError,
-} from "../zotero/zoteroApi";
+import { createZoteroHttpTransport, reportError } from "../zotero/zoteroApi";
 
 /**
  * A window-scoped registration, which cannot be built without the window it
@@ -663,21 +658,16 @@ async function publishProvenanceStore(
  * Two registrations, one per target (`P1-T19`), because `docs/08` §2.3 allows
  * exactly one top-level item per context and
  * `Zotero.MenuManager.registerMenu` takes one target per call. The Tools entry
- * is `./toolsMenu.ts`'s options **extended**
- * with Phase 1's Search & Import command rather than replaced: `P0-T10`'s
- * spike item is asserted by `test/integration/lifecycle.spec.ts` and invoked
- * by `test/integration/zotero/itemCreation.spec.ts`, neither of which is in
- * `P1-T19`'s `Files` list, and a second Tools registration would be a second
- * top-level item (`plan/README.md` §4, corrected 2026-09-30: extend rather
- * than replace when an importer is outside your `Files` list).
+ * is `./toolsMenu.ts`'s submenu **extended** with Phase 1's Search & Import
+ * command, because a second Tools registration would be a second top-level
+ * item. *Changed 2026-11-17 (`plan/10` `P7-T04`):* `P0-T10`'s spike command,
+ * which this registration used to carry below the Search & Import entry, is
+ * retired; its fixture is `test/integration/support/spikeArticle.ts`.
  */
 const APP_REGISTRATIONS: readonly ScopedRegistration[] = [
   menuRegistration(
     TOOLS_MENU_DESCRIPTION,
-    withSearchImportEntry(
-      toolsMenuOptions({ createSpikeArticle, onError: reportError }),
-      SEARCH_MENU_COMMANDS,
-    ),
+    withSearchImportEntry(toolsMenuOptions(), SEARCH_MENU_COMMANDS),
   ),
   // The hidden `report.enabled` that held the report entry back (item 307(d))
   // was removed on 2026-11-02: the window can generate a report (`P4-T20`).

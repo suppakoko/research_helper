@@ -2506,6 +2506,30 @@ Fluent goes in a XUL `<linkset>`, and each `<groupbox>` should carry `aria-label
 
 > **Decided 2026-11-16 (coordinator, under `plan/00` §6 item 313; `plan/09` §0.4): the audio controls in the markup above are not built in Phase 6.** v1.0 writes WAV only (`04-audio-report-tts.md` §10.2's note of that date), so the `rh-audio-format` menulist and its hint have nothing to choose between, and the pane does not show them. The voice is chosen in the report window's audio section (§6.4; `plan/09` `P6-T17`), which writes the choice back to `tts.voice`; the pane's `rh-voice` menulist and its preview button are Phase 7's (`plan/05` §4.1 `W7-4`), when the pane is finished. Until then this markup is the target, not the build.
 
+> **The sections v1.0 ships (written 2026-11-17 by `plan/10` `P7-T01`, from the coordinator's decisions of 2026-11-16
+> under `plan/00` §6 item 313: `plan/10` §0.4 lines 2, 12, 13 and 15; the owner's decision 2 of item 380).** The pane
+> keeps its existing groupboxes (storage, providers, NCBI, Semantic Scholar, usage) and gains or completes these, in
+> this order; `plan/10` `P7-T08` and `P7-T09` build them, and any preference row they need goes into
+> `07-architecture-and-data-model.md` §8.5 first.
+>
+> 1. **Search** — as drawn above.
+> 2. **Report & audio** — the report language and length as drawn; the voice list is **the documented default list**
+>    (`04-audio-report-tts.md`), read by no call. **There is no "Preview voice" button** (`rh-voice-preview` above is
+>    struck by this note): a preview is a paid Gemini call, and the report window's audio section already lets the
+>    user hear the voice on a real job (§0.4 line 13). The audio-format menulist stays out (the note above).
+> 3. **Privacy** — as drawn, with the date the provider policies were last verified beside the retention text
+>    (`plan/10` `P7-T17`; `09-security-privacy-and-api-keys.md` §8 item 7).
+> 4. **Advanced** — concurrency, timeout, cache size **and current usage**, the verbose-logging checkbox (§7.3's
+>    reading of `logLevel`, `07-architecture-and-data-model.md` §10.3), the clear actions drawn above, "Delete all
+>    plugin data", "Reset", then two rows this markup does not draw: **"Remove all Research Helper content"**, a
+>    separate button that moves the notes and attachments the plugin created to the Zotero trash after a
+>    confirmation naming each count, and deletes the plugin database's rows (§0.4 lines 2 and 15;
+>    `09-security-privacy-and-api-keys.md` §3.7); the **data location** (the plugin database's folder, shown, not
+>    editable); and **diagnostics**, the two actions "Save diagnostics…" and "Copy diagnostics" on one plain-text
+>    bundle, each after a preview (`07-architecture-and-data-model.md` §10.4, as v1.0 ships; §0.4 line 12). There is no
+>    Help-menu entry for the bundle. "Remove all stored keys" stays where it is and is not part of the remove-all
+>    command.
+
 **Controls in this pane that are not `preference=` bindings.** Three, and each is deliberate:
 
 | Control | Why not a binding | What the script does |
@@ -2805,6 +2829,8 @@ Three constraints that decide whether you can use it:
 
 > **Unverified:** whether `Zotero.ftl.addResourceIds(['research-helper.ftl'])` makes plugin FTL keys resolvable from `Zotero.getString()` — this is inferred from `intl.js` and `plugins.js` plus an in-source comment, not executed.
 >
+> *Noted 2026-11-17 (`plan/10` `P7-T01` step 4): still unverified, and v1.0 does not depend on it.* No measurement is on file (`01-zotero-plugin-platform.md` §10.4's note of this date). The plugin resolves its own strings only through Fluent, from `src/i18n/ftl.ts`, and never through `Zotero.getString()`; the undo-label row of §10.1's table, which names this path, is not built (`src/zotero/zoteroApi.ts` passes no `undoAction`).
+>
 > **Decision for `research_helper`:** do **not** build the import or report UI on `ProgressQueue`. The two-l10n-key column constraint, the `getString` throw, and the session leak are all real, and we need a Cancel button and per-database status that its fixed three-column layout cannot express. Use the in-window status bar (§4, §6) plus `Zotero.ProgressWindow` toasts.
 
 ### 8.2.2 There is no toast/notification API
@@ -2845,6 +2871,18 @@ Every error the user can see must say **what failed, why, and what to do**. Map 
 > the window's own button), never Open Preferences, so under item 220's rule a run whose sources all failed on 429
 > draws Retry alone. The Korean wording awaits the owner's review. The `rh-error-rate-limit` message, which is the
 > `RateLimitError`'s own `messageKey`, keeps the table's wording and is not used by this row.
+
+> **Audited 2026-11-17 (`P7-T12`; `plan/reports/P7-T12.md`; `plan/00` §6 item 389).** Every `rh-error-*` message in
+> the `en-US` bundle now states what failed, names the service, and ends in one next action; the table in
+> `test/unit/i18n/errorMessages.test.ts` is the record and the test's data. Each rewritten message keeps the
+> sentence above as its first sentence and adds a next action, so this table's "Message (en-US)" column is still the
+> start of each message; the "Action offered" column is the control the window draws, unchanged. No message gained
+> an argument. `rh-error-policy` ships, with no argument, naming Research Helper's privacy mode as the service, so
+> `DEFERRED_ERROR_MESSAGE_IDS` is empty. The Korean for the new and changed sentences is a commented draft, not
+> adopted, awaiting `G-41`; until then the reviewed Korean stays live and `rh-error-policy` falls back to English.
+> NFR-14's "provider error text verbatim in a details disclosure" is not met by any window, on purpose:
+> `07-architecture-and-data-model.md` §10.2 forbids a raw provider message on a user surface. That conflict is an
+> owner question (item 389).
 
 Always log the underlying exception with `Zotero.logError(e)` and, when debug logging is enabled, `Zotero.debug()` the request *shape* — never the key or the prompt body.
 

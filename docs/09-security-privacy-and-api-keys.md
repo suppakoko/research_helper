@@ -922,6 +922,17 @@ Because the plugin database sits in the backed-up data directory (§1.6), the pr
 - **Clear embeddings**.
 - **Delete all plugin data**, offered in `uninstall()` as well as on demand.
 - A visible statement of where the database lives, so a user preparing a shared backup knows what is in it.
+- **Remove all Research Helper content** (*added 2026-11-17 by `plan/10` `P7-T01`; the owner's decision 2 of 2026-11-16,
+  `plan/00` §6 item 380, and the coordinator's reading of it, `plan/10` §0.4 lines 2 and 15*). A separate command,
+  beside the clear list, that removes what the plugin created and nothing else: (a) notes carrying a tag in
+  `GENERATED_TAG_NAMESPACE` (summaries and trend reports), (b) provenance notes (`PROVENANCE_NOTE_TITLE_PREFIX` with the
+  bare tag), (c) the audio attachments whose keys a stored `TrendReport` holds in `audioAttachmentKeys`, and (d) the
+  plugin database's rows. (a)–(c) go to the **Zotero trash**, never hard-deleted; (d) is deleted and counted. It shows
+  the count of each kind and acts only after the user confirms. A linked audio file on disk is left in place, and its
+  folder is named. Imported items, their tags (the bare `research_helper` tag included), their Related links and every
+  user-written note are untouched. Keys are not touched: "Remove all stored keys" stays a separate button. This
+  qualifies the "Clear generated summaries" line above, which still never removes notes; only this command does, and
+  only to the trash. `plan/10` `P7-T11` builds it.
 
 ---
 

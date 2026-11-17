@@ -1906,6 +1906,17 @@ export type { AudioChunk } from "../model/audio";
 > unknown Gemini key that check still fails closed in strict and balanced, so a caller cannot
 > loosen anything by leaving the route out. The callers (`P3-T16`, `P3-T29`) pass the route of the
 > provider the router resolved. The disclosure's side is 09 §3.6 item 3.
+>
+> *Note 2026-11-17 (`plan/10` `P7-T32`, building the owner's decision of 2026-11-16, `plan/00` §6 item 381; the
+> coordinator's readings are item 391):* **balanced mode now treats a free or unknown Gemini key as full mode does.**
+> With `route.providerId === "gemini"` and the key not declared paid, a model that may train on input is refused in
+> **strict** only; balanced and full return the warning `may-train-on-input` with `requiresConfirmation: true`, as an
+> audio job already is (`assertAudioAllowed`, item 379(d)). The list above is corrected by this line for balanced
+> mode: it no longer refuses a free or unknown key. Every other cell is unchanged: a non-Gemini model that may train
+> on input is still refused in balanced mode, and without a route nothing loosens, so a free Gemini model checked
+> without its route is still refused in balanced mode. A caller that cannot ask (the relevance screen during a
+> search) still does not make the call, and the confirmation dialogs show the free-tier warning, which is never
+> suppressed (`09` §3.6 item 3).
 
 > **Decided 2026-10-27 (`P4-T16`, building `plan/00` §6 item 286's report-specific egress notice;
 > the card's readings, for the owner to confirm): the trend report's own notice.** A report run
@@ -2334,6 +2345,9 @@ export interface RecoveryReport {
   readonly pausedByGuard: readonly string[];
   /** Moved to "failed": a resume loop, or a pipeline that cannot resume. */
   readonly failed: readonly string[];
+  // Added 2026-11-17 (coordinator, under plan/00 §6 item 313; §12.6's note, point 9):
+  /** Moved to "cancelled": a pipeline that cannot resume and is named by cancelledAfterRestart. */
+  readonly cancelled: readonly string[];
 }
 ```
 
@@ -6165,7 +6179,7 @@ export class PolicyViolationError extends ResearchHelperError {
 | Audience | Where it appears | Content |
 |---|---|---|
 | **User** | Progress window, progress-queue row, inline dialog | Localized `messageKey` string + one actionable next step. Never a stack trace, never a raw provider message (which can contain request IDs or echoed content), never an error code alone. |
-| **User (detail)** | The "see details" expansion on the job's completion message (a Job Center detail pane is v1.1 — §7.7.1) | Error code, HTTP status, host, timestamp, affected item count. Copyable. |
+| **User (detail)** | The "see details" expansion on the job's completion message (a Job Center detail pane is v1.1 — §7.7.1) | Error code, HTTP status, host, timestamp, affected item count. Copyable. *(Note 2026-11-17, `P7-T12`: as built, the search window's and the Related tab's disclosure shows the code and the HTTP status only (`ERROR_DETAIL_FIELDS`, `errorDetails` in `src/ui/viewModels/searchImportViewModel.ts`), and the report window shows no disclosure. `docs/10` NFR-14 asks for the provider's text verbatim here, which this row's "never a raw provider message" forbids; the conflict is an owner question, `plan/00` §6 item 389, and nothing was changed.)* |
 | **Developer** | `Zotero.debug` output | Full structured record including redacted context and stack. |
 
 Failure aggregation matters more than any individual message. For a 200-item job, do not emit 200 popups. Individual item failures accumulate in the `JobRecord`, and the job completes with `"Summarized 187 of 200 papers. 13 failed — see details."` Only a failure that stops the *whole* job produces a modal.
@@ -6242,16 +6256,29 @@ Log levels are controlled by `extensions.zotero.research-helper.logLevel`; its s
 
 ### 10.4 Debug bundle
 
-A **Help → Research Helper → Export Debug Bundle** action writes a zip to a user-chosen location containing:
+~~A **Help → Research Helper → Export Debug Bundle** action writes a zip to a user-chosen location containing:~~
+*Struck 2026-11-17 (`plan/10` `P7-T01`; `plan/10` §0.4 line 12, the coordinator's decision of 2026-11-16 under
+`plan/00` §6 item 313): v1.0 has no zip and no Help-menu entry. What it ships is the paragraph "As v1.0 ships" below;
+the six items stay as the list of what the text holds, in order.*
 
 1. `environment.json` — Zotero version, plugin version, OS, locale, enabled sources, **provider IDs and model IDs but never keys**, whether each key is *present* (boolean), cache stats, DB schema version.
-2. `settings.json` — every plugin pref **with all secret-flagged prefs replaced by `"[present]"` / `"[absent]"`**. The pref schema's `secret: true` flag drives this mechanically; a new secret pref is redacted automatically.
+2. `settings.json` — every plugin pref **with all secret-flagged prefs replaced by ~~`"[present]"` / `"[absent]"`~~ "set" / "not set"** (*changed 2026-11-17, `P7-T01`, §0.4 line 12*). The pref schema's `secret: true` flag drives this mechanically; a new secret pref is redacted automatically.
 3. `jobs.json` — last 50 `JobRecord`s with inputs, progress, errors, usage — with any free-text query strings included (they are the user's own queries) but no item content.
 4. `log.txt` — the plugin's own ring buffer (last 5000 lines), already redacted.
 5. `errors.txt` — `Zotero.getErrors()` output.
 6. `cache-stats.json` — counts and sizes only, no values.
 
-A confirmation dialog lists exactly what is included and states plainly that **no API keys and no paper content are included**, with a "Preview" button that opens the bundle contents before saving. Nothing is uploaded anywhere; the user attaches the file to a GitHub issue themselves.
+~~A confirmation dialog lists exactly what is included and states plainly that **no API keys and no paper content are included**, with a "Preview" button that opens the bundle contents before saving.~~ Nothing is uploaded anywhere; the user attaches the file to a GitHub issue themselves.
+
+**As v1.0 ships (DECIDED 2026-11-16, coordinator, under `plan/00` §6 item 313; `plan/10` §0.4 line 12; written
+2026-11-17 by `P7-T01`).** The debug bundle is **one UTF-8 plain-text file**, not an archive, so no archive writer is
+added. Its sections, in this order, are the six items above under plain headings: **environment**, **settings** (every
+`secret: true` value replaced by "set" or "not set"), **recent jobs**, **the last log lines**, **recent errors** and
+**cache statistics**. It carries **no API key and no paper content**. It is offered in the preferences pane's Advanced
+section (`08-ui-ux-spec.md` §7.3) by two actions on the same text: **"Save diagnostics…"**, which writes the file where
+the user chooses, and **"Copy diagnostics"**, which puts the text on the clipboard. Both first show the whole text as a
+preview, stating that no key and no paper content is included, and act only when the user confirms. The chosen path is
+never logged. `plan/10` `P7-T13` builds it.
 
 ### 10.5 Offline behaviour
 
@@ -6897,6 +6924,11 @@ Notes:
   length and the TTS step from the target minutes, shown as an estimate; it is asked in `Queued`, before `Scripting`,
   and skipped when a validated script for the language is stored. The second, `AwaitingConfirm`, prices the TTS step
   from the real script (`AudioPlan`, §5.2). **No request reaches Google before it is answered** (FR-42).
+  *Noted 2026-11-17 (owner, `plan/00` §6 item 385): this line was not true as first built, because `prepare` read
+  Gemini's model list before the first confirmation when `tts.model` was empty (the note below, point 3). It is true
+  again: the first confirmation is priced with `tts.model`, or with the marked fallback id
+  `GEMINI_TTS_FALLBACK_MODEL` when it is empty, and nothing, the model-list read included, is sent before it is
+  answered.*
 - **`Cancelling → Cancelled` is reachable from every state before `Attaching`.** A cancel drops the chunks held in
   memory and aborts the request in flight (§7.4); once `Attaching` has begun it runs to the end, so no half-made
   attachment is left (the same rule as the report's Saving, §12.4's reading 7).
@@ -6905,7 +6937,8 @@ Notes:
 - **No `Interrupted → resume` edge** (`plan/09` §0.4 line 14). Chunks are held in memory only; a retry in the same
   session reuses the finished ones, and a restart starts the TTS step again from the stored script. A content-hashed
   chunk cache that would allow a resume is backlog (`plan/09` §4). A job the app quit during ends `Interrupted` under
-  the shared convention above (§12's preamble) and is not resumed.
+  the shared convention above (§12's preamble) and is not resumed. *Noted 2026-11-17 (coordinator, under `plan/00` §6
+  item 313): the next start's `recover()` then ends it `cancelled`, not `failed` (the note below, point 9).*
 - **Progress is one line, "chunk n of N"**, during `Synthesizing` (§7.7's choice for `audioReport`).
 
 > **DECIDED 2026-11-17 (coordinator, under `plan/00` §6 item 313; `plan/09` `P6-T16`): how the job is built.** The
@@ -6929,6 +6962,21 @@ Notes:
 > 3. **The model list.** `TTSProvider.resolveModel` is called in `prepare` (`plan/09` `P6-T16` step 1). With
 >    `tts.model` empty it reads Gemini's model list: one request carrying the key and no content, to the host the
 >    notice then names. It is made before the confirmation. The owner question is `plan/00` §6 item 385.
+>
+>    **DECIDED 2026-11-17 (owner, `plan/00` §6 item 385): resolve after confirmation.** This point is replaced, and
+>    the text above is kept as the record of what was first built. (a) `prepare` sends nothing for the model: the
+>    first confirmation is priced with `tts.model` (trimmed), or with `GEMINI_TTS_FALLBACK_MODEL`
+>    (`src/tts/geminiTts.ts`, the one id marked as the last-resort fallback, `docs/04` §2.2) when it is empty; that is
+>    the **quoted** model, and `AudioRunPlan` carries it with the preference it came from. (b) `execute` resolves the
+>    live model (`TTSProvider.resolveModel`, the model-list `GET` when the preference is empty) first, after the
+>    record's egress log is checked and before the script call. (c) If the resolved model's prices
+>    (`ttsPricesFor`) differ from the quoted model's, the user is asked again, with the audio plan priced on the
+>    resolved model, before any synthesis; a decline cancels the record and keeps a stored script. On the script
+>    path the second confirmation is that ask, since it is already priced on the resolved model. (d) *DECIDED
+>    2026-11-17 (coordinator, under item 313):* prices are compared by their figures (input, output, cached input,
+>    tiers, promotion), not by the date or source of the table; a resolved id that differs from the quoted one at
+>    the same prices is used without asking, because the host the notice named and the cost are unchanged; the
+>    record's egress log keeps what the first confirmation named.
 > 4. **The size checks use the estimate with headroom** (`withHeadroom`, `plan/reports/P6-T10.md`): the
 >    destination check before each confirmation is run with `chooseAttachmentMode(withHeadroom(estimatedBytes))`, so
 >    a group-library report near 10 MiB is refused before synthesis (item 383, Option A), and a folder is asked for
@@ -6953,6 +7001,13 @@ Notes:
 >    marks a job the app quit during `failed` with `NOT_RESUMABLE_CODE`. `plan/09` `P6-T16`'s decision of 2026-11-16
 >    says "marked cancelled"; the stored script stays either way, which is what that decision protects. Recorded as
 >    a finding in `plan/reports/P6-T16.md`, not changed here.
+>    **DECIDED 2026-11-17 (coordinator, under `plan/00` §6 item 313): `cancelled`, as decided on 2026-11-16.**
+>    `JobQueueDeps.cancelledAfterRestart(pipelineId)` names the non-resumable pipelines whose interrupted job
+>    `recover()` ends `cancelled` instead of `failed`; the composition root (`installServices`) names `audioReport`
+>    alone, so every other non-resumable pipeline still ends `failed` with `not-resumable`. `RecoveryReport` lists
+>    such jobs under a new `cancelled`. The record carries no error. A run the app quits during already ends in the
+>    window with the `interrupted` outcome (`research-helper-report-audio-outcome`, `[interrupted]`), which is the
+>    text this case is shown with; no string is added, and no surface reads an ended audio record after a restart.
 > 10. **The output** carries what the window's offers need: the outcome, the refusal reason, the delivered
 >     `AudioRunOutcome`, `classifyAudioFailure`'s answer, the script text (validated or rejected) and, when only the
 >     Zotero write failed, the assembled chunks for FR-40's "Save as…". The attachment title is the surface's
