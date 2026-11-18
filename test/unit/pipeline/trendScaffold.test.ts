@@ -1154,12 +1154,16 @@ describe("§11's Semantic Scholar line (P7-T35, item 395(c))", () => {
     expect(renderReportMarkdown(stored(report))).toContain(
       `\n\n${DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION}\n\n### `,
     );
-    // Its Korean awaits G-41, so a ko report shows the English line.
-    expect(isKoLabelPending("semanticScholarAttribution")).toBe(true);
+    // Its Korean was approved on 2026-11-18 (G-41, item 399(b)), so a ko
+    // report prints the owner's Korean line in the same place.
+    expect(isKoLabelPending("semanticScholarAttribution")).toBe(false);
     const ko = scaffoldReport(
       input({ language: "ko", bibliography: s2Bibliography }),
     ).markdown;
-    expect(ko).toContain(DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION);
+    expect(ko).toContain(
+      "일부 기록 출처: Semantic Scholar, Allen Institute for AI.",
+    );
+    expect(ko).not.toContain(DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION);
     expect(EN_REPORT_LABELS.semanticScholarAttribution).toBe(
       DEFAULT_SEMANTIC_SCHOLAR_ATTRIBUTION,
     );
@@ -1604,17 +1608,19 @@ describe("reportLabels.ts", () => {
       expect(EN_REPORT_LABELS[key as ReportLabelKey], key).toBe(en);
       expect(KO_REPORT_LABELS[key as ReportLabelKey], key).toBe(ko);
     }
-    expect(Object.keys(KO_REPORT_LABELS)).toHaveLength(140);
+    expect(Object.keys(KO_REPORT_LABELS)).toHaveLength(141);
     // The line added after that review (item 317(c)), approved by the owner
     // as item 324(c) on 2026-11-01 (G-41), byte for byte.
     expect(KO_REPORT_LABELS.critiqueTextUnchecked).toBe(
       "일부 문단은 자동 검토를 거치지 않았습니다. 그 문단이 인용한 요약이 너무 길어 한 번의 검토 요청으로 보낼 수 없었기 때문입니다.",
     );
     // FINDING P4-T22-2's two labels were approved as item 335(l); P7-T35's
-    // line (owner, item 395(c), 2026-11-17) waits for G-41.
-    expect(KO_REPORT_LABELS_PENDING_REVIEW).toEqual([
-      "semanticScholarAttribution",
-    ]);
+    // line (owner, item 395(c), 2026-11-17) as item 399(b) on 2026-11-18,
+    // byte for byte from plan/reports/ko-review-p7d.md. Nothing waits.
+    expect(KO_REPORT_LABELS.semanticScholarAttribution).toBe(
+      "일부 기록 출처: Semantic Scholar, Allen Institute for AI.",
+    );
+    expect(KO_REPORT_LABELS_PENDING_REVIEW).toEqual([]);
   });
 
   it("gives a ko report its approved Korean and English for every pending label", () => {

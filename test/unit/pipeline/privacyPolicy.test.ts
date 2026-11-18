@@ -1171,22 +1171,22 @@ describe("the two notices' strings (docs/09 §3.6; G-41)", () => {
     }
   });
 
-  it("drafts the first-job notice's new sentence in ko-KR for G-41, with the live Korean kept (item 395(b), P7-T03)", () => {
+  it("ships the first-job notice's new sentence in ko-KR as the owner approved it (item 395(b), P7-T03; G-41, item 399(b))", () => {
     const sentence =
       "Do not use it on manuscripts you are peer-reviewing, on unpublished work covered by a confidentiality agreement, or on any material containing participant data, without checking your institution's rules first.";
     expect(entry(enUS, L10N_EGRESS_FIRST_JOB_NOTICE)).toContain(sentence);
+    // Approved by the owner on 2026-11-18 ("모두 승인"), byte for byte from
+    // plan/reports/ko-review-p7d.ftl: the earlier Korean with one sentence
+    // added after "처리합니다.", where the English adds it.
     const live = entry(koKR, L10N_EGRESS_FIRST_JOB_NOTICE) ?? "";
-    expect(live).not.toContain("동료 심사");
-    const draft = koKR
-      .split("\n")
-      .find((line) => line.startsWith(`# ${L10N_EGRESS_FIRST_JOB_NOTICE} = `));
-    expect(draft).toContain("동료 심사 중인 원고");
-    expect(draft?.replace(`# ${L10N_EGRESS_FIRST_JOB_NOTICE} = `, "")).toBe(
-      live.replace(
-        "처리합니다. ",
-        "처리합니다. 동료 심사 중인 원고, 비밀유지 계약이 적용되는 미발표 연구, 연구 참여자 데이터가 담긴 자료에는 소속 기관의 규정을 먼저 확인하지 않은 채 사용하지 마세요. ",
-      ),
+    const reviewed = read("plan/reports/ko-review-p7d.ftl");
+    expect(live).toBe(entry(reviewed, L10N_EGRESS_FIRST_JOB_NOTICE));
+    expect(live).toContain(
+      "처리합니다. 동료 심사 중인 원고, 비밀유지 계약이 적용되는 미발표 연구, 연구 참여자 데이터가 담긴 자료에는 소속 기관의 규정을 먼저 확인하지 않은 채 사용하지 마세요. 확인을",
     );
+    // No draft copy is left beside the live entry.
+    expect(koKR).not.toContain(`# ${L10N_EGRESS_FIRST_JOB_NOTICE} = `);
+    expect(koKR).not.toContain("not adopted; G-41, P7-T03");
   });
 });
 

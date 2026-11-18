@@ -142,4 +142,55 @@ describe("where Intl is called (P7-T03 step 4)", () => {
       "src/i18n/format.ts": 7,
     });
   });
+
+  /**
+   * The named exception to `P7-T03`'s Do NOT ("no `NUMBER()` options the
+   * plugin cannot test in Node"): the preferences pane's megabyte figures,
+   * `NUMBER($megabytes, maximumFractionDigits: 1)`, stay in Fluent, because
+   * their Korean is approved and the pane's integration spec checks their
+   * output in Zotero. DECIDED 2026-11-18 (owner, plan/00 §6 item 399(c),
+   * "그대로 둠"). Any other `NUMBER()` in a bundle fails here.
+   */
+  it("uses Fluent NUMBER() only in the four pane messages the owner kept (item 399(c))", () => {
+    const uses: Record<string, Record<string, number>> = {};
+    for (const locale of ["en-US", "ko-KR"]) {
+      const dir = resolve(ROOT, "addon/locale", locale);
+      for (const name of readdirSync(dir).filter((n) => n.endsWith(".ftl"))) {
+        let id = "";
+        for (const line of readFileSync(join(dir, name), "utf8").split("\n")) {
+          const head = /^([a-z][a-z0-9-]*) =/u.exec(line);
+          if (head?.[1] !== undefined) id = head[1];
+          if (line.startsWith("#")) continue;
+          const n = (line.match(/NUMBER\(/gu) ?? []).length;
+          if (n === 0) continue;
+          const key = `${name} ${id}`;
+          uses[locale] ??= {};
+          uses[locale][key] = (uses[locale][key] ?? 0) + n;
+        }
+      }
+    }
+    const kept = {
+      "research-helper-mainWindow.ftl research-helper-prefs-cache-usage-row": 1,
+      "research-helper-mainWindow.ftl research-helper-prefs-cache-usage-total": 1,
+      "research-helper-mainWindow.ftl research-helper-prefs-confirm-delete-all": 1,
+    };
+    expect(uses).toEqual({
+      // The English has one placeable per plural variant of the
+      // cached-responses confirmation; the Korean has no plural variant.
+      "en-US": {
+        ...kept,
+        "research-helper-mainWindow.ftl research-helper-prefs-confirm-clear-responses": 2,
+      },
+      "ko-KR": {
+        ...kept,
+        "research-helper-mainWindow.ftl research-helper-prefs-confirm-clear-responses": 1,
+      },
+    });
+    for (const placeable of readFileSync(
+      resolve(ROOT, "addon/locale/en-US/research-helper-mainWindow.ftl"),
+      "utf8",
+    ).match(/NUMBER\([^)]*\)/gu) ?? []) {
+      expect(placeable).toBe("NUMBER($megabytes, maximumFractionDigits: 1)");
+    }
+  });
 });

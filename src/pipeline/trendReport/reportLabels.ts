@@ -23,7 +23,9 @@
  *   `plan/00` §6 item 292(b)), and since 2026-11-01 the 136 labels of
  *   `plan/reports/ko-draft-report-labels.tsv`, byte for byte (owner, `G-41`,
  *   item 319), and `critiqueTextUnchecked` (owner, `G-41`, item 324(c),
- *   2026-11-01). A Korean label may place its placeholders in another order.
+ *   2026-11-01), and `semanticScholarAttribution` (owner, `G-41`, item
+ *   399(b), 2026-11-18). A Korean label may place its placeholders in another
+ *   order.
  * - Every other key is on {@link KO_REPORT_LABELS_PENDING_REVIEW}: a `ko`
  *   report shows its English until the coordinator drafts the Korean and the
  *   owner approves it in chat (`G-41`'s rule, applied to report text by
@@ -445,6 +447,11 @@ export const KO_REPORT_LABELS: Readonly<
     "보고서 모델의 한도로 이 보고서에 출력 토큰을 {output}개만 쓸 수 있어, {words}단어 분량으로 요청했습니다.",
   fitAnalysesShortened:
     "보고서 모델의 컨텍스트 창에 맞추기 위해 주제 분석을 {sections}절의 세부 내용 없이 보냈습니다. 따라서 해당 절의 내용이 분석 결과보다 적을 수 있습니다.",
+  // Korean drafted by the coordinator on 2026-11-17 and approved by the owner
+  // on 2026-11-18 (G-41, plan/00 §6 item 399(b)), byte for byte from
+  // plan/reports/ko-review-p7d.md (P7-T35).
+  semanticScholarAttribution:
+    "일부 기록 출처: Semantic Scholar, Allen Institute for AI.",
 });
 
 /**
@@ -455,11 +462,11 @@ export const KO_REPORT_LABELS: Readonly<
  * {@link KO_REPORT_LABELS}.
  */
 export const KO_REPORT_LABELS_PENDING_REVIEW: readonly ReportLabelKey[] =
-  Object.freeze([
-    // Draft (coordinator, 2026-11-17, not adopted; G-41, P7-T35):
-    // semanticScholarAttribution: "일부 기록 출처: Semantic Scholar, Allen Institute for AI.",
-    "semanticScholarAttribution",
-  ] as const satisfies readonly ReportLabelKey[]);
+  Object.freeze(
+    // Empty since 2026-11-18: P7-T35's line was approved (G-41, plan/00 §6
+    // item 399(b)). A label added later goes here until the owner approves it.
+    [] as const satisfies readonly ReportLabelKey[],
+  );
 
 // ---------------------------------------------------------------------------
 // 3. Study-design labels

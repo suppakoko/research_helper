@@ -437,11 +437,10 @@ research-helper-remove-notes-done = 노트 { $count }개를 휴지통으로 옮�
 # Korean drafted by the coordinator and reviewed by the owner on 2026-10-22 (G-41,
 # plan/00 §6 item 269(a)).
 
-research-helper-egress-first-job-notice = Research Helper는 사용자의 컴퓨터에서 실행되고 사용자의 API 키를 쓰며, 개발자에게는 아무것도 보내지 않습니다. 그렇다고 제공자에게까지 자료가 비공개로 유지되는 것은 아닙니다. 위에 적힌 내용은 사용자가 고른 제공자에게 전송되며, 제공자는 자체 약관에 따라 이를 처리합니다. 확인을 누르면 이 안내를 읽었다는 사실만 기록됩니다. 이 창이나 창 안의 경고가 꺼지지는 않습니다.
-# Draft (coordinator, 2026-11-17, not adopted; G-41, P7-T03):
-# The whole message with the owner's new sentence (plan/00 §6 item 395(b)).
-# Until it is approved, the live Korean above keeps the earlier text.
-# research-helper-egress-first-job-notice = Research Helper는 사용자의 컴퓨터에서 실행되고 사용자의 API 키를 쓰며, 개발자에게는 아무것도 보내지 않습니다. 그렇다고 제공자에게까지 자료가 비공개로 유지되는 것은 아닙니다. 위에 적힌 내용은 사용자가 고른 제공자에게 전송되며, 제공자는 자체 약관에 따라 이를 처리합니다. 동료 심사 중인 원고, 비밀유지 계약이 적용되는 미발표 연구, 연구 참여자 데이터가 담긴 자료에는 소속 기관의 규정을 먼저 확인하지 않은 채 사용하지 마세요. 확인을 누르면 이 안내를 읽었다는 사실만 기록됩니다. 이 창이나 창 안의 경고가 꺼지지는 않습니다.
+# The first-job notice with the owner's sentence (plan/00 §6 item 395(b)): Korean
+# drafted by the coordinator on 2026-11-17 and approved by the owner on 2026-11-18
+# (G-41, plan/00 §6 item 399(b)), byte for byte from plan/reports/ko-review-p7d.ftl.
+research-helper-egress-first-job-notice = Research Helper는 사용자의 컴퓨터에서 실행되고 사용자의 API 키를 쓰며, 개발자에게는 아무것도 보내지 않습니다. 그렇다고 제공자에게까지 자료가 비공개로 유지되는 것은 아닙니다. 위에 적힌 내용은 사용자가 고른 제공자에게 전송되며, 제공자는 자체 약관에 따라 이를 처리합니다. 동료 심사 중인 원고, 비밀유지 계약이 적용되는 미발표 연구, 연구 참여자 데이터가 담긴 자료에는 소속 기관의 규정을 먼저 확인하지 않은 채 사용하지 마세요. 확인을 누르면 이 안내를 읽었다는 사실만 기록됩니다. 이 창이나 창 안의 경고가 꺼지지는 않습니다.
 research-helper-egress-gemini-free-tier = 이 Google API 키는 무료 등급으로 보입니다. Google 약관에 따르면 무료 등급으로 보낸 내용은 Google 제품 개선에 쓰이며, 사람 검토자가 읽을 수 있습니다. 발표하지 않았거나 기밀인 자료에는 무료 등급을 쓰지 마세요.
 
 # Korean drafted by the coordinator and reviewed by the owner on 2026-10-23 (G-41,

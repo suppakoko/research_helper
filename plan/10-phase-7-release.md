@@ -503,6 +503,13 @@ section. Callers of `format.ts`: the dialogs, panes and view models it is wired 
 > window's second-run note finding of `plan/reports/P7-batchB.md` is behaviour, not a string or `Intl` call, and is not
 > under this sweep (`plan/00` §6 item 398).
 
+> **DECIDED 2026-11-18 (owner, plan/00 §6 item 399(c)): "그대로 둠" — a named exception to the Do NOT's `NUMBER()`
+> line.** The preferences pane's megabyte figures, `NUMBER($megabytes, maximumFractionDigits: 1)`, stay in Fluent: four
+> messages (`research-helper-prefs-cache-usage-row`, `-cache-usage-total`, `-confirm-clear-responses`,
+> `-confirm-delete-all`), five placeables in en-US and four in ko-KR, their Korean approved and their output checked in
+> Zotero by `preferences.spec.ts`. `test/unit/i18n/format.test.ts` pins exactly these and fails on any other `NUMBER()`
+> in a bundle (added 2026-11-18, batch E).
+
 *Updated 2026-11-17 (`plan/00` §6 item 393(d)): depends on `P7-T33`, which changes `src/ui/viewModels/reportViewModel.ts`, `src/ui/viewModels/relatedViewModel.ts` and `src/ui/dialogs/summarizeDialog.ts`, files this sweep also edits.*
 ---
 
@@ -627,7 +634,7 @@ npm run l10n:check && npm run test:unit -- i18n prompts
 | Field | Value |
 |---|---|
 | **ID** | `P7-T06` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-18, awaiting the owner's review (only the owner sets `DONE`); the NVDA half is `P7-T07`'s (`G-33`). Report at `plan/reports/P7-T06.md`. |
 | **Depends on** | `P7-T03` |
 | **Blocks** | `P7-T07`, `P7-T15` |
 | **Retires** | none |
@@ -1150,7 +1157,7 @@ npm run test:integration -- redactionAudit
 | Field | Value |
 |---|---|
 | **ID** | `P7-T15` |
-| **State** | `TODO` |
+| **State** | `TODO` — the agent's part built 2026-11-18, awaiting the owner's review and the owner's run on a library copy (`G-34`; only the owner sets `DONE`). Report at `plan/reports/P7-T15.md`. |
 | **Depends on** | `P7-T06`, `P7-T13` |
 | **Blocks** | `P7-T24` |
 | **Retires** | `R-10` |
@@ -1420,7 +1427,7 @@ npm run test:integration -- offline
 | Field | Value |
 |---|---|
 | **ID** | `P7-T20` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-18 as a draft, awaiting the owner's review (`G-41`, through `P7-T05`; only the owner sets `DONE`). Report at `plan/reports/P7-T20.md`. |
 | **Depends on** | `P7-T19` |
 | **Blocks** | `P7-T05`, `P7-T26` |
 | **Retires** | none |
@@ -1564,7 +1571,7 @@ npm run test:unit -- releaseWorkflow
 | Field | Value |
 |---|---|
 | **ID** | `P7-T23` |
-| **State** | `TODO` |
+| **State** | `TODO` — drafts built 2026-11-18, awaiting the owner's review (only the owner sets `DONE`; the owner posts under `G-36`). Report at `plan/reports/P7-T23.md`. |
 | **Depends on** | `P7-T19` |
 | **Blocks** | `P7-T31` |
 | **Retires** | none |
@@ -1607,7 +1614,7 @@ every point `docs/13` §7.2 item 2 lists, and an entry for each community list i
 | Field | Value |
 |---|---|
 | **ID** | `P7-T24` |
-| **State** | `TODO` |
+| **State** | `TODO` — built 2026-11-18, awaiting the owner's review (only the owner sets `DONE`; `P7-T25` fills it, `G-37` signs it). Report at `plan/reports/P7-T24.md`. |
 | **Depends on** | `P7-T02`, `P7-T15`, `P7-T16`, `P7-T17`, `P7-T18`, `P7-T22`, `P7-T34`, `P7-T35`, `P7-T36`, `P7-T37` |
 | **Blocks** | `P7-T26` |
 | **Retires** | none |
@@ -2165,6 +2172,10 @@ npm run typecheck && npm run test:unit -- summarizeItem
 variable, its tests and four documents. Caller: `summarizeItem`; nothing new is constructed (`summarizeItem.ts` is
 called by `summarizePipeline.ts`, wired in `src/bootstrap/registerPipelines.ts`).
 
+> **DECIDED 2026-11-18 (owner, plan/00 §6 item 399(a)): "지금대로 둠".** Kept as built: every stored summary is made
+> again on its next run, tagged or not, because `{{TAGS}}`'s value changed for an untagged item too (`none` → `not
+> supplied`); `docs/12` §4's note of 2026-11-17 carries the dated record.
+
 ---
 
 ### P7-T35 — Semantic Scholar attribution under the report's references
@@ -2319,7 +2330,7 @@ production caller and nothing constructed.
 | Field | Value |
 |---|---|
 | **ID** | `P7-T38` |
-| **State** | `TODO` |
+| **State** | `TODO` — attempted 2026-11-18: `npm audit fix` stopped with an internal npm error and changed nothing; owner question `plan/00` §6 item 401(d). Report at `plan/reports/P7-T38.md`. |
 | **Depends on** | `P7-T16` |
 | **Blocks** | `P7-T26` |
 | **Retires** | none |

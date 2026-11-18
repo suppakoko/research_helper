@@ -951,10 +951,13 @@ var RHPreferences = {
     this.localize(el, badge.messageId);
     el.classList.toggle("rh-warning", badge.warning);
     // Zotero's own palette variables, so both themes get the right colour
-    // without a stylesheet of this pane's own.
+    // without a stylesheet of this pane's own. P7-T06 (NFR-13's 4.5:1): the
+    // plain accents measured 4.23:1 (red) and 2.13:1 (green) on the light pane
+    // and 2.47:1 (red) on the dark one, so each is mixed 55% with Zotero's
+    // body-text colour, as addon/content/style/searchDialog.css does.
     el.style.color = badge.warning
-      ? "var(--accent-red)"
-      : "var(--accent-green)";
+      ? "color-mix(in srgb, var(--accent-red) 55%, var(--fill-primary))"
+      : "color-mix(in srgb, var(--accent-green) 55%, var(--fill-primary))";
     el.style.fontWeight = badge.warning ? "bold" : "normal";
   },
 

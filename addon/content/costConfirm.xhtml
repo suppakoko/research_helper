@@ -46,7 +46,10 @@ href="chrome://zotero-platform/content/zotero.css"?>
            `tierQuestion`; its radios are added by costConfirm.js. -->
       <html:div id="rh-cost-tier" hidden="hidden">
         <html:p id="rh-cost-tier-prompt" />
-        <radiogroup id="rh-cost-tier-choices" />
+        <radiogroup
+          id="rh-cost-tier-choices"
+          aria-labelledby="rh-cost-tier-prompt"
+        />
       </html:div>
       <html:div id="rh-cost-plan" />
       <html:div id="rh-cost-raise" />

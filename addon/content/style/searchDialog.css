@@ -22,7 +22,33 @@
  * - docs/08 §9: colour never carries meaning on its own, and light/dark and
  *   high-contrast modes follow the application, so every colour below is one of
  *   Zotero's own CSS variables with a plain fallback rather than a literal.
+ *   The four coloured text tokens just below are still Zotero's variables:
+ *   each mixes an accent with `--fill-primary`, Zotero's body-text colour.
  */
+
+/* P7-T06 (NFR-13's 4.5:1; docs/08 §9). Zotero's accents as TEXT measured below
+   4.5:1 on this window's backgrounds (orange 2.60:1 and blue 4.42:1 on white,
+   red 3.05:1 on the dark window; test/integration/accessibility.spec.ts logs
+   each). Mixing an accent 55% with --fill-primary moves it toward the body-text
+   colour, so it darkens in the light appearance and lightens in the dark one,
+   and the badge keeps its hue. 55% is the largest share at which every accent
+   met 4.5:1 on every background measured, the hovered row's included
+   (DECIDED 2026-11-18, coordinator, under plan/00 §6 item 313). The borders
+   below keep the plain accent: a border is not text, and the words and the
+   glyph carry the meaning. */
+:root {
+  --rh-text-red: color-mix(in srgb, var(--accent-red) 55%, var(--fill-primary));
+  --rh-text-orange: color-mix(
+    in srgb,
+    var(--accent-orange) 55%,
+    var(--fill-primary)
+  );
+  --rh-text-blue: color-mix(
+    in srgb,
+    var(--accent-blue) 55%,
+    var(--fill-primary)
+  );
+}
 
 #rh-search-dialog {
   /* docs/08 §4.1.1 requirement 1 and P1-T20 Do step 6. Keep in step with
@@ -151,7 +177,7 @@
 /* The inline message FR-2 requires when nothing is selected, and the one the
    error panel shows. ⚠ plus text, never colour alone (docs/08 §9). */
 .rh-inline-warning {
-  color: var(--accent-red, inherit);
+  color: var(--rh-text-red, inherit);
 }
 
 .rh-inline-warning::before {
@@ -375,7 +401,7 @@ separator:has(+ #rh-search-target-row[hidden]) {
 }
 
 .rh-existing-badge {
-  color: var(--accent-red, inherit);
+  color: var(--rh-text-red, inherit);
 }
 
 .rh-existing-badge::before {
@@ -404,7 +430,7 @@ separator:has(+ #rh-search-target-row[hidden]) {
 }
 .rh-duplicate-badge {
   margin-inline-end: 0.5em;
-  color: var(--accent-orange, inherit);
+  color: var(--rh-text-orange, inherit);
 }
 .rh-duplicate-badge::before {
   content: "\2248";
@@ -414,7 +440,7 @@ separator:has(+ #rh-search-target-row[hidden]) {
 /* plan/00 §6 item 146: another row is a different version of this work. */
 .rh-linked-badge {
   margin-inline-end: 0.5em;
-  color: var(--accent-blue, inherit);
+  color: var(--rh-text-blue, inherit);
 }
 .rh-linked-badge::before {
   content: "\21c4";

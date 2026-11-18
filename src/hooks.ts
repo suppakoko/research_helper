@@ -1,4 +1,5 @@
 import { registerUI, registerWindowUI } from "./bootstrap/registerUI";
+import { startupTimings } from "./bootstrap/startupTimings";
 import type { UninstallReport } from "./core/dataReset";
 
 /**
@@ -25,11 +26,14 @@ import type { UninstallReport } from "./core/dataReset";
  */
 
 async function onStartup(): Promise<void> {
+  // P7-T15 (NFR-10): four marks, kept on `addon.data.startup`.
+  const begunAt = Date.now();
   await Promise.all([
     Zotero.initializationPromise,
     Zotero.unlockPromise,
     Zotero.uiReadyPromise,
   ]);
+  const readyAt = Date.now();
 
   // The barrier above can take seconds, and the user can disable the plugin
   // inside that window. Registering after `onShutdown` has already run would
@@ -43,10 +47,13 @@ async function onStartup(): Promise<void> {
   // Application-scoped first, then existing windows, so a plugin enabled
   // mid-session catches up on windows that are already open (docs/01 §2.4).
   await registerUI(addon.scope);
+  const uiAt = Date.now();
 
   await Promise.all(
     Zotero.getMainWindows().map((win) => onMainWindowLoad(win)),
   );
+
+  addon.data.startup = startupTimings(begunAt, readyAt, uiAt, Date.now());
 
   // Read by zotero-plugin.config.ts's `test.waitForPlugin`, and by anything
   // outside the plugin that needs to know loading finished.

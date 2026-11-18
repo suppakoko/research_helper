@@ -1304,12 +1304,13 @@ describe("localization (FR-55, NFR-11, V-17, P1-T18)", function () {
       "each stop reason has its own Korean sentence",
     );
 
-    // The report labels are in the plugin's bundle, not in Fluent. Only
-    // P7-T35's line (owner, item 395(c), 2026-11-17) awaits G-41.
+    // The report labels are in the plugin's bundle, not in Fluent. P7-T35's
+    // line (owner, item 395(c), 2026-11-17) was the last to await G-41; it
+    // was approved on 2026-11-18 (item 399(b)), so none awaits review.
     assert.deepEqual(
       [...KO_REPORT_LABELS_PENDING_REVIEW],
-      ["semanticScholarAttribution"],
-      "only the Semantic Scholar line awaits review",
+      [],
+      "no report label awaits review",
     );
     for (const [key, args] of [
       ["fitOutputLowered", { output: 8192, words: 1390 }],

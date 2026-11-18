@@ -81,6 +81,8 @@ var RHSummarizeWindow = {
     this.on(this.spec.exportButton, () => this.exportSummaries());
     this.on(this.spec.continueButton, () => this.answer("resume"));
     this.on(this.spec.stopButton, () => this.answer("cancel"));
+    // P7-T06 (NFR-13; docs/08 §9): the window's keyboard contract.
+    window.addEventListener("keydown", (event) => this.onKey(event));
     window.addEventListener(
       "unload",
       () => {
@@ -146,6 +148,42 @@ var RHSummarizeWindow = {
   cancel() {
     this.answer("cancel");
     this.call("cancel");
+  },
+
+  /**
+   * P7-T06 (NFR-13; `docs/08` §9): the keyboard contract of this modeless
+   * window, which has no `<dialog>` to give it one. `Escape` cancels a running
+   * job first, a paused one's question included, and closes the window when
+   * nothing runs. `Enter` is Summarize, the window's default, when it can
+   * start, unless the focus is on a control that takes its own `Enter`.
+   */
+  onKey(event) {
+    if (!event || event.defaultPrevented) {
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      if (this.state.running) {
+        this.cancel();
+      } else {
+        window.close();
+      }
+      return;
+    }
+    if (event.key !== "Enter" || this.takesOwnEnter(event.target)) {
+      return;
+    }
+    const start = this.el(this.spec.start);
+    if (start && !start.disabled && !start.hidden && !this.state.running) {
+      event.preventDefault();
+      this.start();
+    }
+  },
+
+  /** A button, a list or a link acts on its own `Enter`. */
+  takesOwnEnter(target) {
+    const name = target && target.localName;
+    return ["button", "menulist", "menuitem", "a", "textarea"].includes(name);
   },
 
   /** A paused run's question, asked here; resolves "resume" or "cancel". */

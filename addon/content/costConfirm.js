@@ -345,15 +345,32 @@ var RHCostDialog = {
         const acceptLabel = this.attributeOf(accept, "label");
         const cancelLabel = this.attributeOf(cancel, "label");
         if (dialog && acceptLabel !== undefined) {
-          dialog.setAttribute("buttonlabelaccept", acceptLabel);
+          this.labelButton(dialog, "accept", acceptLabel);
         }
         if (dialog && cancelLabel !== undefined) {
-          dialog.setAttribute("buttonlabelcancel", cancelLabel);
+          this.labelButton(dialog, "cancel", cancelLabel);
         }
       })
       .catch((error) =>
         this.debug("could not format the dialog strings", error),
       );
+  },
+
+  /**
+   * `P7-T06`: label one of the `<dialog>`'s buttons. Gecko reads
+   * `buttonlabel<name>` only while the dialog is constructed, so setting it
+   * afterwards left the platform's "OK" and "Cancel" showing (measured
+   * 2026-11-18 by `test/integration/accessibility.spec.ts`). The rendered
+   * button's own label is set too; the attribute stays for anything that
+   * reads it.
+   */
+  labelButton(dialog, name, label) {
+    dialog.setAttribute(`buttonlabel${name}`, label);
+    const button =
+      typeof dialog.getButton === "function" ? dialog.getButton(name) : null;
+    if (button) {
+      button.label = label;
+    }
   },
 
   attributeOf(message, name) {

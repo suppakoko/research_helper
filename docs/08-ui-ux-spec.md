@@ -3025,6 +3025,8 @@ For the result table, leave `disableFontSizeScaling` **false**.
 * The only animation is the progress bar. No spinners that convey nothing; where progress is determinate, show the number.
 
 > **Unverified:** whether Zotero 10 ships a high-contrast/forced-colors stylesheet that plugin panes inherit automatically. Test the prefs pane and dialogs under Windows high-contrast mode before release.
+>
+> **Measured 2026-11-18 (`P7-T06`, `docs/spikes/phase-7-accessibility.md` §5), in part.** In Zotero 10.0.3 on Windows 11, setting `ui.useAccessibilityTheme` = 1, or `browser.display.document_color_use` = 2, did not make `(forced-colors: active)` true in the Search & Import window, and the badge colours did not change. What Windows' own contrast themes do is still unverified: that is the owner's optional step in the NVDA procedure (`P7-T07`, `G-33`).
 
 ---
 

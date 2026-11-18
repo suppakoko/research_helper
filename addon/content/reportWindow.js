@@ -141,10 +141,7 @@ var RHReportWindow = {
     this.on(this.spec.copy, () => this.copy());
     this.on(this.spec.shown, () => this.showReport());
     this.on(this.spec.audioGenerate, () => this.startAudio());
-    this.on(this.spec.audioCancel, () => {
-      this.answer("cancel");
-      this.call("cancelAudio");
-    });
+    this.on(this.spec.audioCancel, () => this.cancelAudio());
     this.on(this.spec.audioLanguage, () =>
       this.callWith("setAudioLanguage", this.selectedAudioLanguage()),
     );
@@ -156,6 +153,8 @@ var RHReportWindow = {
     });
     this.on(this.spec.audioSaveScript, () => this.settle(this.saveScript()));
     this.on(this.spec.audioSaveAudio, () => this.settle(this.saveAudio()));
+    // P7-T06 (NFR-13; docs/08 §9): the window's keyboard contract.
+    window.addEventListener("keydown", (event) => this.onKey(event));
     window.addEventListener(
       "unload",
       () => {
@@ -520,6 +519,56 @@ var RHReportWindow = {
     this.call("cancel");
   },
 
+  /** "Cancel audio". */
+  cancelAudio() {
+    this.answer("cancel");
+    this.call("cancelAudio");
+  },
+
+  /**
+   * P7-T06 (NFR-13; `docs/08` §9): `Escape` cancels a running report or audio
+   * run first, a paused one's question included, and only then closes the
+   * window, as the Search & Import window does. Close, the dialog's cancel
+   * button, is left as it was: a click closes and the run goes on (`plan/00`
+   * §6 item 324(a)). `Enter` is Generate, the window's default, when it can
+   * start, unless the focus is on a control that takes its own `Enter`; the
+   * dialog's own `Enter` would press its hidden accept button and do nothing.
+   */
+  onKey(event) {
+    if (!event || event.defaultPrevented) {
+      return;
+    }
+    if (event.key === "Escape") {
+      if (this.state.running) {
+        event.preventDefault();
+        this.cancel();
+      } else if (this.state.audioRunning) {
+        event.preventDefault();
+        this.cancelAudio();
+      }
+      return;
+    }
+    if (event.key !== "Enter" || this.takesOwnEnter(event.target)) {
+      return;
+    }
+    const generate = this.el(this.spec.generate);
+    if (
+      generate &&
+      !generate.disabled &&
+      !generate.hidden &&
+      !this.state.running
+    ) {
+      event.preventDefault();
+      this.start();
+    }
+  },
+
+  /** A button, a list or a link acts on its own `Enter`. */
+  takesOwnEnter(target) {
+    const name = target && target.localName;
+    return ["button", "menulist", "menuitem", "a", "textarea"].includes(name);
+  },
+
   /** A question, asked in place; resolves "resume" (first button) or "cancel". */
   ask(question) {
     this.answer("cancel");
@@ -728,7 +777,7 @@ var RHReportWindow = {
             : undefined;
         const dialog = this.el(this.spec.root);
         if (dialog && label && label.value) {
-          dialog.setAttribute("buttonlabelcancel", label.value);
+          this.labelButton(dialog, "cancel", label.value);
         }
       },
       (error) => this.debug("the window's chrome strings failed", error),
@@ -801,6 +850,23 @@ var RHReportWindow = {
     promise.then(undefined, (error) =>
       this.debug("a host call rejected", error),
     );
+  },
+
+  /**
+   * `P7-T06`: label one of the `<dialog>`'s buttons. Gecko reads
+   * `buttonlabel<name>` only while the dialog is constructed, so setting it
+   * afterwards left the platform's "OK" and "Cancel" showing (measured
+   * 2026-11-18 by `test/integration/accessibility.spec.ts`). The rendered
+   * button's own label is set too; the attribute stays for anything that
+   * reads it.
+   */
+  labelButton(dialog, name, label) {
+    dialog.setAttribute(`buttonlabel${name}`, label);
+    const button =
+      typeof dialog.getButton === "function" ? dialog.getButton(name) : null;
+    if (button) {
+      button.label = label;
+    }
   },
 
   /** One Debug Output line: the error's name only, never a value. */

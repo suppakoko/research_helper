@@ -1,5 +1,6 @@
 import { config } from "../package.json";
 import hooks from "./hooks";
+import type { StartupTimings } from "./bootstrap/startupTimings";
 import {
   createScope,
   type Scope,
@@ -181,6 +182,8 @@ class Addon {
     config: typeof config;
     env: "development" | "production";
     initialized?: boolean;
+    /** Set by `hooks.onStartup` just before `initialized` (`P7-T15`, `NFR-10`). */
+    startup?: StartupTimings;
     locale?: {
       current: any;
     };
