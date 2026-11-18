@@ -104,6 +104,7 @@ import {
   type ExternalIds,
 } from "../../model/ids";
 import type {
+  AcquiredSection,
   AcquiredSource,
   AcquisitionWarning,
   SourceTier,
@@ -329,6 +330,50 @@ export async function hashAcquiredText(
     };
   }
   return { hash: `md5:${md5Hex(text)}`, fallback: true };
+}
+
+// ---------------------------------------------------------------------------
+// One compact copy of the paper (`P7-T40`)
+// ---------------------------------------------------------------------------
+
+/**
+ * The same string as `text`, as a new string that shares nothing with the
+ * strings `text` was built from (`P7-T40`; owner, `plan/00` §6 item 403(e)).
+ *
+ * *Measured 2026-11-18 in the test profile (Zotero 10.0.3,
+ * `plan/reports/P7-T40.md`):* a paper of about 40,900 characters, held as
+ * `acquireSource` built it, kept two strings of 131,096 bytes each (`text`,
+ * and the body its sections were cut from), because the text Zotero reads is
+ * stored with two bytes a character and a joined string is given a
+ * power-of-two capacity. With this copy and `rebaseSections`, one acquired
+ * paper held 66,042 bytes of strings in the integration test; one byte a
+ * character accounts for about 41 KB of that, and the rest is not yet
+ * explained. A
+ * `JSON.stringify`/`JSON.parse` round trip returns exactly the string it was
+ * given, lone surrogates included, so the result is always equal to `text`.
+ */
+export function compactText(text: string): string {
+  return JSON.parse(JSON.stringify(text)) as string;
+}
+
+/**
+ * `sections` with each `text` cut again from the final `text`, and each
+ * heading compacted, so no section keeps the body it was first cut from
+ * alive (`P7-T40`). A section's `text` is `text.slice(start, end)` by
+ * construction; one that is not keeps a compacted copy of its own `text`.
+ */
+export function rebaseSections(
+  sections: readonly AcquiredSection[],
+  text: string,
+): AcquiredSection[] {
+  return sections.map((section) => {
+    const cut = text.slice(section.start, section.end);
+    return {
+      ...section,
+      heading: compactText(section.heading),
+      text: cut === section.text ? cut : compactText(section.text),
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -663,6 +708,11 @@ export async function acquireSource<
     tier = "metadata_only";
     text = "";
   }
+  // `P7-T40`: a run holds every planned paper from `prepare` to the end of
+  // `execute`, so the source keeps one compact copy of the paper and nothing
+  // it was read or cleaned from (`compactText`, `rebaseSections`).
+  text = compactText(text);
+  if (abstract !== null) abstract = compactText(abstract);
 
   const detected = detectBodySections(body, abstract);
   const validated = options.imradDetectorValidated ?? IMRAD_DETECTOR_VALIDATED;
@@ -723,7 +773,7 @@ export async function acquireSource<
     libraryID: item.libraryID,
     tier,
     abstract,
-    sections: sections.sections,
+    sections: rebaseSections(sections.sections, text),
     sectionAware: sections.sectionAware,
     text,
     charCount: text.length,

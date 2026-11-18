@@ -191,7 +191,14 @@ fixture mode for its AI provider. So they are measured in the **test profile** b
 - **The spec logs in MiB** (2²⁰ bytes). §6 gives MB (10⁶ bytes) beside them, because `NFR-7`'s
   budgets are in MB. *Found 2026-11-18:* the spec's own "within" label compares against 150 and
   400 **MiB**, which is 4.9% wider than the MB budgets. Read the MB figure in §6.1, not the label
-  (`plan/00` §6 item 403(e)).
+  (`plan/00` §6 item 403(e)). *Changed 2026-11-18 (batch G, `P7-T40`; owner, item 403(e)):* the
+  budgets are now in MB (`BUDGET_REFERENCE_MB`, `BUDGET_FULL_TEXT_MB`), and each peak line reads
+  "budget 400 MB: N MB, within" or "OVER". The heap figures themselves stay in MiB.
+- *Found 2026-11-18 (batch G):* `zotero-plugin.config.ts` sets `server.devtools: true`, so the
+  suite starts Zotero with `--jsdebugger`. With it, Gecko keeps every closed chrome window in
+  memory, a bare `about:blank` one included; without it, closed windows are freed. Figures from
+  the configured runs therefore overstate growth and peak (owner question `plan/00` §6 item
+  405(b)).
 
 **What these figures are not.** The test profile holds a few hundred items, the fake model
 answers at once, and the whole process's increase is counted, including Zotero's own share of a
@@ -205,6 +212,12 @@ is separate, and the workload figures on a real library would need a real key an
 job minus the one before the first, with the same idle procedure each time. Making the 500
 items is not counted as growth, because they are all made before the first idle reading. The
 spec also logs the `explicit/` groups that grew most.
+
+*Added 2026-11-18 (batch G, `P7-T39`):* the spec keeps a weak reference to each plugin window it
+closes (cost dialogs, summarize and report windows) and logs how many are still alive after the
+five jobs. It asserts that none is alive only when at least one was freed, because under
+`--jsdebugger` none can be (§3.2). It also waits until the plugin's own hold on each closed
+window is released (`heldCount`).
 
 ## 4. The main thread (`NFR-3`): long tasks during import and report
 
@@ -229,6 +242,15 @@ spec also logs the `explicit/` groups that grew most.
 3. In each profile, open the main thread's **Marker Chart** and find the longest task while the
    plugin's frames are on the stack. The `NFR-3` figure is the longest such task, in ms, and the
    function at the top of its stack.
+
+*Done 2026-11-18 for the 500-item full-text job in the test profile (batch G; owner, `plan/00` §6
+item 403(b)).* Step 2's environment variables were not used. A temporary development spec
+started Zotero's own profiler from inside the test profile (`Services.profiler.StartProfiler`,
+a 1 ms interval, the `js`, `stackwalk` and `cpu` features, the main thread only), ran §3.2's job,
+and wrote the raw profile to a local file with `dumpProfileToFileAsync` (195 MB, kept outside
+the repository). A local script read the samples inside the sampler's gap. Nothing was uploaded,
+and the profiler's web front end was not opened. The result is in §6.1 and
+`plan/reports/P7-T15.md`.
 
 ## 5. Bundle size (`NFR-18`)
 
@@ -266,6 +288,10 @@ CI enforces the same budget. §6 has the agent's build of 2026-11-18.
 | `NFR-7` reference workload: job 1's peak over idle (heap) | 59.1–62.0 MiB (62.0–65.0 MB) in seven runs, 2026-11-18. All five jobs: 59.1–87.6 MiB (up to 91.9 MB). Budget 150 MB: **pass** in the test profile | `[P7-T15 memory] reference job N: peak` lines (§3.2) |
 | `NFR-7` 500-item full-text job: peak over idle (heap) | 335.5–394.7 MiB (351.8–413.9 MB) in seven runs, 2026-11-18; all 500 summaries from the attached text. Budget 400 MB: six runs within, one **over by 13.9 MB**, so **not met with any margin** in the test profile (`plan/00` §6 item 403(e)). The spec labels its own lines against 400 MiB, so its "within" reads 4.9% wide of the MB budget | `[P7-T15 memory] full-text job: peak` line (§3.2) |
 | `docs/13` §8.8: idle heap after five reference jobs minus before the first | +21.3 to +26.0 MiB in seven runs, 2026-11-18. Among the groups that grew are three of the plugin's closed windows, 18.6 MiB together. **Not met** in the test profile (`plan/00` §6 item 403(a)) | `[P7-T15 memory] growth after 5 consecutive jobs` lines (§3.3) |
+| *Batch G (2026-11-18), one development run without `--jsdebugger`, not a recorded run:* `NFR-7` 500-item full-text job after `P7-T40` | 167.4 MiB (**175.5 MB**) over idle; all 500 summaries from the attached text. Within 400 MB in that run; the margin across recorded runs is not yet measured (`plan/00` §6 items 405(b), 405(d)) | `[P7-T15 memory] full-text job: peak` line |
+| *Batch G, the same run:* reference jobs 1–5 | 51.8–71.8 MiB (54.3–75.3 MB) over idle | `reference job N: peak` lines |
+| *Batch G, the same run:* growth after five jobs, after `P7-T39` | +8.2 MiB heap. Largest groups: Zotero's note editor +4.2, SQLite +1.0, strings +1.0 MiB. 20 closed plugin windows tracked, 0 alive | `growth after 5 consecutive jobs` and `closed windows (P7-T39)` lines |
+| *Batch G:* what runs in the 500-item job's gap (`NFR-3`, item 403(b)) | One synchronous task in summarize `prepare`. The duplicate screen (`screenItems` → `findCollectionDuplicates` → `sameWork` → `compareCandidates` → `levSim` → `levenshtein`) takes 91.6 % of the gap's 5589 main-thread samples, 88.8 % inside `levenshtein`. `detectLanguage` takes 8.1 %. Recorded on the code before batch G's changes | the local profile (§4), `plan/reports/P7-T15.md` |
 | The sampler's longest gap (`NFR-3`, for reference only) | 0.42–0.54 s in the 100-item jobs; 10.5–10.7 s in each 500-item job. *Not a task length:* it shows only that the 100 ms timer did not run (`plan/00` §6 item 403(b)) | the same lines' "longest gap" |
 
 *Batch F's seven runs (2026-11-18, `plan/reports/P7-batchF.md` §6) also repeated the startup rows:* `ownMs` 9–37 ms for the

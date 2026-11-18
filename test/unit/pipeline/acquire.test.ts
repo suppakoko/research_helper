@@ -8,13 +8,16 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createMemoryPrefStore } from "../../../src/core/config";
 import {
   acquireSource,
+  compactText,
   hashAcquiredText,
   isPasswordError,
   probeSubtleDigest,
+  rebaseSections,
   type AcquirableAttachment,
   type AcquirableItem,
   type FullTextPort,
 } from "../../../src/pipeline/summarize/acquire";
+import type { AcquiredSection } from "../../../src/model/summary";
 import { PREF_KEYS, setPrefStore } from "../../../src/prefs";
 import type {
   IndexedPageCounts,
@@ -372,5 +375,87 @@ describe("no full-text writer or raw cache reader in src/ (P3-T18)", () => {
       "// indexItems is never called\nawait Zotero.Fulltext.indexItems([id]);",
     );
     expect(/\bindexItems\b/u.test(code)).toBe(true);
+  });
+});
+
+describe("compactText and rebaseSections (P7-T40)", () => {
+  it("compactText returns an equal string, whatever it holds", () => {
+    for (const text of [
+      "",
+      "plain ASCII",
+      "Hangul 가힣, CJK 一鿿\n and — dashes",
+      "a lone \ud800 surrogate and \udfff another",
+      '"quotes", \\backslashes\\ and \t\f\r\u0000 control characters',
+      "x".repeat(50_000),
+    ]) {
+      expect(compactText(text)).toBe(text);
+    }
+  });
+
+  const TEXT = "Preamble\n\nIntroduction\nWhy.\nMethods\nHow.";
+  const section = (
+    start: number,
+    end: number,
+    heading: string,
+    text: string = TEXT.slice(start, end),
+  ): AcquiredSection => ({
+    imrad: "other",
+    labels: ["other"],
+    heading,
+    text,
+    start,
+    end,
+  });
+
+  it("cuts every section again from the final text, keeping each field", () => {
+    const sections = [
+      section(0, 10, ""),
+      section(10, 28, "Introduction"),
+      section(28, TEXT.length, "Methods"),
+    ];
+    const rebased = rebaseSections(sections, TEXT);
+    expect(rebased).toEqual(sections);
+    expect(rebased).not.toBe(sections);
+    rebased.forEach((s, i) => {
+      expect(s).not.toBe(sections[i]);
+      expect(s.text).toBe(TEXT.slice(s.start, s.end));
+    });
+  });
+
+  it("keeps a section's own text when the offsets do not cut it", () => {
+    const odd = section(0, 10, "Heading", "not the text at 0-10");
+    expect(rebaseSections([odd], TEXT)).toEqual([odd]);
+  });
+
+  it("returns no sections for none", () => {
+    expect(rebaseSections([], TEXT)).toEqual([]);
+  });
+
+  it("acquireSource's sections are cuts of its text, as workloadMemory.spec.ts's body gives them", async () => {
+    const parts = [`Abstract\n\n${ABSTRACT}\n`];
+    for (const heading of [
+      "Introduction",
+      "Methods",
+      "Results",
+      "Discussion",
+    ]) {
+      parts.push(`${heading}\n`);
+      for (let n = 0; n < 40; n += 1) {
+        parts.push(
+          `The ${heading.toLowerCase()} sentence number ${String(n)}.\n`,
+        );
+      }
+    }
+    const { port } = fakePort({ text: parts.join("\n") });
+    const source = await acquireSource(
+      fakeItem(ABSTRACT),
+      { ...OPTIONS, imradDetectorValidated: true },
+      port,
+    );
+    expect(source.tier).toBe("fulltext_pdf");
+    expect(source.sections.length).toBeGreaterThan(1);
+    for (const s of source.sections) {
+      expect(s.text).toBe(source.text.slice(s.start, s.end));
+    }
   });
 });

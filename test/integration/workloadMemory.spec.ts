@@ -42,6 +42,15 @@
  *    synthetic items, each with an abstract and an attached plain-text file of
  *    about {@link FULL_TEXT_CHARS} characters, read as Tier 2 text. Its peak is
  *    `NFR-7`'s 400 MB row.
+ * 3. **`P7-T39`** (owner, `plan/00` §6 item 403(a)): a closed summarize or
+ *    report window leaves the plugin's hold as it closes (`heldCount`), and
+ *    every window the reference workload closed is freed, in a run where a
+ *    closed window can be freed at all (`windowsCanBeFreed`).
+ * 4. **`P7-T40`** (owner, item 403(e)): an acquired paper keeps one compact
+ *    copy of its text, measured as the strings fifty held acquisitions add.
+ *
+ * *Changed 2026-11-18 (item 403(e)):* the budgets are MB (10⁶ bytes), not
+ * MiB; each budget clause gives the peak in MB.
  *
  * Each figure is logged with the `[P7-T15 memory]` prefix and **is not
  * asserted against its budget**: `P7-T15`'s Do step 2 makes a figure over
@@ -69,6 +78,7 @@ import {
   PAPER_SUMMARY_SCHEMA_VERSION,
   type PaperSummary,
 } from "../../src/model/summary";
+import { acquireZoteroSource } from "../../src/pipeline/summarize/acquire";
 import { expectedHeadings } from "../../src/pipeline/trendReport/compose";
 import { COST_DIALOG_URL } from "../../src/ui/dialogs/costConfirmDialog";
 import { chatResponse, mockModel } from "../helpers/mockLLM";
@@ -91,7 +101,9 @@ declare function before(body: (this: MochaContext) => Promise<void>): void;
 declare function after(body: (this: MochaContext) => Promise<void>): void;
 declare const assert: {
   strictEqual<T>(actual: T, expected: T, message?: string): void;
+  deepEqual<T>(actual: T, expected: T, message?: string): void;
   isAbove(value: number, floor: number, message?: string): void;
+  isBelow(value: number, ceiling: number, message?: string): void;
   include(haystack: string, needle: string, message?: string): void;
   fail(message: string): never;
 };
@@ -115,8 +127,14 @@ const SAMPLE_MS = 100;
 /** The pause after `minimizeMemoryUsage` before an idle reading. */
 const SETTLE_MS = 2_000;
 const MIB = 1_048_576;
-const BUDGET_REFERENCE_MIB = 150;
-const BUDGET_FULL_TEXT_MIB = 400;
+/**
+ * `NFR-7`'s budgets are in MB, 10⁶ bytes (owner, `plan/00` §6 item 403(e):
+ * "MB, not MiB"). The figures beside them stay in MiB, as `about:memory`
+ * gives them; each budget clause gives the peak in MB too.
+ */
+const MB = 1_000_000;
+const BUDGET_REFERENCE_MB = 150;
+const BUDGET_FULL_TEXT_MB = 400;
 const USAGE = {
   inputTokens: 100,
   outputTokens: 20,
@@ -185,6 +203,14 @@ function argsOf(element: Element | null): Record<string, unknown> {
 
 function mib(bytes: number): string {
   return (bytes / MIB).toFixed(1);
+}
+
+/** A peak against an `NFR-7` budget, in MB: "budget 400 MB: 287.3 MB, within". */
+function budgetClause(peak: number, budgetMb: number): string {
+  return (
+    `budget ${String(budgetMb)} MB: ${(peak / MB).toFixed(1)} MB, ` +
+    (peak <= budgetMb * MB ? "within" : "OVER")
+  );
 }
 
 /* ------------------------------------------------------- the reporter */
@@ -668,6 +694,7 @@ async function acceptCostDialogsUntil(done: () => boolean): Promise<number> {
         acknowledge.checked = true;
       }
       shown.RHCostDialog?.updateAccept();
+      remember("a cost dialog", shown);
       (
         doc.getElementById("rh-cost-dialog") as unknown as {
           acceptDialog(): void;
@@ -797,6 +824,44 @@ async function closeWindow(win: Window): Promise<void> {
   win.close();
   await waitUntil(() => win.closed, "a window to close");
   await delay(250);
+}
+
+/* ------------------------------------------- closed windows (P7-T39) */
+
+/** Each plugin window the reference workload closed, held weakly (`P7-T39`). */
+const closedWindows: {
+  readonly what: string;
+  readonly doc: WeakRef<Document>;
+}[] = [];
+
+function remember(what: string, win: Window): void {
+  closedWindows.push({ what, doc: new WeakRef(win.document) });
+}
+
+/** The two commands' {@link heldCount}s: handles the plugin still holds. */
+function heldCounts(): { summarize: number; report: number } {
+  const api = pluginInstance()?.api;
+  if (!api?.summarizeWindow || !api.reportWindow) {
+    assert.fail("registerUI() published no window commands");
+  }
+  return {
+    summarize: api.summarizeWindow.heldCount(),
+    report: api.reportWindow.heldCount(),
+  };
+}
+
+/**
+ * *Measured 2026-11-18 (`plan/reports/P7-T39.md`):* with the run's
+ * `--jsdebugger` (`server.devtools`, which test runs inherit) every closed
+ * chrome window stayed alive after Gecko's "Minimize memory usage", a bare
+ * one with no script included; without it every one could be freed. So the
+ * closed plugin windows are asserted freed only in a run where at least one
+ * of them was: the cost dialogs, which the plugin never held, are freed in
+ * such a run. A blank `about:blank` window is no control: it stayed alive in
+ * a run without the debugger.
+ */
+function windowsCanBeFreed(): boolean {
+  return closedWindows.some((one) => one.doc.deref() === undefined);
 }
 
 /* ------------------------------------------------------- the library */
@@ -966,8 +1031,128 @@ describe("P7-T15 (item 401(a)): NFR-7's workload memory in the test profile", fu
     if (locale !== undefined) await restoreUILocale(locale, log);
   });
 
+  it("P7-T39: a closed summarize or report window leaves the plugin's hold as it closes; one opened again stays held", async function () {
+    this.timeout(STEP_TIMEOUT_MS);
+    const api = pluginInstance()?.api;
+    if (!api?.summarizeWindow || !api.reportWindow) {
+      assert.fail("registerUI() published no window commands");
+    }
+    assert.deepEqual(heldCounts(), { summarize: 0, report: 0 });
+    // A collection id no library holds, as `lifecycle.spec.ts` uses: the
+    // windows open and draw their header, and no job starts.
+    const id = 2_000_000_039;
+    const main = Zotero.getMainWindow();
+    const loaded = async (win: Window, what: string): Promise<void> => {
+      await waitUntil(
+        () => win.document?.readyState === "complete",
+        `the ${what} to load`,
+      );
+      await delay(300);
+    };
+    const summarize = api.summarizeWindow.open(main, id) as unknown as Window;
+    await loaded(summarize, "summarize window");
+    const firstDoc = summarize.document;
+    // The same collection again: the named window loads its document again,
+    // and the first document's unload must not drop the handle.
+    const again = api.summarizeWindow.open(main, id) as unknown as Window;
+    assert.strictEqual(again, summarize, "the named window is reused");
+    await waitUntil(
+      () => summarize.document !== firstDoc,
+      "the summarize window to load again",
+    );
+    await loaded(summarize, "summarize window");
+    assert.strictEqual(
+      heldCounts().summarize,
+      1,
+      "the reopened window is held",
+    );
+    assert.strictEqual(api.summarizeWindow.openCount(), 1);
+    const report = api.reportWindow.open(main, id) as unknown as Window;
+    await loaded(report, "report window");
+    assert.strictEqual(heldCounts().report, 1, "the report window is held");
+    await closeWindow(summarize);
+    await closeWindow(report);
+    await waitUntil(
+      () => heldCounts().summarize === 0 && heldCounts().report === 0,
+      "both closed windows to leave the plugin's hold",
+    );
+    assert.strictEqual(api.summarizeWindow.openCount(), 0);
+    assert.strictEqual(api.reportWindow.openCount(), 0);
+  });
+
+  it("P7-T40: an acquired paper keeps one compact copy of its text", async function () {
+    this.timeout(STEP_TIMEOUT_MS);
+    const collection = await makeCollection(
+      `${TAG} compact`,
+      1,
+      true,
+      tempFiles,
+    );
+    collections.push(collection);
+    const item = collection.getChildItems(false, false)[0];
+    if (item === undefined) assert.fail("the item was not made");
+    const options = {
+      estimateTokens: (text: string) => Math.ceil(text.length / 4),
+      includeFullText: true,
+      tryEuropePmc: false,
+    };
+    const first = await acquireZoteroSource(item, options);
+    assert.strictEqual(first.tier, "fulltext_pdf", "Tier 2 read the text");
+    assert.isAbove(first.sections.length, 1, "the sections were found");
+    const strings = async (): Promise<number> => {
+      const cu = Cu as unknown as { forceGC(): void; forceCC(): void };
+      cu.forceGC();
+      cu.forceCC();
+      cu.forceGC();
+      let total = 0;
+      await new Promise<void>((resolve) => {
+        reporter().getReports(
+          (_process, path, _kind, units, amount) => {
+            if (
+              units === UNITS_BYTES &&
+              path.startsWith("explicit/") &&
+              /\/strings(\/|$)/u.test(path)
+            ) {
+              total += amount;
+            }
+          },
+          null,
+          () => resolve(),
+          null,
+          false,
+        );
+      });
+      return total;
+    };
+    const copies = 50;
+    const before = await strings();
+    const held: unknown[] = [];
+    for (let i = 0; i < copies; i += 1) {
+      held.push(await acquireZoteroSource(item, options));
+    }
+    const perPaper = ((await strings()) - before) / copies;
+    log(
+      `P7-T40: one acquired paper of ${String(first.text.length)} characters ` +
+        `holds ${(perPaper / 1024).toFixed(1)} KiB of strings ` +
+        `(${String(copies)} held at once; ${String(first.sections.length)} sections)`,
+    );
+    // Below one two-byte copy of the text. Before `P7-T40` a paper held two
+    // two-byte copies with power-of-two capacity, about 6.4 bytes a
+    // character. Measured 2026-11-18 (dev run, no debugger): 66,042 bytes for
+    // 40,928 characters, about 1.6 a character; the part above one byte a
+    // character is not yet explained (`plan/reports/P7-T40.md`). DECIDED
+    // 2026-11-18 (coordinator, under item 313; `plan/00` §6 item 404(k)).
+    assert.isBelow(
+      perPaper,
+      2 * first.text.length,
+      "one compact copy of the paper is held",
+    );
+    assert.strictEqual(held.length, copies);
+  });
+
   it("the reference workload (100 abstracts and one report), five times: each peak, and the growth across five jobs", async function () {
     this.timeout(JOB_TIMEOUT_MS);
+    closedWindows.length = 0;
     const madeAt = Date.now();
     const jobs: Zotero.Collection[] = [];
     for (let j = 1; j <= CONSECUTIVE_JOBS; j += 1) {
@@ -997,11 +1182,19 @@ describe("P7-T15 (item 401(a)): NFR-7's workload memory in the test profile", fu
       const summarizeWin = await openSummarize(collection.id);
       whereNow = summarizeWhere(summarizeWin);
       const summarized = await runSummarize(summarizeWin);
+      remember(`the summarize window of job ${String(job)}`, summarizeWin);
       await closeWindow(summarizeWin);
       whereNow = () => "the report window";
       const reportWin = await openReport(collection.id);
       const outcome = await runReport(reportWin);
+      remember(`the report window of job ${String(job)}`, reportWin);
       await closeWindow(reportWin);
+      // `P7-T39`: a closed window leaves the plugin's hold as it closes, not
+      // at the next open.
+      await waitUntil(
+        () => heldCounts().summarize === 0 && heldCounts().report === 0,
+        `job ${String(job)}: the closed windows to leave the plugin's hold`,
+      );
       const sampled = sampler.stop();
       whereNow = () => "-";
       const peak = sampled.peak.heap - idle.heap;
@@ -1017,8 +1210,7 @@ describe("P7-T15 (item 401(a)): NFR-7's workload memory in the test profile", fu
         `reference job ${String(job)}: peak heap ${mib(sampled.peak.heap)} MiB, ` +
           `peak resident ${mib(sampled.peak.resident)} MiB; peak − idle: heap ` +
           `${mib(peak)} MiB, resident ${mib(sampled.peak.resident - idle.resident)} MiB ` +
-          `(budget ${String(BUDGET_REFERENCE_MIB)} MiB: ` +
-          `${peak <= BUDGET_REFERENCE_MIB * MIB ? "within" : "OVER"}); ` +
+          `(${budgetClause(peak, BUDGET_REFERENCE_MB)}); ` +
           `${String(sampled.samples)} samples, longest gap ` +
           `${String(sampled.longestGapMs)} ms, slowest read ` +
           `${String(sampled.readCostMs)} ms; gaps of ${String(LONG_GAP_MS)} ms or more: ` +
@@ -1056,6 +1248,29 @@ describe("P7-T15 (item 401(a)): NFR-7's workload memory in the test profile", fu
       `growth after ${String(CONSECUTIVE_JOBS)} consecutive jobs, largest ` +
         `explicit/ groups (MiB): ${largestGrowth(before.reports, afterJobs.reports, 10)}`,
     );
+
+    // `P7-T39`: every window the five jobs closed is freed, in a run where
+    // a closed window can be (`windowsCanBeFreed`).
+    const freeable = windowsCanBeFreed();
+    const alive = closedWindows
+      .filter((one) => one.doc.deref() !== undefined)
+      .map((one) => one.what);
+    log(
+      `closed windows (P7-T39): ${String(closedWindows.length)} closed, ` +
+        `${String(alive.length)} still alive after the idle reading` +
+        (freeable
+          ? ""
+          : "; none was freed, as with the run's --jsdebugger, so none is asserted") +
+        (alive.length > 0 ? `: ${alive.join("; ")}` : ""),
+    );
+    assert.isAbove(
+      closedWindows.length,
+      2 * CONSECUTIVE_JOBS - 1,
+      "every summarize and report window was tracked",
+    );
+    if (freeable) {
+      assert.strictEqual(alive.join("; "), "", "every closed window is freed");
+    }
   });
 
   it("a 500-item full-text summarize job: its peak", async function () {
@@ -1090,6 +1305,7 @@ describe("P7-T15 (item 401(a)): NFR-7's workload memory in the test profile", fu
     const win = await openSummarize(collection.id);
     whereNow = summarizeWhere(win);
     const summarized = await runSummarize(win);
+    const fullTextWindow = new WeakRef(win.document);
     await closeWindow(win);
     const sampled = sampler.stop();
     whereNow = () => "-";
@@ -1105,8 +1321,7 @@ describe("P7-T15 (item 401(a)): NFR-7's workload memory in the test profile", fu
       `full-text job: peak heap ${mib(sampled.peak.heap)} MiB, peak ` +
         `resident ${mib(sampled.peak.resident)} MiB; peak − idle: heap ` +
         `${mib(peak)} MiB, resident ${mib(sampled.peak.resident - idle.resident)} MiB ` +
-        `(budget ${String(BUDGET_FULL_TEXT_MIB)} MiB: ` +
-        `${peak <= BUDGET_FULL_TEXT_MIB * MIB ? "within" : "OVER"}); ` +
+        `(${budgetClause(peak, BUDGET_FULL_TEXT_MB)}); ` +
         `${String(sampled.samples)} samples, longest gap ` +
         `${String(sampled.longestGapMs)} ms, slowest read ` +
         `${String(sampled.readCostMs)} ms; gaps of ${String(LONG_GAP_MS)} ms or more: ` +
@@ -1116,7 +1331,9 @@ describe("P7-T15 (item 401(a)): NFR-7's workload memory in the test profile", fu
     log(
       `full-text job, idle after − idle before: heap ` +
         `${mib(afterJob.heap - idle.heap)} MiB; largest explicit/ groups (MiB): ` +
-        largestGrowth(idle.reports, afterJob.reports, 10),
+        largestGrowth(idle.reports, afterJob.reports, 10) +
+        `; its summarize window is ${fullTextWindow.deref() === undefined ? "freed" : "still alive"}` +
+        ` (P7-T39; logged, not asserted), held handles ${JSON.stringify(heldCounts())}`,
     );
     assert.strictEqual(
       summarized.done,

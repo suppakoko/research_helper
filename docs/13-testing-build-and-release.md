@@ -1165,6 +1165,12 @@ jobs:
 >
 > The workflow sets `permissions: {}` at the top, every third-party action is pinned to a full commit with its tag as
 > a comment (item 390(a)), and no secret is referenced beyond the run's automatic `GITHUB_TOKEN`.
+>
+> *Decided 2026-11-18 (owner, `plan/00` §6 item 403(d): "1.0에서는 허용").* The dependency gate in step 1 is
+> `npm audit --omit=dev --audit-level=high`, and it must report 0; that is the v1.0 gate, unchanged. Advisories in
+> development tools only (16 on 2026-11-18 with npm 11.21.3's lockfile, 21 on the committed one) are **accepted for
+> v1.0**, because the one remaining fix downgrades `zotero-plugin-scaffold` to an older major line
+> (`plan/reports/P7-T38.md`). They are listed in `docs/release/v1.0-checklist.md` §3.
 
 Two things this workflow deliberately does:
 
@@ -1492,6 +1498,7 @@ seven recorded runs with a fake provider; `docs/spikes/phase-7-profiling.md` §3
 - **Growth after five jobs:** the idle heap grew by +21.3 to +26.0 MiB, so the second line is **not met** there. Part of
   that growth is three of the plugin's closed windows, still in memory (owner question `plan/00` §6 item 403(a)).
 - **Idle memory and a large library** are the owner's run (`plan/06` `G-34`).
+- *Batch G, 2026-11-18 (`P7-T39`, `P7-T40`; `plan/reports/P7-batchG.md`), test profile, one development run, not a recorded run: the three recorded runs wait on `plan/00` §6 item 405(d), and whether they run with the debugger is item 405(b):* the plugin no longer holds its closed windows, so none of the 20 tracked stayed alive. Growth after five jobs was +8.2 MiB, mostly Zotero's own note editor, SQLite and strings. The 500-item full-text job's peak was 175.5 MB over idle. With `--jsdebugger`, which the configured runs use, Gecko keeps every closed chrome window, so those runs still show the windows.
 
 ### 8.9 Release hygiene
 

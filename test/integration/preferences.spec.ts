@@ -35,10 +35,13 @@
  *    *same* login manager with a stubbed `request`, is driven through a
  *    succeeding and a failing Test call whose transport deliberately echoes the
  *    key (in the body on success, in the error message and URL on failure).
- *    Then Debug Output, both console channels, every preference in the profile,
- *    `Zotero.getErrors()` and every note in the library are swept for the key
- *    and for its digest. The sweep is proven non-vacuous: the host logged
- *    something, and the request that went out did carry the key.
+ *    Then Debug Output, both console channels, every preference in the profile
+ *    that has a user value, `Zotero.getErrors()` and every note in the library
+ *    are swept for the key, its digest and its last sixteen characters. The
+ *    sweep is proven non-vacuous: the host logged something, the request that
+ *    went out did carry the key, and a user-set control preference is found.
+ *    *Changed 2026-11-18 (owner, `plan/00` §6 item 403(c)):* shipped defaults
+ *    are no longer searched, and the four-character tail became sixteen.
  *
  * ## The UI locale is pinned to `en-US` (2026-10-26)
  *
@@ -307,16 +310,46 @@ function containsAny(text: string, needles: readonly string[]): boolean {
   return needles.some((needle) => needle.length > 0 && text.includes(needle));
 }
 
-/** Every string-valued preference in the whole profile that holds a needle. */
+/**
+ * The tail of a synthetic key the sweeps search for besides the whole key and
+ * its digest: long enough that a chance match is negligible.
+ *
+ * > **DECIDED 2026-11-18 (owner, plan/00 §6 item 403(c)): "기본값 설정은 건너뜀".**
+ * > The tail was four characters (`key.slice(-4)`, random hex). In batch F's
+ * > recorded run 1 the whole-profile sweep matched it inside a shipped default,
+ * > `browser.contentblocking.report.mobile-ios.url`, an App Store URL ending in
+ * > digits. Sixteen hex characters are 64 random bits, so a chance match in the
+ * > profile's text is negligible. *Coordinator, under item 313:* the length.
+ */
+const KEY_TAIL_NEEDLE_LENGTH = 16;
+
+/** {@link KEY_TAIL_NEEDLE_LENGTH} characters from the end of `key`. */
+function keyTail(key: string): string {
+  return key.slice(-KEY_TAIL_NEEDLE_LENGTH);
+}
+
+/**
+ * Every string-valued preference in the whole profile **that has a user
+ * value** and holds a needle.
+ *
+ * A preference with no user value holds only its shipped default, which no
+ * key typed in this session can be in, so it is skipped (owner, `plan/00` §6
+ * item 403(c)). A user value that equals its default still counts as one and is
+ * searched; every user-set preference is searched.
+ */
 function allPrefsContaining(needles: readonly string[]): {
   scanned: number;
+  userSet: number;
   hits: string[];
 } {
   const branch = Services.prefs.getBranch("");
   const names = branch.getChildList("");
   const hits: string[] = [];
+  let userSet = 0;
   for (const name of names) {
     if (branch.getPrefType(name) !== Services.prefs.PREF_STRING) continue;
+    if (!branch.prefHasUserValue(name)) continue;
+    userSet += 1;
     let value: string;
     try {
       value = branch.getStringPref(name);
@@ -325,7 +358,26 @@ function allPrefsContaining(needles: readonly string[]): {
     }
     if (containsAny(value, needles)) hits.push(name);
   }
-  return { scanned: names.length, hits };
+  return { scanned: names.length, userSet, hits };
+}
+
+/**
+ * The sweep cannot be blind to user values: a user-set control preference
+ * holding a marker is found, and is cleared again.
+ */
+function assertSweepSeesUserValues(): void {
+  const marker = `rhsweep-${randomHex(16)}`;
+  const name = `extensions.zotero.rh-sweep-control-${randomHex(4)}`;
+  Services.prefs.setStringPref(name, marker);
+  try {
+    assert.deepEqual(
+      allPrefsContaining([marker]).hits,
+      [name],
+      "the whole-profile sweep finds a user-set preference holding a needle",
+    );
+  } finally {
+    Services.prefs.clearUserPref(name);
+  }
 }
 
 /** How many notes in the user library contain any needle. */
@@ -348,7 +400,7 @@ interface Sweep {
   readonly debugOutput: string;
   readonly consoleMessages: string[];
   readonly branchHits: string[];
-  readonly allPrefs: { scanned: number; hits: string[] };
+  readonly allPrefs: { scanned: number; userSet: number; hits: string[] };
   readonly errors: string[];
   readonly notes: number;
 }
@@ -874,7 +926,7 @@ describe("P1-T44 — the preference pane", function () {
       stored.add("source.ncbi");
       if (!storeResult.stored) assert.fail("fixture: store refused");
       const digest = storeResult.digest;
-      const needles = [key, digest, key.slice(-4)];
+      const needles = [key, digest, keyTail(key)];
 
       const reports: TestReport[] = [];
       mode = "ok";
@@ -898,7 +950,8 @@ describe("P1-T44 — the preference pane", function () {
       log(
         `sweep: Debug Output ${result.debugOutput.length} chars, ${newLines} new line(s), ` +
           `storing was ${String(debugWasStoring)}; console ${result.consoleMessages.length} msgs; ` +
-          `plugin-branch hits ${result.branchHits.length}; all prefs scanned ${result.allPrefs.scanned}, ` +
+          `plugin-branch hits ${result.branchHits.length}; all prefs listed ${result.allPrefs.scanned}, ` +
+          `string prefs with a user value searched ${result.allPrefs.userSet}, ` +
           `hits ${result.allPrefs.hits.length}; errors ${result.errors.length} ` +
           `(${result.errors.length - errorsBefore} new); notes containing ${result.notes}`,
       );
@@ -908,6 +961,12 @@ describe("P1-T44 — the preference pane", function () {
         "the host logged something, so the sweep reads real lines",
       );
       assertClean(result, needles, "after a succeeding and a failing Test");
+      assert.isAbove(
+        result.allPrefs.userSet,
+        0,
+        "the whole-profile sweep searched user-set preferences",
+      );
+      assertSweepSeesUserValues();
 
       // The reports and the state the pane would paint carry none of it either.
       const painted = JSON.stringify([reports, await host.readState()]);
@@ -998,6 +1057,7 @@ describe("P1-T44 — the preference pane", function () {
         [],
         "no preference anywhere in the profile holds any of the four keys or digests",
       );
+      assertSweepSeesUserValues();
       assert.isFalse(
         containsAny(await flushedPrefsFile(), needles),
         "prefs.js holds none of them after the four clears either",

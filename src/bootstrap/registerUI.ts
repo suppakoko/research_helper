@@ -2265,11 +2265,18 @@ async function publishSummarySection(
 const summarizeState: {
   graph: ServiceGraph | undefined;
   /**
-   * Every summarize window this instance opened, closed at shutdown as the
-   * report window's are (owner, `plan/00` §6 item 307(e)).
+   * Every summarize window this instance opened that is still open, with the
+   * session it was opened with, closed at shutdown as the report window's are
+   * (owner, `plan/00` §6 item 307(e)).
+   *
+   * *Changed 2026-11-18 (`P7-T39`, owner, `plan/00` §6 item 403(a)):* a
+   * window is forgotten when its session's `closed()` runs, not at the next
+   * open; the handle kept until then held the closed window alive. The session
+   * is the key's check: a named window opened again for the same collection
+   * keeps its handle, and the old document's `closed()` must not drop it.
    */
-  readonly windows: Set<SummarizeWindowHandle>;
-} = { graph: undefined, windows: new Set() };
+  readonly windows: Map<SummarizeWindowHandle, SummarizeWindowSession>;
+} = { graph: undefined, windows: new Map() };
 
 /** The menu's "Summarize All Papers in Collection": open its window. */
 function openSummarizeWindowCommand(
@@ -2280,16 +2287,17 @@ function openSummarizeWindowCommand(
   if (graph === undefined) {
     throw new Error("[research-helper] the summarize window has no services");
   }
-  // A window the user closed is forgotten here (item 307(e)).
-  for (const win of summarizeState.windows) {
-    if (win.closed === true) summarizeState.windows.delete(win);
-  }
-  const win = openSummarizeWindow(
-    host,
-    collectionID,
-    createSummarizeSession(graph, collectionID),
-  );
-  summarizeState.windows.add(win);
+  let win: SummarizeWindowHandle | undefined;
+  const session = createSummarizeSession(graph, collectionID, () => {
+    // A window the user closed is forgotten when it closes (item 307(e);
+    // `P7-T39`).
+    if (win !== undefined && summarizeState.windows.get(win) === session) {
+      summarizeState.windows.delete(win);
+    }
+    win = undefined;
+  });
+  win = openSummarizeWindow(host, collectionID, session);
+  summarizeState.windows.set(win, session);
   return win;
 }
 
@@ -2434,10 +2442,14 @@ function idleView(
  * egress log (`docs/09` §3.6 item 4) and `execute` runs in its context. Cancel
  * — or the window closing — cancels the run's token; nothing is rolled back.
  * The export path is used once and never kept or logged (`docs/09` §2.2).
+ *
+ * @param onClosed - run after `closed()` has cancelled the run, so the opener
+ *   forgets the window (`P7-T39`)
  */
 function createSummarizeSession(
   graph: ServiceGraph,
   collectionID: number,
+  onClosed: () => void,
 ): SummarizeWindowSession {
   const logger = graph.logger.child({ surface: "summarizeWindow" });
   let running: CancellationTokenSource | undefined;
@@ -2661,6 +2673,7 @@ function createSummarizeSession(
 
     closed() {
       running?.cancel({ kind: "user" });
+      onClosed();
     },
   };
 }
@@ -2689,8 +2702,10 @@ async function publishSummarizeCommands(
         open: (host, collectionID) =>
           openSummarizeWindowCommand(host, collectionID),
         openCount: () =>
-          [...summarizeState.windows].filter((win) => win.closed !== true)
-            .length,
+          [...summarizeState.windows.keys()].filter(
+            (win) => win.closed !== true,
+          ).length,
+        heldCount: () => summarizeState.windows.size,
       };
       graph.jobNotices.setResumedNotice(async (records) => {
         const text = await formatValue(
@@ -2713,7 +2728,7 @@ async function publishSummarizeCommands(
       // Item 307(e): a summarize window left open must not outlive the plugin,
       // as `publishReportWindowCommands` does for the report window. Closing
       // it runs the window's `closed()`, which cancels a running job.
-      for (const win of summarizeState.windows) {
+      for (const win of [...summarizeState.windows.keys()]) {
         if (win.closed !== true) win.close?.();
       }
       summarizeState.windows.clear();
@@ -2757,6 +2772,12 @@ export interface SummarizeWindowCommands {
   ): SummarizeWindowHandle;
   /** How many summarize windows this instance opened that are still open. */
   openCount(): number;
+  /**
+   * How many window handles this instance holds. A window leaves when it
+   * closes (`P7-T39`), so this equals {@link openCount} unless a handle
+   * outlived its window. Published so an integration spec can see it.
+   */
+  heldCount(): number;
 }
 
 /** {@link PluginApi.reportWindow}. */
@@ -2765,6 +2786,11 @@ export interface ReportWindowCommands {
   open(host: ReportWindowHost, collectionID: number): ReportWindowHandle;
   /** How many report windows this instance opened that are still open. */
   openCount(): number;
+  /**
+   * How many window handles this instance holds, as
+   * {@link SummarizeWindowCommands.heldCount} counts them (`P7-T39`).
+   */
+  heldCount(): number;
   /**
    * What the start runs for jobs left paused (`P4-T21`; owner, `plan/00` §6 item
    * 332(b)). Published so an integration spec can run it over a job it paused.
@@ -2785,11 +2811,19 @@ interface OpenReportWindow {
  * leaves no report window or run behind (`P4-T19` Done when). Module state, as
  * {@link summarizeState} is, because `SEARCH_MENU_COMMANDS` is built before
  * any graph exists.
+ *
+ * *Changed 2026-11-18 (`P7-T39`, owner, `plan/00` §6 item 403(a)):* a window
+ * leaves `windows` when its session's `closed()` runs, not at the next open;
+ * the entry kept until then held the closed window alive. Its session, which
+ * holds no window once closed, waits in `closedSessions` until the next open
+ * forgets it, as the whole entry did before, so a teardown in between still
+ * waits for the run that window started to end.
  */
 const reportWindowState: {
   graph: ServiceGraph | undefined;
   readonly windows: Map<number, OpenReportWindow>;
-} = { graph: undefined, windows: new Map() };
+  readonly closedSessions: Set<ReportSession>;
+} = { graph: undefined, windows: new Map(), closedSessions: new Set() };
 
 /**
  * The menu's "Generate Research Trends Report…": open, or raise, the
@@ -2811,12 +2845,19 @@ function openReportWindowCommand(
   for (const [id, open] of reportWindowState.windows) {
     if (open.win.closed === true) reportWindowState.windows.delete(id);
   }
+  reportWindowState.closedSessions.clear();
   const already = reportWindowState.windows.get(collectionID);
   if (already !== undefined) {
     already.win.focus();
     return already.win;
   }
-  const session = createReportWindowSession(graph, collectionID);
+  const session = createReportWindowSession(graph, collectionID, () => {
+    // Forgotten when it closes (`P7-T39`); the session waits for teardown.
+    if (reportWindowState.windows.get(collectionID)?.session === session) {
+      reportWindowState.windows.delete(collectionID);
+      reportWindowState.closedSessions.add(session);
+    }
+  });
   const win = openReportWindow(host, collectionID, session);
   reportWindowState.windows.set(collectionID, { win, session });
   return win;
@@ -2891,10 +2932,14 @@ interface ReportSession extends ReportWindowSession {
  * text" (`plan/00` §6 item 286). A chain with every setting empty is a
  * `ConfigurationError` from the router, drawn as "no report model is set"; any
  * other failure rejects `describe()`, which the window logs by name.
+ *
+ * @param onClosed - run at the end of `closed()`, so the opener forgets the
+ *   window (`P7-T39`)
  */
 function createReportWindowSession(
   graph: ServiceGraph,
   collectionID: number,
+  onClosed: () => void,
 ): ReportSession {
   const logger = graph.logger.child({ surface: "reportWindow" });
   let state: ReportRunState = IDLE_REPORT_RUN;
@@ -3718,6 +3763,7 @@ function createReportWindowSession(
       source?.cancel({ kind: "user" });
       audioSource?.cancel({ kind: "user" });
       releaseWaits();
+      onClosed();
     },
 
     async shutdown() {
@@ -3912,6 +3958,7 @@ async function publishReportWindowCommands(
           [...reportWindowState.windows.values()].filter(
             (open) => open.win.closed !== true,
           ).length,
+        heldCount: () => reportWindowState.windows.size,
         announcePaused,
       };
       return "reportWindowState";
@@ -3920,11 +3967,16 @@ async function publishReportWindowCommands(
       delete api.reportWindow;
       await pausedNotice;
       const open = [...reportWindowState.windows.values()];
-      await Promise.allSettled(open.map((one) => one.session.shutdown()));
+      const sessions = [
+        ...open.map((one) => one.session),
+        ...reportWindowState.closedSessions,
+      ];
+      await Promise.allSettled(sessions.map((session) => session.shutdown()));
       for (const one of open) {
         if (one.win.closed !== true) one.win.close?.();
       }
       reportWindowState.windows.clear();
+      reportWindowState.closedSessions.clear();
       reportWindowState.graph = undefined;
     },
   });
