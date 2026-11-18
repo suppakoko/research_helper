@@ -108,10 +108,11 @@ import type {
   ValidationResult,
 } from "../types";
 
+import { defaultYieldToEventLoop } from "../../sources/shared/dedupe";
 import { IMRAD_DETECTOR_VALIDATED } from "./imrad";
 import { detectLanguage } from "./languageDetect";
 import {
-  screenItems,
+  screenItemsAsync,
   screeningPolicyFrom,
   type ScreenDecision,
   type ScreenItem,
@@ -132,6 +133,16 @@ import {
 /** `Pipeline.displayNameKey`: the menu entry's own id. */
 export const SUMMARIZE_DISPLAY_NAME_KEY =
   "research-helper-menu-collection-summarize-all";
+
+/**
+ * How many items `prepare` reads the language of between two yields to the
+ * event loop, before the screen (`P7-T41`, `docs/10` NFR-3). `P7-T15`'s
+ * profile of 2026-11-18 put `detectLanguage` at 8.1 % of a 10.9 s task over
+ * 500 papers of about 40 000 characters, about 1.8 ms a paper, so a slice of
+ * 25 is about 45 ms. DECIDED 2026-11-18 (coordinator, under item 313;
+ * `plan/00` §6 item 406(b)).
+ */
+export const SCREEN_LANGUAGE_YIELD_EVERY_ITEMS = 25;
 
 /**
  * `docs/07` §12.3's stages, in run order. The label keys are the stage
@@ -968,20 +979,32 @@ export function createSummarizePipeline(
     const acquiredByKey = new Map(
       candidates.map((c) => [c.item.itemKey, c.acquired.source]),
     );
-    const report = screenItems(
-      collection.items.map((item): ScreenItem => {
-        const source = acquiredByKey.get(item.itemKey);
-        const text = source === undefined ? "" : source.text;
-        const language =
-          text === ""
-            ? undefined
-            : (({ nonEnglish, dominantScript }) => ({
-                nonEnglish,
-                dominantScript,
-              }))(detectLanguage(text));
-        return { ...item.screen, ...(language !== undefined && { language }) };
-      }),
+    // `P7-T41`: the language reads and the duplicate screen yield to the event
+    // loop as they go, so a large collection does not hold the main thread.
+    const screenInput: ScreenItem[] = [];
+    for (const [index, item] of collection.items.entries()) {
+      if (index > 0 && index % SCREEN_LANGUAGE_YIELD_EVERY_ITEMS === 0) {
+        await defaultYieldToEventLoop();
+        ctx.token.throwIfCancelled();
+      }
+      const source = acquiredByKey.get(item.itemKey);
+      const text = source === undefined ? "" : source.text;
+      const language =
+        text === ""
+          ? undefined
+          : (({ nonEnglish, dominantScript }) => ({
+              nonEnglish,
+              dominantScript,
+            }))(detectLanguage(text));
+      screenInput.push({
+        ...item.screen,
+        ...(language !== undefined && { language }),
+      });
+    }
+    const report = await screenItemsAsync(
+      screenInput,
       screeningPolicyFrom(ctx.config),
+      { token: ctx.token },
     );
     const decisions = new Map(report.decisions.map((d) => [d.key, d]));
 

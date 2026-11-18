@@ -37,7 +37,8 @@ AI 제공자에게 무엇이든 보내기 전에, 확인 창이 전송 대상, �
 |---|---|---|---|---|
 | 1.0 (아직 출시 전) | 10.0.x만 | 검증됨 | **검증 안 됨** | **검증 안 됨** |
 
-"검증됨"은 자동화된 통합 테스트 묶음이 Windows 11의 Zotero 10.0.3에서 실행되고, 릴리스의 수동
+<!-- 2026-11-18: only the version number changed, 10.0.3 to 10.0.8, for the owner's baseline move (plan/00 §6 item 405(d)); the approved wording is otherwise unchanged (G-41). -->
+"검증됨"은 자동화된 통합 테스트 묶음이 Windows 11의 Zotero 10.0.8에서 실행되고, 릴리스의 수동
 점검이 릴리스 체크리스트([`docs/release/v1.0-checklist.md`](docs/release/v1.0-checklist.md))에
 기록된다는 뜻입니다. macOS와 Linux는 쓸 수 있는 컴퓨터가 없어 점검하지 못했습니다. 작동할 것으로
 예상하지만 아무도 확인하지 않았습니다. 두 운영체제에서의 사용 보고를 환영합니다. 인터페이스는

@@ -220,7 +220,7 @@ export default defineConfig({
   },
 
   server: {
-    devtools: true,        // appends --jsdebugger to Zotero's start args
+    devtools,              // true unless RH_DEVTOOLS=off (§2.3); true appends --jsdebugger
     debugOutputFile: true, // capture stdout/stderr into .scaffold/logs/
   },
 
@@ -322,7 +322,7 @@ is not evidence that the test runner can parse the same source.
 | `-purgecaches` | Force re-reading of cached files |
 | `-ZoteroDebugText` | Emit debug text output to the console |
 | `-jsconsole` | Open the JavaScript console |
-| `--jsdebugger` | Appended automatically by the scaffold when `server.devtools: true`; opens the Firefox developer tools / debugger against the Zotero process |
+| `--jsdebugger` | Appended automatically by the scaffold when `server.devtools: true`; opens the Firefox developer tools / debugger against the Zotero process. Not appended when `RH_DEVTOOLS=off` (§2.3; 2026-11-18) |
 
 Do not invent additional flags. `--debugger` as such is **not** documented for Zotero; the scaffold uses `--jsdebugger`.
 
@@ -598,6 +598,25 @@ This makes the interesting behaviours testable deterministically: retry-then-suc
 Integration tests must never call an external API or an LLM. The `httpRequest` choke point is stubbed inside the test plugin with the same fixture replay used in contract tests, and `MockLLMProvider` is injected.
 
 **Running them.** Locally: `npm run test:integration` (headed, watch). In CI: `ubuntu-latest` with `--exit-on-finish --abort-on-fail` — headless is not a CLI flag; the scaffold enables it automatically on CI services. On Windows/macOS, integration tests are run **manually** as part of the release QA (§8) rather than in CI, per the documented headless limitation.
+
+**Without the debugger.** *Added 2026-11-18 (owner, `plan/00` §6 item 405(b)).* The command on this machine is
+`NODE_USE_SYSTEM_CA=1 env -u OPENROUTER_API_KEY npm run test:integration -- --exit-on-finish`; with
+`RH_DEVTOOLS=off` in front of it, `zotero-plugin.config.ts` sets `server.devtools` to false and Zotero starts
+without `--jsdebugger`. Only the exact value `off` does that; unset or any other value keeps the default, the
+debugger on. The run's profile carries `researchHelper.test.devtools` (true or false), so a spec can tell which
+run it is in. **The memory figures (§8.8, `NFR-7`) come from runs without the debugger**: with it, Gecko keeps
+every closed chrome window, a bare one included (measured 2026-11-18, `plan/reports/P7-T39.md`), so such a run
+overstates growth and peak.
+
+**Zotero does not update itself in the test profile.** *Added 2026-11-18 (owner, `plan/00` §6 item 405(d)).* In
+batch G's runs Zotero's own update check reached `www.zotero.org` and staged a new release, and later starts ran
+`updater.exe`. `NO_APP_UPDATE_PREFS` in `zotero-plugin.config.ts` now sets `app.update.auto`,
+`app.update.checkInstallTime` and `app.update.staging.enabled` to false (with the scaffold's own
+`app.update.enabled`), and sets the daily background check's last time to the run's start, so the check is not
+due during a run. The comment there says which of them Gecko 140 reads (read from Zotero's `omni.ja`); a profile
+cannot switch the check off entirely. `test/unit/integration/testProfilePrefs.test.ts` checks the configuration,
+and `test/integration/testProfile.spec.ts` checks the running profile and logs the Zotero version. The tested
+baseline is **Zotero 10.0.8** since 2026-11-18 (was 10.0.3).
 
 ---
 
@@ -1487,7 +1506,9 @@ Run on **Windows, macOS, and Linux** for a minor or major release; Windows plus 
 ### 8.8 Resources and stability
 
 - [ ] Idle incremental memory ≤ 30 MB; peak during the 100-item reference workload ≤ 150 MB (NFR-7).
-- [ ] No memory growth after 5 consecutive jobs (measure before/after with the same idle state).
+- [ ] No plugin window or plugin realm grows across 5 consecutive jobs (measure before/after with the same idle
+  state, in a run without the debugger, §2.3); the whole-process growth is recorded beside it. *Reworded
+  2026-11-18 (owner, `plan/00` §6 item 405(c)): it read "No memory growth after 5 consecutive jobs".*
 - [ ] Built XPI ≤ 3 MB (NFR-18) — enforced in CI, re-confirmed here.
 - [ ] Debug output contains no unredacted secrets and no unhandled promise rejections across the full QA pass.
 

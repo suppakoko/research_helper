@@ -31,6 +31,7 @@
 > *Re-priced 2026-11-17, latest (`plan/00` §6 item 398): Phase 7 is 32.00–45 d over 38 cards after `P7-T34`–`P7-T38` and `P7-T03`'s 1.5 → 1.75 d; it read 29.75–42 d.*
 > *Re-priced 2026-11-18 (`plan/00` §6 item 402(a)): Phase 7 is 32.50–46 d over 38 cards after `P7-T15` went 1.5 → 2.0 d for item 401(a); it read 32.00–45 d.*
 > *Re-priced 2026-11-18, later (`plan/00` §6 item 404(a)): Phase 7 is 34.75–49 d over 40 cards after `P7-T39` and `P7-T40` (1.0 d each) were added and `P7-T15` went 2.0 → 2.25 d for item 403; it read 32.50–46 d.*
+> *Re-priced 2026-11-18, later still (`plan/00` §6 item 406(a)): Phase 7 is 35.75–50 d over 41 cards after `P7-T41` (1.0 d) was added for item 405(a); it read 34.75–49 d.*
 > *Re-priced 2026-11-05 (`plan/00` §6 item 344(b)): Phase 5's measured band is 36.25–51 d; it read 35.75–50 d.*
 > *Re-priced 2026-11-02 (`plan/00` §6 item 335(g)): Phase 4's measured band is 25.25–35 d; it read 23.75–33 d.*
 > *Re-priced again 2026-11-02 (`plan/00` §6 item 336(d)): it is 25.75–36 d; it read 25.25–35 d.*
@@ -205,8 +206,8 @@ below, Phase 6's gating list, is kept as the record it was.
 before §0's exit conditions (a) and (c) held — Phases 3–6 are not `DONE`, and Phase 6 is not built;
 `plan/10` §0 records which entry conditions are met. It has had no independent review yet.
 
-**Effort:** **34.75–49 developer-days — measured**, the sum of `plan/10`'s 40 cards (34.75 × 1.4 =
-48.65 → 49; *re-priced 2026-11-18, later, `plan/00` §6 item 404(a): it read 32.50–46 over 38 cards (32.50 × 1.4 = 45.5 → 46) before `P7-T39`, `P7-T40` and `P7-T15`'s 2.0 → 2.25 d*; *re-priced 2026-11-18, `plan/00` §6 item 402(a): it read 32.00–45 before `P7-T15` went 1.5 → 2.0 d*; *re-priced 2026-11-17, latest, `plan/00` §6 item 398: it read 29.75–42 over 33 cards before `P7-T34`–`P7-T38` and `P7-T03`'s re-estimate*; *re-priced 2026-11-17, `plan/00` §6 item 393(d): it read 29.25–41 over 32 cards before `P7-T33`*; *re-priced 2026-11-16, later still, `plan/00` §6 item 381: it read 28.50–40 over 31 cards before `P7-T32`*), replacing the 21–29 d **scaled ×1.50, not decomposed** figure this section quoted from
+**Effort:** **35.75–50 developer-days — measured**, the sum of `plan/10`'s 41 cards (35.75 × 1.4 =
+50.05 → 50; *re-priced 2026-11-18, later still, `plan/00` §6 item 406(a): it read 34.75–49 over 40 cards (34.75 × 1.4 = 48.65 → 49) before `P7-T41`*; *re-priced 2026-11-18, later, `plan/00` §6 item 404(a): it read 32.50–46 over 38 cards (32.50 × 1.4 = 45.5 → 46) before `P7-T39`, `P7-T40` and `P7-T15`'s 2.0 → 2.25 d*; *re-priced 2026-11-18, `plan/00` §6 item 402(a): it read 32.00–45 before `P7-T15` went 1.5 → 2.0 d*; *re-priced 2026-11-17, latest, `plan/00` §6 item 398: it read 29.75–42 over 33 cards before `P7-T34`–`P7-T38` and `P7-T03`'s re-estimate*; *re-priced 2026-11-17, `plan/00` §6 item 393(d): it read 29.25–41 over 32 cards before `P7-T33`*; *re-priced 2026-11-16, later still, `plan/00` §6 item 381: it read 28.50–40 over 31 cards before `P7-T32`*), replacing the 21–29 d **scaled ×1.50, not decomposed** figure this section quoted from
 2026-09-09 to 2026-11-16 (`docs/11` §1, Phase 7, and the effort summary table carry the change). With
 it, no phase of the plan carries a scaled figure.
 

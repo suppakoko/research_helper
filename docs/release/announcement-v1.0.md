@@ -46,7 +46,8 @@ The interface is in English and Korean.
 
 **Compatibility**
 
-Zotero 10.0.x only. Tested on Windows 11 with Zotero 10.0.3. **macOS and Linux are untested**,
+<!-- Baseline moved 2026-11-18 from Zotero 10.0.3 to 10.0.8 (owner, plan/00 §6 item 405(d)). -->
+Zotero 10.0.x only. Tested on Windows 11 with Zotero 10.0.8. **macOS and Linux are untested**,
 because no machine was available. They are expected to work but nobody has confirmed it, and
 reports from either are very welcome.
 

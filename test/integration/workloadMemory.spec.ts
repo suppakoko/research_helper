@@ -48,6 +48,15 @@
  *    closed window can be freed at all (`windowsCanBeFreed`).
  * 4. **`P7-T40`** (owner, item 403(e)): an acquired paper keeps one compact
  *    copy of its text, measured as the strings fifty held acquisitions add.
+ * 5. **Item 405(c)** (owner): §8.8's growth line is read as "no plugin window
+ *    or plugin realm grows across five jobs" (`isPluginGroup`), asserted in a
+ *    run without the debugger and logged in every run, with the whole-process
+ *    growth beside it.
+ * 6. **`P7-T41`** (owner, item 405(a)): the 500-item job's longest sampler
+ *    gap, against the card's 1 s, logged.
+ *
+ * *Added 2026-11-18 (item 405(b)):* the log's first line says whether the run
+ * has the debugger; `RH_DEVTOOLS=off npm run test:integration` runs without it.
  *
  * *Changed 2026-11-18 (item 403(e)):* the budgets are MB (10⁶ bytes), not
  * MiB; each budget clause gives the peak in MB.
@@ -864,6 +873,63 @@ function windowsCanBeFreed(): boolean {
   return closedWindows.some((one) => one.doc.deref() === undefined);
 }
 
+/**
+ * Whether this run started Zotero with `--jsdebugger`: the
+ * `researchHelper.test.devtools` preference `zotero-plugin.config.ts` writes
+ * into the test profile (`RH_DEVTOOLS=off` turns the debugger off; owner,
+ * `plan/00` §6 item 405(b)). `undefined` when the preference is absent, as on
+ * a profile configured before 2026-11-18.
+ */
+function runHasDebugger(): boolean | undefined {
+  const name = "researchHelper.test.devtools";
+  return Services.prefs.getPrefType(name) === Services.prefs.PREF_BOOL
+    ? Services.prefs.getBoolPref(name)
+    : undefined;
+}
+
+/* ------------------------------------- the plugin's own groups (405(c)) */
+
+/**
+ * A grouped `explicit/` report that is the plugin's own: one of its windows
+ * (`chrome://research-helper/…`) or a realm of its code (the build under
+ * `research_helper/.scaffold/build`). Owner, `plan/00` §6 item 405(c):
+ * `docs/13` §8.8's growth line reads "no plugin window or plugin realm grows
+ * across five jobs", with the whole-process figure recorded beside it.
+ */
+const PLUGIN_GROUP = /research[-_]helper|researchHelper/iu;
+
+function isPluginGroup(prefix: string): boolean {
+  return (
+    (prefix.startsWith("explicit/window-objects/") ||
+      prefix.startsWith("explicit/js-non-window/zones/")) &&
+    PLUGIN_GROUP.test(prefix)
+  );
+}
+
+/**
+ * How much a plugin group may grow across five jobs and still read as "does
+ * not grow": measurement noise between two idle readings, not a held window
+ * (a closed summarize window's group was 3.2 MiB, `plan/reports/P7-T39.md`).
+ * DECIDED 2026-11-18 (coordinator, under item 313; `plan/00` §6 item 406(h)).
+ */
+const PLUGIN_GROUP_GROWTH_TOLERANCE = 1 * MIB;
+
+/** Each plugin group's growth between two idle readings, largest first. */
+function pluginGrowth(
+  before: ReadonlyMap<string, number>,
+  after: ReadonlyMap<string, number>,
+): [string, number][] {
+  const prefixes = new Set(
+    [...before.keys(), ...after.keys()].filter(isPluginGroup),
+  );
+  return [...prefixes]
+    .map((prefix): [string, number] => [
+      prefix,
+      (after.get(prefix) ?? 0) - (before.get(prefix) ?? 0),
+    ])
+    .sort((a, b) => b[1] - a[1]);
+}
+
 /* ------------------------------------------------------- the library */
 
 const BACKGROUND = [
@@ -969,6 +1035,11 @@ describe("P7-T15 (item 401(a)): NFR-7's workload memory in the test profile", fu
     );
     assert.isAbove(first.heap, 0, "the reporter gives a heap figure");
     assert.isAbove(first.resident, 0, "the reporter gives a resident figure");
+    log(
+      `this run: Zotero ${Services.appinfo.version}; debugger (--jsdebugger) ` +
+        `${String(runHasDebugger() ?? "unknown")} (researchHelper.test.devtools; ` +
+        `RH_DEVTOOLS=off turns it off, item 405(b))`,
+    );
     locale = await pinUILocale(["en-US"], log);
     const bundled = await import("../../src/prompts/bundled");
     headings = expectedHeadings(bundled.PROMPT_REGISTRY.get("TREND_REPORT_EN"));
@@ -1249,6 +1320,40 @@ describe("P7-T15 (item 401(a)): NFR-7's workload memory in the test profile", fu
         `explicit/ groups (MiB): ${largestGrowth(before.reports, afterJobs.reports, 10)}`,
     );
 
+    // Item 405(c) (owner): §8.8's line is "no plugin window or plugin realm
+    // grows across five jobs"; the whole-process growth above is recorded
+    // beside it. Asserted in a run without the debugger, which keeps every
+    // closed window (item 405(b)); logged in every run.
+    const plugin = pluginGrowth(before.reports, afterJobs.reports);
+    const grown = plugin.filter(
+      ([, amount]) => amount > PLUGIN_GROUP_GROWTH_TOLERANCE,
+    );
+    const debuggerOn = runHasDebugger() !== false;
+    log(
+      `growth after ${String(CONSECUTIVE_JOBS)} consecutive jobs, the plugin's ` +
+        `own groups (item 405(c); tolerance ${mib(PLUGIN_GROUP_GROWTH_TOLERANCE)} MiB ` +
+        `each): ${String(plugin.length)} group(s), ` +
+        `${String(grown.length)} over the tolerance` +
+        (plugin.length > 0
+          ? `: ${plugin
+              .map(
+                ([prefix, amount]) =>
+                  `${prefix.slice(0, 160)} ${amount >= 0 ? "+" : ""}${mib(amount)}`,
+              )
+              .join("; ")}`
+          : "") +
+        (debuggerOn
+          ? "; the run has the debugger, so this is not asserted"
+          : ""),
+    );
+    if (!debuggerOn) {
+      assert.strictEqual(
+        grown.map(([prefix]) => prefix).join("; "),
+        "",
+        "no plugin window or plugin realm grows across five jobs",
+      );
+    }
+
     // `P7-T39`: every window the five jobs closed is freed, in a run where
     // a closed window can be (`windowsCanBeFreed`).
     const freeable = windowsCanBeFreed();
@@ -1326,6 +1431,14 @@ describe("P7-T15 (item 401(a)): NFR-7's workload memory in the test profile", fu
         `${String(sampled.longestGapMs)} ms, slowest read ` +
         `${String(sampled.readCostMs)} ms; gaps of ${String(LONG_GAP_MS)} ms or more: ` +
         sampled.longGaps,
+    );
+    // `P7-T41` (owner, `plan/00` §6 item 405(a)): Done when this job shows no
+    // sampler gap over 1 s. Logged, not asserted, like the budgets (item
+    // 402(c)); DECIDED 2026-11-18 (coordinator, under item 313; item 406(f)).
+    log(
+      `P7-T41: the 500-item job's longest sampler gap ${String(sampled.longestGapMs)} ms ` +
+        `(Done when: no gap over ${String(LONG_GAP_MS)} ms): ` +
+        (sampled.longestGapMs <= LONG_GAP_MS ? "met" : "NOT MET"),
     );
     const afterJob = await idleReading("after the full-text job");
     log(

@@ -38,8 +38,17 @@
 import {
   candidateFromLibraryItem,
   compareCandidates,
+  defaultYieldToEventLoop,
+  DEDUP_YIELD_EVERY_COMPARISONS,
+  ID_KINDS,
   isPreprintPair,
+  isTitleComparable,
+  LEVSIM_DUPLICATE_THRESHOLD,
+  MAX_YEAR_DELTA,
+  titleNumbers,
   type DedupCandidate,
+  type DedupCounter,
+  type DedupeAsyncOptions,
 } from "../../sources/shared/dedupe";
 import type { ConfigReader } from "../types";
 import {
@@ -370,20 +379,167 @@ function keepOrder(a: ScreenItem, b: ScreenItem): number {
 }
 
 /**
- * Collection-scoped duplicate detection (§13.4): every pair of `items`
- * through `src/sources/shared/dedupe.ts`'s cascade, grouped transitively, one
- * item kept per group.
- *
- * Quadratic in the collection, which is the scale `docs/06` §13.4 means
- * ("Zotero collections routinely contain the same paper twice"); the search
- * pipeline's blocked cascade is for result sets, not this.
- *
- * @param items - the collection's items; keys must be unique
- * @returns dropped key → kept key
+ * How many {@link sameWork} comparisons the duplicate screen runs between two
+ * yields to the event loop, in {@link findCollectionDuplicatesAsync}
+ * (`P7-T41`, `docs/10` NFR-3). The search pipeline's figure
+ * (`DEDUP_YIELD_EVERY_COMPARISONS`, measured by `P2-T30` at about 50 µs a
+ * comparison): `P7-T15`'s profile of 2026-11-18 put this screen's comparisons
+ * at about 80 µs each, so a slice is about 20 ms.
  */
-export function findCollectionDuplicates(
+export const SCREEN_YIELD_EVERY_COMPARISONS = DEDUP_YIELD_EVERY_COMPARISONS;
+
+/** The pair `[i, j]`, `i < j`, as one number, for a `Set` of pairs seen. */
+function pairKey(i: number, j: number, n: number): number {
+  return Math.min(i, j) * n + Math.max(i, j);
+}
+
+/**
+ * The fuzzy title tier's group (`P7-T41`): two candidates whose keys differ
+ * can never be a fuzzy-title `"match"` after `guardTitleVerdict`, which turns a
+ * match into a flag when exactly one side is a preprint (`isPreprintPair`), or
+ * when the two titles carry different numbers (`innerNumbersDiffer`, item
+ * 281(c)). So the key is "preprint or not" and the title's numbers, in order.
+ */
+function fuzzyKeyOf(c: DedupCandidate): string {
+  return `${c.type === "preprint" ? "p" : "w"}|${titleNumbers(c.title).join(",")}`;
+}
+
+/**
+ * Whether a pair in one fuzzy group, years within {@link MAX_YEAR_DELTA}, can
+ * still be a fuzzy-title match: the tier's first rule needs `levSim` at least
+ * `LEVSIM_DUPLICATE_THRESHOLD`, and its other two need the same first author.
+ * A Levenshtein distance is never below the length difference, so
+ * `1 - |la - lb| / max(la, lb)` bounds `levSim` from above, and a pair below
+ * the threshold on that bound and with different first authors is skipped.
+ */
+function fuzzyPairPossible(a: DedupCandidate, b: DedupCandidate): boolean {
+  if (a.firstAuthor !== undefined && a.firstAuthor === b.firstAuthor) {
+    return true;
+  }
+  const longest = Math.max(a.title.length, b.title.length);
+  if (longest === 0) return true;
+  const levSimBound = 1 - Math.abs(a.title.length - b.title.length) / longest;
+  return levSimBound >= LEVSIM_DUPLICATE_THRESHOLD;
+}
+
+/**
+ * The pairs the duplicate screen compares (`P7-T41`; owner, `plan/00` §6 item
+ * 405(a)): only pairs that {@link sameWork} can call one paper, found by cheap
+ * keys, each pair once, as `[i, j]` with `i < j`. It replaces comparing every
+ * pair of the collection (124 750 pairs at 500 items, about 10.5 s in one task:
+ * `plan/reports/P7-T15.md`, batch G).
+ *
+ * **Nothing {@link sameWork} accepts is left out**, because each way the
+ * cascade can make two library items one paper needs a shared key here:
+ *
+ * 1. **A shared identifier** (`ID_KINDS`) **or bioRxiv accession**: Tiers 0–4's
+ *    match. Every pair holding one value is compared.
+ * 2. **The same normalized title**, not empty: Tier 5's match, and §13.4 step
+ *    4's preprint pair, which needs equal titles. This also holds every
+ *    `"link"` or `"flag"` {@link sameWork} accepts, and every pair of two
+ *    F1000Research reports across versions, whose matches the cascade returns
+ *    as links.
+ * 3. **A fuzzy-title match** (Tier 6): both titles comparable, both years
+ *    known and within {@link MAX_YEAR_DELTA} (each of the tier's three rules
+ *    needs that), the same {@link fuzzyKeyOf} key, and
+ *    {@link fuzzyPairPossible}.
+ *
+ * Tier 7 (a known version link) gives a link, which counts only under 2; a
+ * library item has no `relatedVersionIds` anyway.
+ *
+ * @param candidates - the collection's candidates, in item order
+ */
+function* candidatePairsOf(
+  candidates: readonly DedupCandidate[],
+): Generator<readonly [number, number], void, void> {
+  const n = candidates.length;
+  const seen = new Set<number>();
+  const exact = new Map<string, number[]>();
+  const fuzzy = new Map<string, number[]>();
+  const push = (map: Map<string, number[]>, key: string, i: number): void => {
+    const list = map.get(key);
+    if (list === undefined) map.set(key, [i]);
+    else list.push(i);
+  };
+  candidates.forEach((c, i) => {
+    for (const kind of ID_KINDS) {
+      const value = c.ids[kind];
+      if (value !== undefined) push(exact, `${kind}:${value}`, i);
+    }
+    if (c.accession !== undefined) push(exact, `accession:${c.accession}`, i);
+    if (c.title !== "") push(exact, `title:${c.title}`, i);
+    if (isTitleComparable(c) && c.year !== undefined) {
+      push(fuzzy, fuzzyKeyOf(c), i);
+    }
+  });
+  for (const holders of exact.values()) {
+    for (let x = 0; x < holders.length; x += 1) {
+      for (let y = x + 1; y < holders.length; y += 1) {
+        const i = holders[x] as number;
+        const j = holders[y] as number;
+        const key = pairKey(i, j, n);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        yield [Math.min(i, j), Math.max(i, j)];
+      }
+    }
+  }
+  for (const members of fuzzy.values()) {
+    // By year, so each item meets only the items within MAX_YEAR_DELTA.
+    const byYear = [...members].sort(
+      (p, q) => (candidates[p]?.year ?? 0) - (candidates[q]?.year ?? 0),
+    );
+    for (let x = 0; x < byYear.length; x += 1) {
+      const i = byYear[x] as number;
+      const a = candidates[i] as DedupCandidate;
+      for (let y = x + 1; y < byYear.length; y += 1) {
+        const j = byYear[y] as number;
+        const b = candidates[j] as DedupCandidate;
+        if ((b.year ?? 0) - (a.year ?? 0) > MAX_YEAR_DELTA) break;
+        if (!fuzzyPairPossible(a, b)) continue;
+        const key = pairKey(i, j, n);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        yield [Math.min(i, j), Math.max(i, j)];
+      }
+    }
+  }
+}
+
+/**
+ * The pairs of `items` the duplicate screen compares (`P7-T41`), exported so
+ * a test can check that every pair {@link sameWork} accepts is among them.
+ *
+ * @param items - the collection's items, in order
+ * @returns `[i, j]` index pairs, `i < j`, each once
+ */
+export function screenCandidatePairs(
   items: readonly ScreenItem[],
-): ReadonlyMap<string, string> {
+): readonly (readonly [number, number])[] {
+  return [...candidatePairsOf(items.map(candidateOf))];
+}
+
+/**
+ * Whether two collection items are one paper under §13.4 ({@link sameWork}
+ * on their candidates): the predicate the screen applies to each pair,
+ * exported for `P7-T41`'s test, which applies it to every pair.
+ */
+export function screenItemsAreSameWork(a: ScreenItem, b: ScreenItem): boolean {
+  return sameWork(candidateOf(a), candidateOf(b));
+}
+
+/**
+ * The duplicate screen as a generator: the one body behind
+ * {@link findCollectionDuplicates} and {@link findCollectionDuplicatesAsync},
+ * as `dedupeCascade` is for the search pipeline. It yields after every
+ * {@link SCREEN_YIELD_EVERY_COMPARISONS} comparisons. A pair already in one
+ * group is not compared again: grouping is transitive, so the comparison
+ * could not change the groups.
+ */
+function* duplicateScreen(
+  items: readonly ScreenItem[],
+  counter: DedupCounter,
+): Generator<void, ReadonlyMap<string, string>, void> {
   const candidates = items.map(candidateOf);
   const parent = items.map((_item, i) => i);
   const find = (i: number): number => {
@@ -391,16 +547,86 @@ export function findCollectionDuplicates(
     while ((parent[x] ?? x) !== x) x = parent[x] ?? x;
     return x;
   };
-  for (let i = 0; i < items.length; i += 1) {
-    for (let j = i + 1; j < items.length; j += 1) {
-      const a = candidates[i];
-      const b = candidates[j];
-      if (a === undefined || b === undefined || !sameWork(a, b)) continue;
-      const ri = find(i);
-      const rj = find(j);
-      if (ri !== rj) parent[Math.max(ri, rj)] = Math.min(ri, rj);
+  let sinceYield = 0;
+  for (const [i, j] of candidatePairsOf(candidates)) {
+    const ri = find(i);
+    const rj = find(j);
+    if (ri === rj) continue;
+    const a = candidates[i];
+    const b = candidates[j];
+    if (a === undefined || b === undefined) continue;
+    counter.comparisons += 1;
+    if (sameWork(a, b)) parent[Math.max(ri, rj)] = Math.min(ri, rj);
+    sinceYield += 1;
+    if (sinceYield >= SCREEN_YIELD_EVERY_COMPARISONS) {
+      yield;
+      sinceYield = 0;
     }
   }
+  return groupsToDropped(items, find);
+}
+
+/**
+ * Collection-scoped duplicate detection (§13.4): the pairs of `items` that
+ * can be one paper ({@link screenCandidatePairs}) through
+ * `src/sources/shared/dedupe.ts`'s cascade, grouped transitively, one item
+ * kept per group.
+ *
+ * *Changed 2026-11-18 (`P7-T41`; owner, `plan/00` §6 item 405(a)):* it compared
+ * every pair of the collection, which at 500 items held the main thread for
+ * about 10.5 s. It now compares only pairs that share a cheap key, and finds
+ * the same groups (`test/unit/pipeline/screen.test.ts`). Synchronous, for the
+ * callers that have no event loop to yield to; the summarize pipeline runs
+ * {@link findCollectionDuplicatesAsync} through {@link screenItemsAsync}.
+ *
+ * @param items - the collection's items; keys must be unique
+ * @param counter - optional comparison counter, incremented in place
+ * @returns dropped key → kept key
+ */
+export function findCollectionDuplicates(
+  items: readonly ScreenItem[],
+  counter: DedupCounter = { comparisons: 0 },
+): ReadonlyMap<string, string> {
+  const screen = duplicateScreen(items, counter);
+  for (;;) {
+    const step = screen.next();
+    if (step.done) return step.value;
+  }
+}
+
+/** What {@link findCollectionDuplicatesAsync} takes beside the items. */
+export type ScreenAsyncOptions = DedupeAsyncOptions;
+
+/**
+ * {@link findCollectionDuplicates}, yielding to the event loop every
+ * {@link SCREEN_YIELD_EVERY_COMPARISONS} comparisons and checking the token
+ * after each yield (`P7-T41`, `docs/10` NFR-3, `docs/07` §7.4). Same pairs,
+ * same order, same result: both drain one generator.
+ *
+ * @throws OperationCancelledError when `options.token` is cancelled, at the
+ *   next yield (or on entry if it already is)
+ */
+export async function findCollectionDuplicatesAsync(
+  items: readonly ScreenItem[],
+  options: ScreenAsyncOptions = {},
+): Promise<ReadonlyMap<string, string>> {
+  const counter = options.counter ?? { comparisons: 0 };
+  const yieldToEventLoop = options.yieldToEventLoop ?? defaultYieldToEventLoop;
+  options.token?.throwIfCancelled();
+  const screen = duplicateScreen(items, counter);
+  for (;;) {
+    const step = screen.next();
+    if (step.done) return step.value;
+    await yieldToEventLoop();
+    options.token?.throwIfCancelled();
+  }
+}
+
+/** The union-find's groups as dropped key → kept key, by §13.4's order. */
+function groupsToDropped(
+  items: readonly ScreenItem[],
+  find: (i: number) => number,
+): ReadonlyMap<string, string> {
   const groups = new Map<number, ScreenItem[]>();
   items.forEach((item, i) => {
     const root = find(i);
@@ -489,6 +715,35 @@ export function screenItems(
   const duplicates = policy.dedupe
     ? findCollectionDuplicates(items)
     : new Map<string, string>();
+  return decideItems(items, policy, duplicates);
+}
+
+/**
+ * {@link screenItems}, with the duplicate screen yielding to the event loop
+ * ({@link findCollectionDuplicatesAsync}; `P7-T41`). The summarize pipeline's
+ * `prepare` runs this one. Same decisions as {@link screenItems}.
+ *
+ * @param items - the collection's items, keys unique
+ * @param policy - from {@link screeningPolicyFrom}
+ * @param options - the job's token, and the yield (injectable for a test)
+ */
+export async function screenItemsAsync(
+  items: readonly ScreenItem[],
+  policy: ScreeningPolicy,
+  options: ScreenAsyncOptions = {},
+): Promise<ScreenReport> {
+  const duplicates = policy.dedupe
+    ? await findCollectionDuplicatesAsync(items, options)
+    : new Map<string, string>();
+  return decideItems(items, policy, duplicates);
+}
+
+/** The per-item decisions, once the duplicates are known. */
+function decideItems(
+  items: readonly ScreenItem[],
+  policy: ScreeningPolicy,
+  duplicates: ReadonlyMap<string, string>,
+): ScreenReport {
   let retracted = 0;
   let expressionsOfConcern = 0;
   let nonEnglish = 0;

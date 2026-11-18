@@ -29,6 +29,47 @@ import pkg from "./package.json" with { type: "json" };
 //   divergence between the two files would therefore be silent: the manifest
 //   in the XPI would carry the value from here. Keep them identical.
 
+// Item 405(b) (owner, 2026-11-18, "디버거 없이 기록"): `RH_DEVTOOLS=off` in the
+//   environment turns `server.devtools` off, so Zotero starts without
+//   `--jsdebugger`; the memory runs are recorded that way, because with the
+//   debugger Gecko keeps every closed chrome window (measured 2026-11-18,
+//   `plan/reports/P7-T39.md`). Any other value, or none, leaves it on: the
+//   default is unchanged. Test runs inherit `server.devtools` (scaffold 0.9.2's
+//   `Tester.startZotero` passes `this.ctx.server.devtools` to the runner).
+const devtools = process.env.RH_DEVTOOLS !== "off";
+
+// Item 405(d) (owner, 2026-11-18): no test run may check for, download or
+//   stage a Zotero update again. Read 2026-11-18 from Zotero 10.0.3's shipped
+//   omni.ja files (Gecko 140.15.0), not from memory:
+//   - `app.update.enabled` is read by nothing in `UpdateService.sys.mjs`,
+//     `UpdateServiceStub.sys.mjs`, `UpdateUtils.sys.mjs` or `AppUpdater.sys.mjs`,
+//     so the `false` the scaffold already sets has no effect; kept, as asked.
+//   - `app.update.auto` is a profile preference in Zotero's build
+//     (`PER_INSTALLATION_PREFS_PLATFORMS` is empty in `UpdateUtils.sys.mjs`, so
+//     nothing is written under C:\ProgramData); false stops an automatic
+//     download, not the check.
+//   - `app.update.checkInstallTime` is read by `_checkForOldBuildUpdates` in
+//     the app's `BrowserGlue.sys.mjs` (Zotero ships it `true`, with a 63-day
+//     age); false stops that start-up check.
+//   - `app.update.staging.enabled` is read by `UpdateService.sys.mjs`; false
+//     stops staging a downloaded update in the background.
+//   - The daily check itself is `UpdateTimerManager.sys.mjs`'s
+//     `background-update-timer`, due at `app.update.lastUpdateTime.<id>` plus
+//     `app.update.interval` (capped at 86400 s). The test profile never kept
+//     that time, so the timer fired soon after every start. Setting it to the
+//     run's start makes the next check due a day later. Only an enterprise
+//     policy (`DisableAppUpdate`, under C:\Program Files) turns the check off
+//     entirely, and that is not a test-profile setting.
+const NO_APP_UPDATE_PREFS = {
+  "app.update.enabled": false,
+  "app.update.auto": false,
+  "app.update.checkInstallTime": false,
+  "app.update.staging.enabled": false,
+  "app.update.lastUpdateTime.background-update-timer": Math.floor(
+    Date.now() / 1000,
+  ),
+} as const;
+
 export default defineConfig({
   source: ["src", "addon"],
   dist: ".scaffold/build",
@@ -193,7 +234,9 @@ export default defineConfig({
   },
 
   server: {
-    devtools: true, // appends --jsdebugger to Zotero's start args
+    // Appends --jsdebugger to Zotero's start args; `RH_DEVTOOLS=off` turns it
+    // off (item 405(b), above).
+    devtools,
     debugOutputFile: true, // capture stdout/stderr into .scaffold/logs/
   },
 
@@ -215,8 +258,20 @@ export default defineConfig({
     entries: ["test/integration"],
     // Measured 2026-11-05: saving an item with a DOI makes Zotero itself ask
     // api.zotero.org/retractions/search. A test run sends nothing to a real host.
+    //
+    // Item 405(d), 2026-11-18: and Zotero checks for its own update, which
+    // reached www.zotero.org and staged 10.0.8 during batch G's runs; see
+    // NO_APP_UPDATE_PREFS above. The scaffold writes these into the test
+    // profile's prefs.js as user_pref lines before each start (0.9.2's
+    // `ZoteroRunner.setupProfile`, after its own defaults and the file's
+    // existing lines), so they win.
+    //
+    // `researchHelper.test.devtools` is read by no plugin code: it tells a
+    // spec whether this run has the debugger (item 405(b)).
     prefs: {
       "extensions.zotero.retractions.enabled": false,
+      ...NO_APP_UPDATE_PREFS,
+      "researchHelper.test.devtools": devtools,
     },
     mocha: {
       timeout: 30000,

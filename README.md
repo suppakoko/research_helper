@@ -38,7 +38,8 @@ many papers, what part of each paper, the privacy mode, and the estimated cost.
 |---|---|---|---|---|
 | 1.0 (not yet released) | 10.0.x only | Tested | **Untested** | **Untested** |
 
-"Tested" means the automated integration suite runs in Zotero 10.0.3 on Windows 11, and the
+<!-- Baseline moved 2026-11-18 from Zotero 10.0.3 to 10.0.8 (owner, plan/00 §6 item 405(d)). -->
+"Tested" means the automated integration suite runs in Zotero 10.0.8 on Windows 11, and the
 release's manual check is recorded in the release checklist
 ([`docs/release/v1.0-checklist.md`](docs/release/v1.0-checklist.md)). macOS and Linux have not been
 checked, because no machine was available; they are expected to work but nobody has confirmed it.

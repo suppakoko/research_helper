@@ -306,9 +306,10 @@ jobs:
     timeout-minutes: 20
     env:
       # Pinned to the Zotero release the developer machine runs (P0-T13 found
-      # 10.0.2; the machine has run 10.0.3 since 2026-10-07). Left unset,
-      # scaffold 0.9.2 downloads the latest *beta* build on every run instead.
-      ZOTERO_VERSION: "10.0.3"
+      # 10.0.2; the machine ran 10.0.3 from 2026-10-07; the owner moved the
+      # tested baseline to 10.0.8 on 2026-11-18, plan/00 §6 item 405(d)). Left
+      # unset, scaffold 0.9.2 downloads the latest *beta* build on every run.
+      ZOTERO_VERSION: "10.0.8"
     steps:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

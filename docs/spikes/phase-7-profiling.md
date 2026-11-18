@@ -199,6 +199,11 @@ fixture mode for its AI provider. So they are measured in the **test profile** b
   memory, a bare `about:blank` one included; without it, closed windows are freed. Figures from
   the configured runs therefore overstate growth and peak (owner question `plan/00` §6 item
   405(b)).
+- *Decided 2026-11-18 (owner, `plan/00` §6 item 405(b)):* the memory figures come from runs
+  without the debugger: `RH_DEVTOOLS=off` in front of the integration command (`docs/13` §2.3).
+  The spec logs which kind of run it is in (`researchHelper.test.devtools`).
+- *Added 2026-11-18 (batch H, `P7-T41`, item 405(a)):* the 500-item job's line also reads
+  `P7-T41: the 500-item job's longest sampler gap N ms`, against the card's 1 s line.
 
 **What these figures are not.** The test profile holds a few hundred items, the fake model
 answers at once, and the whole process's increase is counted, including Zotero's own share of a
@@ -218,6 +223,12 @@ closes (cost dialogs, summarize and report windows) and logs how many are still 
 five jobs. It asserts that none is alive only when at least one was freed, because under
 `--jsdebugger` none can be (§3.2). It also waits until the plugin's own hold on each closed
 window is released (`heldCount`).
+
+*Decided 2026-11-18 (owner, `plan/00` §6 item 405(c)):* `docs/13` §8.8's line reads "no plugin
+window or plugin realm grows across five jobs". In a run without the debugger the spec takes
+the plugin's window and zone groups from the memory reporter by the plugin's name and asserts
+that none grew more than 1 MiB (`PLUGIN_GROUP_GROWTH_TOLERANCE`, item 406(h)); the whole
+process's growth is logged beside it.
 
 ## 4. The main thread (`NFR-3`): long tasks during import and report
 
