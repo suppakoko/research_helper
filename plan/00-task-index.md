@@ -3701,6 +3701,7 @@ the caller of what the card builds; if it does not, the caller is added with a d
     - (k) **A Zotero version line in the run's log.** `testProfile.spec.ts` logs the running Zotero's version and the debugger state at the start, so each recorded run names what it measured.
 407. **Raised 2026-11-18: batch H's owner questions** (`plan/reports/P7-batchH.md`). Tag: Phase 7. Every draft is the coordinator's, **not adopted**.
     - (a) **Security and network: a profile cannot switch Zotero's update check off entirely.** In Gecko 140 the only full switch is an enterprise policy (`DisableAppUpdate` in `distribution/policies.json` under the Zotero install folder), which the agent may not write. The test profile's preferences (item 406(i)) stop the automatic download and make the daily check not due during a run, and the run's live-request guard names every host a run reaches. *Draft answer:* keep the preferences, and read each recorded run's host list for an update host. The alternative is that the owner adds the policy by hand; it would also stop update for the owner's own use of Zotero on this machine.
+      **DECIDED 2026-11-18 (owner, plan/00 §6 item 407(a)): "설정만 두고 매번 확인".** No policy file is added. The test profile keeps the update preferences of item 406(i), and every recorded integration run's report states that the live-request guard's host list holds no update host. The owner's own Zotero keeps automatic update.
 
 
 ## 7. Regenerating this file
