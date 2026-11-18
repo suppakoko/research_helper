@@ -1,18 +1,6 @@
-<!--
-Draft (coordinator, 2026-11-18, not adopted; G-41, P7-T20).
-A Korean draft of README.md for the owner's review: the terms with no settled
-Korean, and each choice made here, are listed in
-plan/reports/ko-review-p7e-readme.md. It states nothing README.md does not
-state; where the two differ, README.md is the authority. The plugin's control
-names are the ko-KR bundle's (addon/locale/ko-KR/) as of 2026-11-18, and
-Zotero's own menu names are those of Zotero 10.0.3's ko-KR locale, which leaves
-"Plugins" and "Settings" in English.
--->
+<!-- Adopted 2026-11-18: approved by the owner as written (G-41; plan/00 §6 item 401(c)). -->
 
 # Zotero용 Research Helper
-
-> **검토 전 초안입니다.** 이 문서는 [README.md](README.md)의 한국어 번역 초안이며, 아직 검토를
-> 거쳐 채택되지 않았습니다.
 
 문헌을 검색하고, 컬렉션을 만들고, 찾은 논문을 요약하고, 연구 동향 보고서를 써서 음성으로도
 들려주는 Zotero 플러그인입니다. 모든 작업은 Zotero 안에서 여러분의 API 키로 실행되며, Research

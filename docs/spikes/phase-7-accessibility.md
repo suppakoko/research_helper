@@ -59,8 +59,12 @@
 **Not exercised here:**
 
 - the related and recommend modes of the search window, which start a run as they open;
-- the cost dialog's pre-flight moment, and its tier question (`rh-cost-tier-choices`'s new label
-  is therefore not exercised: the mutation sweep's survivor, `plan/reports/P7-T06.md`);
+- a summarize or report run's pre-flight moment of the cost dialog. *Updated 2026-11-18 (batch F,
+  `plan/00` §6 item 402(f)):* the tier question is now exercised, on an audio run's pre-flight moment, built by
+  `buildAudioDialogModel` with `askTierQuestion: true` and opened without starting a run. Tab
+  reaches its controls with names, `rh-cost-tier-choices` is named by its prompt, and Escape
+  cancels. That mutant (M10) is now killed (`plan/reports/P7-T06.md`). The ceiling moment shows
+  no tier question by design (`docs/08` §6.4, `docs/07` §8.5);
 - Zotero's own Settings window chrome.
 
 ## 2. Contrast, in Zotero's light and dark appearance

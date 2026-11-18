@@ -3017,6 +3017,8 @@ For the result table, leave `disableFontSizeScaling` **false**.
 
 * Never encode meaning in colour alone. The relation badges in §5 pair colour with text (`cited by`, `reference`, `similar`); the duplicate marker pairs colour with a ⚠ glyph and text.
 * Use Zotero's CSS variables so light/dark and high-contrast modes follow the app. Menu icons should use `fill="context-fill"` in the SVG — the `menuManager.js` JSDoc explicitly recommends this "to use the default icon color for automatic hover and dark mode support". Supply `darkIcon` where a single icon cannot work.
+
+  *DECIDED 2026-11-18 (owner, plan/00 §6 item 401(b)): "1.0에서는 그대로".* **The report window does not follow Zotero's dark appearance in v1.0.** Measured 2026-11-18 (`P7-T06`, `plan/reports/P7-T06.md`): in dark, its root text is `rgb(0, 0, 0)` on `rgb(242, 242, 242)` while `prefers-color-scheme: dark` matches; the contrast is 21:1, so `NFR-13` holds. It is left as built for v1.0, and following the dark appearance in that window is a later-release candidate. The cause was not investigated.
 * Respect the user's font size: Zotero scales UI text. Do not defeat it — with a plain `<html:table>` that means no fixed pixel font sizes, and on `VirtualizedTable` it means leaving the `disableFontSizeScaling` prop unset (§4.3).
 * Do not set fixed pixel heights on text containers; long Korean and English strings differ in wrapping.
 

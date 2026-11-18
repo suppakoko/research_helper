@@ -1,6 +1,6 @@
 # Research Helper for Zotero
 
-Korean: [`README.ko.md`](README.ko.md) (a draft awaiting review).
+Korean: [`README.ko.md`](README.ko.md).
 
 A Zotero plugin that searches the literature, builds collections, summarizes what it finds, and
 writes — and speaks — a research trends report. It runs entirely inside Zotero, with your own API

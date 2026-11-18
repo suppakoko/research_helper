@@ -35,18 +35,32 @@
  * Forced-colours mode is then observed, not asserted
  * (`ui.useAccessibilityTheme`), as `docs/08` §9's marker asks.
  *
+ * **The cost dialog is opened in two moments**: its ceiling moment, and an
+ * audio run's pre-flight moment with the once-asked tier question
+ * (`P6-T15`), whose radio group is named by its prompt. Both models are built
+ * by the shipped pure builders (`buildCostDialogModel`, `buildAudioDialogModel`)
+ * and opened by `openCostConfirmDialog`, so no run starts. *Added 2026-11-18
+ * (`plan/reports/P7-batchF.md`): before, only the ceiling moment was opened,
+ * which never shows the tier question, so mutant M10 (the group's
+ * `aria-labelledby` removed) survived.*
+ *
  * **Not exercised here** (`plan/reports/P7-T06.md` records each): the related
  * and recommend modes of the search window, which start a run by themselves;
- * the cost dialog's pre-flight moment (its ceiling moment is here); and
- * Zotero's own Settings window chrome around the plugin's pane.
+ * the cost dialog's other pre-flight moments (a summary's or a report's, which
+ * hold no radio group); and Zotero's own Settings window chrome around the
+ * plugin's pane.
  */
 
 import { config } from "../../package.json";
 import type Addon from "../../src/addon";
+import { audioEgressNotice } from "../../src/pipeline/audioReport/disclosure";
+import { estimateAudioPlan } from "../../src/pipeline/audioReport/estimate";
 import { ZERO_SPEND } from "../../src/pipeline/shared/budget";
+import { chunkScript } from "../../src/tts/chunk";
 import {
   COST_DIALOG_FEATURES,
   COST_DIALOG_URL,
+  buildAudioDialogModel,
   buildCostDialogModel,
   openCostConfirmDialog,
   type CostDialogOutcome,
@@ -1146,6 +1160,112 @@ describe("P7-T06: keyboard, focus, accessible names and contrast (NFR-13)", func
         `${key} on the untouched dialog stops the run (defaultButton="cancel")`,
       );
       await closed(win, "the cost dialog");
+    }
+  });
+
+  it("the cost dialog (an audio run's pre-flight moment, with the tier question): Tab reaches its controls with names; the tier group is named by its prompt; Escape cancels", async function () {
+    this.timeout(TEST_TIMEOUT_MS);
+    // SYNTHETIC: fifty short sentences, two chunks; nothing is sent.
+    const script = Array.from({ length: 50 }, () => "Tides rise slowly.").join(
+      " ",
+    );
+    const plan = estimateAudioPlan({
+      reportId: `${TAG}-report`,
+      script: { text: script, language: "en" },
+      chunks: chunkScript(script, { language: "en" }),
+      model: "p7t06-tts",
+      voice: "Charon",
+      stylePrefix: "Read this aloud.",
+      prices: {
+        inputPerMTokUsd: 0.5,
+        outputPerMTokUsd: 10,
+        cachedInputPerMTokUsd: undefined,
+        tiers: [],
+        asOfEpochMs: Date.UTC(2026, 8, 8),
+        source: "documented-table",
+      },
+      atEpochMs: Date.UTC(2026, 10, 18),
+    });
+    const disclosure = audioEgressNotice(
+      {
+        privacyMode: "balanced",
+        ttsModelId: "p7t06-tts",
+        scriptCall: undefined,
+        keyFingerprint: "0123456789abcdef",
+        knownKeyFingerprints: ["0123456789abcdef"],
+      },
+      {
+        baseUrls: {
+          effectiveHost: () => "generativelanguage.googleapis.com",
+        },
+        egressAcknowledged: () => true,
+        geminiPaidTier: () => false,
+      },
+    );
+    const model = buildAudioDialogModel(
+      {
+        step: "audio",
+        plan,
+        warnings: [],
+        disclosure,
+        providerName: "Google Gemini",
+        confirmAboveCents: 200,
+        ceiling: undefined,
+        session: ZERO_SPEND,
+        askTierQuestion: true,
+        pricesAsOfEpochMs: Date.UTC(2026, 8, 8),
+      },
+      "en-US",
+    );
+    assert.isTrue(
+      model.tierQuestion !== undefined,
+      "the model asks the tier question",
+    );
+    const recording = recordingHost();
+    const outcome: Promise<CostDialogOutcome> = openCostConfirmDialog(
+      recording.host,
+      model,
+    );
+    const win = recording.opened();
+    if (win === undefined) assert.fail("no cost dialog");
+    try {
+      await loaded(win, "RHCostDialog");
+      await activate(win);
+      const where = "cost dialog (audio pre-flight, tier question)";
+      const tier = win.document.getElementById("rh-cost-tier") as
+        (Element & { hidden: boolean }) | null;
+      const group = win.document.getElementById("rh-cost-tier-choices");
+      const prompt = win.document.getElementById("rh-cost-tier-prompt");
+      assert.isFalse(tier?.hidden ?? true, `${where}: the tier question shows`);
+      if (group === null || prompt === null) {
+        assert.fail(`${where}: no tier group or prompt`);
+      }
+      const promptText = labelText(prompt);
+      log(
+        `${where}: ${String(group.querySelectorAll("radio").length)} choices; ` +
+          `group name "${accessibleName(group)}", prompt "${promptText}"`,
+      );
+      assert.isTrue(promptText !== "", `${where}: the prompt has text`);
+      assert.strictEqual(
+        accessibleName(group),
+        promptText,
+        `${where}: the tier group is named by its visible prompt`,
+      );
+      await assertButtonLabels(win, where);
+      assertKeyboardAndNames(
+        win,
+        win.document.documentElement as Element,
+        where,
+      );
+      focusManager().clearFocus(win);
+      pressKey(win, "Escape", ESCAPE);
+      const answer = await outcome;
+      log(`${where}: Escape → ${JSON.stringify(answer)}`);
+      assert.strictEqual(answer.kind, "cancelled", `${where}: Escape cancels`);
+      await closed(win, "the cost dialog");
+    } finally {
+      // A failed assertion must not leave the dialog open for the next test.
+      if (!win.closed) win.close();
     }
   });
 

@@ -1485,6 +1485,14 @@ Run on **Windows, macOS, and Linux** for a minor or major release; Windows plus 
 - [ ] Built XPI ≤ 3 MB (NFR-18) — enforced in CI, re-confirmed here.
 - [ ] Debug output contains no unredacted secrets and no unhandled promise rejections across the full QA pass.
 
+*Measured 2026-11-18, in the test profile only (`plan/00` §6 item 401(a); `test/integration/workloadMemory.spec.ts`,
+seven recorded runs with a fake provider; `docs/spikes/phase-7-profiling.md` §3.2–§3.3 and §6.1).*
+
+- **The reference workload's peak:** 59.1–62.0 MiB over idle, within 150 MB.
+- **Growth after five jobs:** the idle heap grew by +21.3 to +26.0 MiB, so the second line is **not met** there. Part of
+  that growth is three of the plugin's closed windows, still in memory (owner question `plan/00` §6 item 403(a)).
+- **Idle memory and a large library** are the owner's run (`plan/06` `G-34`).
+
 ### 8.9 Release hygiene
 
 - [ ] `package.json` version, git tag, and the version inside the built `manifest.json` all agree.

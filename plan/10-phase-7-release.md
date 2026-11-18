@@ -6,7 +6,7 @@
 > §8 item 7). Every card is `TODO`. Like `plan/09`, this file has had **no independent review** yet;
 > the author's report is `plan/reports/P7-decomposition.md`, and §0.4 lists the lines the owner still
 > has to answer. *Updated 2026-11-16, later (`plan/00` §6 item 381): the owner answered §0.4's lines 18–23; no
-> line is open now, and line 20 added `P7-T32` (0.75 d), so the file holds 32 cards summing to 29.25 d.* *Updated 2026-11-17 (`plan/00` §6 item 393(d)): the owner answered item 393, and `P7-T33` (0.5 d) was added, so the file holds 33 cards summing to 29.75 d.* *Updated 2026-11-17, later (`plan/00` §6 items 395, 398): the owner answered item 395; `P7-T34`–`P7-T38` (2.0 d) were added and `P7-T03` went from 1.5 to 1.75 d for item 395(b)'s step, so the file holds 38 cards summing to 32.00 d.* The card sum replaced `docs/11`'s scaled 21–29 d on 2026-11-16 at the five places
+> line is open now, and line 20 added `P7-T32` (0.75 d), so the file holds 32 cards summing to 29.25 d.* *Updated 2026-11-17 (`plan/00` §6 item 393(d)): the owner answered item 393, and `P7-T33` (0.5 d) was added, so the file holds 33 cards summing to 29.75 d.* *Updated 2026-11-17, later (`plan/00` §6 items 395, 398): the owner answered item 395; `P7-T34`–`P7-T38` (2.0 d) were added and `P7-T03` went from 1.5 to 1.75 d for item 395(b)'s step, so the file holds 38 cards summing to 32.00 d.* *Updated 2026-11-18 (`plan/00` §6 items 401(a), 402(a)): the owner answered item 401(a) ("만듦"), and `P7-T15` went from 1.5 to 2.0 d for the test-profile memory measurement, so the file holds 38 cards summing to 32.50 d.* The card sum replaced `docs/11`'s scaled 21–29 d on 2026-11-16 at the five places
 > `plan/README.md` §7 names (`docs/11` §1–§2, `plan/00` §1, `plan/05` §4, now a pointer here).
 >
 > **What this file is.** The task-card decomposition of `docs/11-implementation-roadmap.md` §1
@@ -78,14 +78,14 @@ documents, `plan/reports/` and the tree:
 mitigation by `P7-T31`; R-15 was already retired on 2026-09-16 (`P0-T27`) and `P7-T30` re-confirms it
 on a real release; R-1 moves to ongoing handling with `P7-T22`'s job.
 
-**Effort.** **32.00 developer-days over 38 cards** (§1), so the band these cards imply is
-**32.00–45 d** (32.00 × 1.4 = 44.8 → 45). Against the scaled 21–29 d `docs/11` published before this
-file, the low end is **+52 %** (32.00 ÷ 21 = 1.524) and 10 % above the scaled top (32.00 ÷ 29 = 1.103)
+**Effort.** **32.50 developer-days over 38 cards** (§1), so the band these cards imply is
+**32.50–46 d** (32.50 × 1.4 = 45.5 → 46, an exact half rounding up). Against the scaled 21–29 d `docs/11` published before this
+file, the low end is **+55 %** (32.50 ÷ 21 = 1.548) and 12 % above the scaled top (32.50 ÷ 29 = 1.121)
 — above the ~30 % `plan/README.md` §7 calls a signal to re-estimate the phase in `docs/11`, which was
-done. Against the old 10–14 d band the low end is **+129 %** (32.00 ÷ 14 = 2.286). **Propagated
+done. Against the old 10–14 d band the low end is **+132 %** (32.50 ÷ 14 = 2.321). **Propagated
 2026-11-16** to `docs/11` §1–§2, `plan/00` §1 and `plan/05` §4. *Updated 2026-11-16, later (`plan/00` §6
 item 381): this read 28.50 d over 31 cards, 28.50–40 d, +36 %, 2 % below the scaled top and +104 %, before
-`P7-T32` (0.75 d) was added for §0.4 line 20; propagated the same day to the same five sites.* *Updated 2026-11-17 (`plan/00` §6 item 393(d)): this read 29.25 d over 32 cards, 29.25–41 d, +39 %, 1 % above the scaled top and +109 %, before `P7-T33` (0.5 d) was added for the owner's answer to item 393; propagated the same day to the same five sites.* *Updated 2026-11-17, later (`plan/00` §6 item 398): this read 29.75 d over 33 cards, 29.75–42 d, +42 %, 3 % above the scaled top and +113 %, before `P7-T34`–`P7-T38` (2.0 d) were added for the owner's answers to item 395 and `P7-T03` rose by 0.25 d for item 395(b); propagated the same day to the same five sites.* §3 says where the days went and where
+`P7-T32` (0.75 d) was added for §0.4 line 20; propagated the same day to the same five sites.* *Updated 2026-11-17 (`plan/00` §6 item 393(d)): this read 29.25 d over 32 cards, 29.25–41 d, +39 %, 1 % above the scaled top and +109 %, before `P7-T33` (0.5 d) was added for the owner's answer to item 393; propagated the same day to the same five sites.* *Updated 2026-11-17, later (`plan/00` §6 item 398): this read 29.75 d over 33 cards, 29.75–42 d, +42 %, 3 % above the scaled top and +113 %, before `P7-T34`–`P7-T38` (2.0 d) were added for the owner's answers to item 395 and `P7-T03` rose by 0.25 d for item 395(b); propagated the same day to the same five sites.* *Updated 2026-11-18 (`plan/00` §6 items 401(a), 402(a)): this read 32.00 d over 38 cards, 32.00–45 d, +52 %, 10 % above the scaled top and +129 %, before `P7-T15` rose by 0.5 d for the owner's answer to item 401(a); propagated the same day to the same five sites.* §3 says where the days went and where
 the sum is still likely low.
 
 ### Phase definition of done
@@ -237,7 +237,7 @@ them (`plan/04` §0.2 item 10) may now be executed as the answer says. Every ans
 | `P7-T12` | Error-message audit against NFR-14 | 1.25 | none |
 | `P7-T13` | Log ring buffer and diagnostics: save and copy | 1.5 | none |
 | `P7-T14` | Log-redaction audit of a full job at debug level | 0.75 | none |
-| `P7-T15` | Startup, memory and main-thread profiling | 1.5 | **Yes** |
+| `P7-T15` | Startup, memory and main-thread profiling | 2.0 | **Yes** |
 | `P7-T16` | `docs/09` §7 security review, `SECURITY.md`, dependency audit | 1.5 | none |
 | `P7-T17` | Provider-policy re-verification and dated retention text | 0.75 | none |
 | `P7-T18` | Offline verification | 1.0 | none |
@@ -261,7 +261,7 @@ them (`plan/04` §0.2 item 10) may now be executed as the answer says. Every ans
 | `P7-T36` | Teardown error line through `redact` | 0.25 | none |
 | `P7-T37` | Redaction audit reads the plugin database | 0.25 | none |
 | `P7-T38` | `npm audit fix` as its own reviewed change | 0.5 | none |
-| | **Total** | **32.00** | 10 gates |
+| | **Total** | **32.50** | 10 gates |
 
 *Updated 2026-11-16, later (`plan/00` §6 item 381): `P7-T32` added for §0.4 line 20; the total read 28.50. It is
 a new entry point that blocks `P7-T16`, and it does not lie on the critical path below (it ends at 0.75 d, before
@@ -271,6 +271,8 @@ a new entry point that blocks `P7-T16`, and it does not lie on the critical path
 
 *Updated 2026-11-17, later (`plan/00` §6 items 395, 398): `P7-T34`–`P7-T38` added for the owner's answers to item 395 (2.0 d), and `P7-T03` rose from 1.5 to 1.75 d for item 395(b)'s step; the total read 29.75. Each new card depends on `P7-T16`; `P7-T34`–`P7-T37` block `P7-T24`, `P7-T35` also blocks `P7-T05`, and `P7-T38` blocks `P7-T26`. None lies on the critical path below; `P7-T03` does, so the path is now 14.75 d (recomputed by script the same day).*
 
+*Updated 2026-11-18 (`plan/00` §6 items 401(a), 402(a)): `P7-T15` rose from 1.5 to 2.0 d for the owner's answer to item 401(a) (the test-profile memory measurement); the total read 32.00. `P7-T15` lies on the critical path below, so the path is now 15.25 d (recomputed by script the same day).*
+
 **Entry points** (no `Depends on`): `P7-T01`, `P7-T04`, `P7-T12`, `P7-T21`, `P7-T22`, `P7-T28`, and `P7-T32`
 (added 2026-11-16, `plan/00` §6 item 381). They
 are documents, the spike's removal, the error audit, two workflow files and the owner's NCBI check;
@@ -279,9 +281,9 @@ none touches a file another entry point holds, except that `P7-T04` and `P7-T12`
 
 **Critical path inside the phase:** `P7-T01` → `P7-T08` → `P7-T09` → `P7-T10` → `P7-T11` → `P7-T03`
 → `P7-T06` → `P7-T15` → `P7-T24` → `P7-T26` → `P7-T25` → `P7-T29` → `P7-T30` → `P7-T31`,
-**14.75 d** *(14.5 d before 2026-11-17's `P7-T03` change, item 398)*, computed by script over the **Depends on** rows. The documents chain (`P7-T19` →
+**15.25 d** *(14.75 d before 2026-11-18's `P7-T15` change, item 402(a); 14.5 d before 2026-11-17's `P7-T03` change, item 398)*, computed by script over the **Depends on** rows. The documents chain (`P7-T19` →
 `P7-T20` → `P7-T05`, ending at 9.0 d) and the security chain (`P7-T13` → `P7-T14` → `P7-T16`, ending
-at 7.0 d) finish before `P7-T24` (12.5 d; 12.25 d before 2026-11-17, item 398) and `P7-T26` need them. Ten of the 31 cards are
+at 7.0 d) finish before `P7-T24` (13.0 d; 12.5 d before 2026-11-18, item 402(a); 12.25 d before 2026-11-17, item 398) and `P7-T26` need them. Ten of the 31 cards are
 human-gated, and six of those sit on the path: the calendar time of `P7-T15`, `P7-T26`, `P7-T25`,
 `P7-T29`, `P7-T30` and `P7-T31` is the owner's, not the developer's.
 
@@ -624,6 +626,11 @@ register `docs/12` §19 item 4 asks for, and the corrections are in the tree.
 npm run l10n:check && npm run test:unit -- i18n prompts
 ```
 
+> **DECIDED 2026-11-18 (owner, plan/00 §6 item 401(c)): "모두 승인".** The owner approved `README.ko.md` as
+> written, so this card's `README.ko.md` part is settled: its draft comment and draft line are gone and nothing else
+> changed. The rest of this card (the Korean prompts, and every `ko-KR` string not yet reviewed) stays the owner's,
+> and its `Done when` lines are unchanged.
+
 **Notes.** Needs: every card that adds a Korean string or prompt, including `P6-T06`, `P6-T08`,
 `P6-T17`. Callers: none (strings and prompts).
 
@@ -684,6 +691,18 @@ tests hold the first two.
 ```bash
 npm run typecheck && npm run lint:check && npm run test:unit && npm run test:integration -- accessibility
 ```
+
+> **Updated 2026-11-18 (batch F, `plan/00` §6 item 402(f)): mutant M10 is killed.** That the cost dialog's ceiling
+> moment never shows the tier question is intended: `CeilingDialogModel` (`src/ui/dialogs/costConfirmDialog.ts`) has
+> no `tierQuestion` member, and the question belongs to an audio run's confirmation (`docs/08` §6.4's note "the audio section
+> and its menu entry, as built", item 5; `docs/07` §8.5's note "As built 2026-11-17 (`plan/09` `P6-T15`)", item 2). So M10 was not equivalent: the
+> spec opened only the ceiling moment. `accessibility.spec.ts` now also opens an audio run's pre-flight moment with the
+> question, built by `buildAudioDialogModel` and opened by `openCostConfirmDialog`, so no run starts; with M10 planted
+> it failed on the group's name (`plan/reports/P7-batchF.md`). Batch E's report said the pre-flight moment "would need
+> a run to start"; the pure builders make that untrue.
+>
+> **DECIDED 2026-11-18 (owner, plan/00 §6 item 401(b)): "1.0에서는 그대로".** The report window does not follow Zotero's
+> dark appearance in v1.0; following it is a later-release candidate (a dated note in `docs/08` §9's Visual list).
 
 **Notes.** Needs: every window card (`P2-*` search, `P4-T20`, `P5-*` related, `P6-T17`). Callers:
 none new.
@@ -1157,12 +1176,12 @@ npm run test:integration -- redactionAudit
 | Field | Value |
 |---|---|
 | **ID** | `P7-T15` |
-| **State** | `TODO` — the agent's part built 2026-11-18, awaiting the owner's review and the owner's run on a library copy (`G-34`; only the owner sets `DONE`). Report at `plan/reports/P7-T15.md`. |
+| **State** | `TODO` — the agent's part built 2026-11-18, awaiting the owner's review and the owner's run on a library copy (`G-34`; only the owner sets `DONE`). Report at `plan/reports/P7-T15.md`. *2026-11-18, batch F:* the test-profile workload memory measurement (item 401(a)) built and run three times; its figures are test-profile figures only; owner questions in `plan/00` §6 item 403. |
 | **Depends on** | `P7-T06`, `P7-T13` |
 | **Blocks** | `P7-T24` |
 | **Retires** | `R-10` |
 | **Implements** | `NFR-3`, `NFR-7`, `NFR-10`, `NFR-18` |
-| **Estimate** | 1.5 d |
+| **Estimate** | 2.0 d |
 | **Human gate** | **Yes** — gate `G-34` (Windows only for v1.0): the owner provides a **copy** of a large real library (~10 k items) in a separate Zotero profile, never the original, and runs the profiling procedure on it. |
 
 **Goal.** NFR-3 (no task over 100 ms), NFR-7 (idle ≤ 30 MB, reference workload peak ≤ 150 MB, 500-item
@@ -1178,6 +1197,9 @@ each have a measured figure on Windows, with the method.
 - create `docs/spikes/phase-7-profiling.md` (the procedure, the figures, the machine)
 - create `test/integration/startupCost.spec.ts` (the plugin's own startup time from its hooks'
   timestamps, and no request at startup)
+- create `test/integration/workloadMemory.spec.ts` (*added 2026-11-18, `plan/00` §6 item 401(a)*:
+  `NFR-7`'s two workload figures and `docs/13` §8.8's growth line, in the test profile, through a
+  fake provider)
 
 **Do.**
 1. Write the procedure: startup with and without the plugin (median of five), `about:memory` before
@@ -1201,6 +1223,18 @@ npm run build && npm run test:integration -- startupCost
 Then the owner's run of the written procedure.
 
 **Notes.** Needs: Phases 1–6 built. Callers: none.
+
+> **DECIDED 2026-11-18 (owner, plan/00 §6 item 401(a)): "만듦".** The workload memory measurement is
+> built in the test profile with a fake provider: no network, no key, no spend. The Estimate rose
+> 1.5 → 2.0 d (item 402(a)). Its figures go into `docs/release/v1.0-checklist.md` as test-profile
+> figures only; the large-library run (`G-34`) stays the owner's. The reading is heap, not
+> `explicit`, which Zotero 10.0.3's reporter does not have (item 402(b)). The budgets are logged,
+> not asserted (item 402(c)). The method is in `docs/spikes/phase-7-profiling.md` §3.2–§3.3, and
+> the figures are in its §6.1 and `plan/reports/P7-T15.md`. The three findings it measured are owner
+> questions in `plan/00` §6 item 403:
+> - growth after five jobs, item (a);
+> - a long timer gap in a 500-item summarize job, item (b);
+> - the 500-item full-text peak over 400 MB in one of seven runs, item (e).
 
 ---
 
@@ -1427,7 +1461,7 @@ npm run test:integration -- offline
 | Field | Value |
 |---|---|
 | **ID** | `P7-T20` |
-| **State** | `TODO` — built 2026-11-18 as a draft, awaiting the owner's review (`G-41`, through `P7-T05`; only the owner sets `DONE`). Report at `plan/reports/P7-T20.md`. |
+| **State** | `TODO` — built 2026-11-18 as a draft; approved by the owner as written the same day (`G-41`, `plan/00` §6 item 401(c)), so the draft banner is gone; awaiting the owner's `DONE` (only the owner sets it). Reports at `plan/reports/P7-T20.md` and `plan/reports/P7-batchF.md`. |
 | **Depends on** | `P7-T19` |
 | **Blocks** | `P7-T05`, `P7-T26` |
 | **Retires** | none |
@@ -1455,6 +1489,10 @@ npm run test:integration -- offline
 - [ ] Every `README.md` heading has a Korean counterpart in the same order.
 
 **Verify with.** `grep -c "^## " README.md README.ko.md` gives equal counts.
+
+> **DECIDED 2026-11-18 (owner, plan/00 §6 item 401(c)): "모두 승인".** `README.ko.md` is approved as written. The
+> draft comment and the visible draft line were removed and replaced by a one-line provenance comment; every other
+> byte is the draft's. `grep -c "^## "` gave 11 and 11 afterwards.
 
 **Notes.** Needs: nothing earlier. Callers: none.
 
@@ -2330,7 +2368,7 @@ production caller and nothing constructed.
 | Field | Value |
 |---|---|
 | **ID** | `P7-T38` |
-| **State** | `TODO` — attempted 2026-11-18: `npm audit fix` stopped with an internal npm error and changed nothing; owner question `plan/00` §6 item 401(d). Report at `plan/reports/P7-T38.md`. |
+| **State** | `TODO` — attempted 2026-11-18: `npm audit fix` stopped with an internal npm error and changed nothing; owner question `plan/00` §6 item 401(d). Report at `plan/reports/P7-T38.md`. *2026-11-18, batch F:* run once with npm 11.21.3 (item 401(d)'s answer). It changed `package-lock.json`, but the remaining `picomatch` advisory can be fixed only by a breaking change, so the package files were restored to HEAD and nothing is to commit; owner question `plan/00` §6 item 403(d). |
 | **Depends on** | `P7-T16` |
 | **Blocks** | `P7-T26` |
 | **Retires** | none |
@@ -2370,11 +2408,20 @@ npm audit && npm run typecheck && npm run lint:check && npm run test && npm run 
 coordinator: the fix is one command, but its check is a full run and three integration runs, and a transitive bump
 can break the scaffold. Not built in batch D, as the brief says. No caller and nothing constructed.
 
+> **DECIDED 2026-11-18 (owner, plan/00 §6 item 401(d)): "새 npm으로 한 번만 실행".** Run once through `npx` with the
+> exact npm 11 version that `npm view npm@11 version` gives, never `--force` or `--legacy-peer-deps`, and leave the
+> installed npm as it is. If it fails or an advisory needs a breaking upgrade, restore the package files and raise an
+> owner question. *Done 2026-11-18 (batch F), with npm 11.21.3 (item 402(h)).* It ran and changed `package-lock.json`.
+> Its report then said the `picomatch` advisory needs `--force`, which would install `zotero-plugin-scaffold@0.1.7`, a
+> breaking change. So the lockfile was restored, `node_modules` was reinstalled from it offline, and every check and
+> three integration runs passed on the restored tree. The before and after audits and the lockfile diff are in
+> `plan/reports/P7-T38.md`. Owner question: item 403(d).
+
 ---
 
 ## 3. Estimate reconciliation
 
-Where the 32.00 d sit *(28.50 d when first written; 32.00 since 2026-11-17, item 398)* against `plan/05` §4.1's work areas (now §5.1):
+Where the 32.50 d sit *(28.50 d when first written; 32.00 since 2026-11-17, item 398; 32.50 since 2026-11-18, item 402(a))* against `plan/05` §4.1's work areas (now §5.1):
 
 | Work area | Cards | Days |
 |---|---|---|
@@ -2383,7 +2430,7 @@ Where the 32.00 d sit *(28.50 d when first written; 32.00 since 2026-11-17, item
 | W7-3 Accessibility pass | `P7-T06`, `P7-T07` | 2.25 |
 | W7-4 Preferences consolidation | `P7-T08`, `P7-T09`, `P7-T10`, `P7-T11` | 5.5 |
 | W7-5 Error-message and redaction audit | `P7-T12`, `P7-T13`, `P7-T14` | 3.5 |
-| W7-6 Performance and resource profiling | `P7-T15` | 1.5 |
+| W7-6 Performance and resource profiling | `P7-T15` | 2.0 |
 | W7-7 Security review | `P7-T16`, `P7-T17` | 2.25 |
 | W7-8 Documentation | `P7-T19` (and `SECURITY.md` in `P7-T16`, `README.ko.md` in W7-2) | 1.5 |
 | W7-9 Release engineering | `P7-T21`, `P7-T22`, `P7-T26`, `P7-T30` | 2.25 |
@@ -2393,7 +2440,7 @@ Where the 32.00 d sit *(28.50 d when first written; 32.00 since 2026-11-17, item
 | Not a work area: the owner's answer to §0.4 line 20 (added 2026-11-16, item 381) | `P7-T32` | 0.75 |
 | Not a work area: the owner's answer to item 393 (added 2026-11-17, item 393(d)) | `P7-T33` | 0.5 |
 | Not a work area: the owner's answers to item 395 (added 2026-11-17, item 398) | `P7-T34`, `P7-T35`, `P7-T36`, `P7-T37`, `P7-T38` | 2.0 |
-| | **Total** | **32.00** |
+| | **Total** | **32.50** |
 
 **Where the sum is likely low.** (1) `P7-T03` and `P7-T06`: a sweep is priced on the windows that
 exist today; Phases 5 and 6 add windows not yet built, and their findings are counted only as
