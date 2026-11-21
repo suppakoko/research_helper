@@ -274,7 +274,7 @@ through `P4-T22` ends at 10.25 d. Both re-read by script.)*
 | Field | Value |
 |---|---|
 | **ID** | `P4-T01` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | none |
 | **Blocks** | `P4-T04`, `P4-T10`, `P4-T12`, `P4-T17` |
 | **Retires** | none |
@@ -363,7 +363,7 @@ is a shared file under the wave rules — small exact-string edits only.
 | Field | Value |
 |---|---|
 | **ID** | `P4-T02` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | none |
 | **Blocks** | `P4-T09`, `P4-T18`, `P4-T19` |
 | **Retires** | none |
@@ -435,7 +435,7 @@ shared files under the wave rules — exact-string edits only. Only this card ad
 | Field | Value |
 |---|---|
 | **ID** | `P4-T03` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | none |
 | **Blocks** | `P4-T05`, `P4-T07`, `P4-T08`, `P4-T16` |
 | **Retires** | part of `R-6`, part of `R-7` |
@@ -594,7 +594,7 @@ sentences each. The "every file sets exactly one of the two" rule is item 2 (`ma
 | Field | Value |
 |---|---|
 | **ID** | `P4-T04` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P4-T01` |
 | **Blocks** | `P4-T05`, `P4-T08`, `P4-T12` |
 | **Retires** | none |
@@ -666,7 +666,7 @@ already escapes every variable.
 | Field | Value |
 |---|---|
 | **ID** | `P4-T05` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P4-T03`, `P4-T04` |
 | **Blocks** | `P4-T06`, `P4-T07` |
 | **Retires** | none |
@@ -780,7 +780,7 @@ summaries. `P4-T18` maps it to the job's end. `docs/12` §8's note of this date.
 | Field | Value |
 |---|---|
 | **ID** | `P4-T06` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P4-T05` |
 | **Blocks** | `P4-T18` |
 | **Retires** | none |
@@ -881,7 +881,7 @@ behaviour. `docs/12` §20's note of this date. `P4-T18` maps the new stop to the
 | Field | Value |
 |---|---|
 | **ID** | `P4-T07` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P4-T03`, `P4-T05` |
 | **Blocks** | `P4-T08` |
 | **Retires** | part of `R-6` |
@@ -993,7 +993,7 @@ import cycle. The comparison tests against `planSynthesis` now pin "estimate ≥
 | Field | Value |
 |---|---|
 | **ID** | `P4-T08` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P4-T03`, `P4-T04`, `P4-T07`, `P4-T10` |
 | **Blocks** | `P4-T09`, `P4-T21` |
 | **Retires** | part of `R-6` |
@@ -1136,7 +1136,7 @@ the 1.0.0 → 1.0.1 PATCH; `docs/12` §17.3.)*
 | Field | Value |
 |---|---|
 | **ID** | `P4-T09` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P4-T02`, `P4-T08`, `P4-T12` |
 | **Blocks** | `P4-T18` |
 | **Retires** | part of `R-6`, part of `R-7` |
@@ -1297,7 +1297,7 @@ header no longer calls `critique.ts` "not built yet". `docs/06` §12.2's note of
 | Field | Value |
 |---|---|
 | **ID** | `P4-T10` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P4-T01` |
 | **Blocks** | `P4-T08`, `P4-T11`, `P4-T13`, `P4-T15` |
 | **Retires** | part of `R-7` |
@@ -1375,7 +1375,7 @@ npm run typecheck && npm run test:unit -- trendCitations
 | Field | Value |
 |---|---|
 | **ID** | `P4-T11` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P4-T10` |
 | **Blocks** | `P4-T13`, `P4-T15` |
 | **Retires** | part of `R-7` |
@@ -1442,7 +1442,7 @@ npm run typecheck && npm run test:integration -- --exit-on-finish --abort-on-fai
 | Field | Value |
 |---|---|
 | **ID** | `P4-T12` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P4-T01`, `P4-T04` |
 | **Blocks** | `P4-T09`, `P4-T18`, `P4-T21` |
 | **Retires** | part of `R-6` |
@@ -1606,7 +1606,7 @@ holds only `critiqueTextUnchecked`, which waits for the next batch.
 | Field | Value |
 |---|---|
 | **ID** | `P4-T13` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P4-T10`, `P4-T11` |
 | **Blocks** | `P4-T14` |
 | **Retires** | part of `R-7` |
@@ -1696,7 +1696,7 @@ npm run typecheck && npm run test:unit -- trendNoteHtml && npm run test:integrat
 | Field | Value |
 |---|---|
 | **ID** | `P4-T14` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P4-T13` |
 | **Blocks** | `P4-T18` |
 | **Retires** | none |
@@ -1824,7 +1824,7 @@ store into its own card.
 | Field | Value |
 |---|---|
 | **ID** | `P4-T15` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P4-T10`, `P4-T11` |
 | **Blocks** | `P4-T20` |
 | **Retires** | none |
@@ -1911,7 +1911,7 @@ npm run typecheck && npm run test:unit -- trendExport
 | Field | Value |
 |---|---|
 | **ID** | `P4-T16` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P4-T03` |
 | **Blocks** | `P4-T18` |
 | **Retires** | part of `R-4` |
@@ -2043,7 +2043,7 @@ there). `SynthesisPlan.themes` is now t, the themes reserved, and `reportPlanLin
 | Field | Value |
 |---|---|
 | **ID** | `P4-T17` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P4-T01` |
 | **Blocks** | `P4-T18` |
 | **Retires** | none |
@@ -2102,7 +2102,7 @@ npm run typecheck && npm run test:unit -- synthesisKeys
 | Field | Value |
 |---|---|
 | **ID** | `P4-T18` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P4-T02`, `P4-T06`, `P4-T09`, `P4-T12`, `P4-T14`, `P4-T16`, `P4-T17` |
 | **Blocks** | `P4-T20`, `P4-T21`, `P4-T22` |
 | **Retires** | part of `R-6` |
@@ -2322,7 +2322,7 @@ moves no job state (`TrendReportOutcome` gains `interrupted`). `analyseThemes` h
 | Field | Value |
 |---|---|
 | **ID** | `P4-T19` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P4-T02` |
 | **Blocks** | `P4-T20` |
 | **Retires** | none |
@@ -2432,7 +2432,7 @@ opens no window. `menus.spec.ts` and `lifecycle.spec.ts` turn it on for their du
 | Field | Value |
 |---|---|
 | **ID** | `P4-T20` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P4-T15`, `P4-T18`, `P4-T19` |
 | **Blocks** | `P4-T23` |
 | **Retires** | none |
@@ -2543,7 +2543,7 @@ this card's Done-when `src/prefs/schema.ts`, `src/prefs/keys.ts`, `test/unit/pre
 | Field | Value |
 |---|---|
 | **ID** | `P4-T21` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P4-T08`, `P4-T12`, `P4-T18` |
 | **Blocks** | `P4-T23`, `P4-T25` |
 | **Retires** | none |
@@ -2627,7 +2627,7 @@ the notice spec now reads the label's `value`. One new string. The estimate is n
 | Field | Value |
 |---|---|
 | **ID** | `P4-T22` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P4-T18` |
 | **Blocks** | `P4-T25` |
 | **Retires** | none |

@@ -333,7 +333,7 @@ hangs off `P5-T06` and should run as early as `G-26` allows: its answer can chan
 | Field | Value |
 |---|---|
 | **ID** | `P5-T01` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | none |
 | **Blocks** | `P5-T03`, `P5-T05`, `P5-T06`, `P5-T07`, `P5-T08`, `P5-T09`, `P5-T10`, `P5-T18`, `P5-T19` |
 | **Retires** | none |
@@ -431,7 +431,7 @@ commits.
 | Field | Value |
 |---|---|
 | **ID** | `P5-T02` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | none |
 | **Blocks** | `P5-T15`, `P5-T17`, `P5-T26` |
 | **Retires** | none |
@@ -491,7 +491,7 @@ npm run typecheck && npm run test:unit -- schema
 | Field | Value |
 |---|---|
 | **ID** | `P5-T03` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P5-T01` |
 | **Blocks** | `P5-T18`, `P5-T20`, `P5-T25` |
 | **Retires** | none |
@@ -577,7 +577,7 @@ npm run typecheck && npm run test:unit -- provenanceRerun privacyPolicy userPric
 | Field | Value |
 |---|---|
 | **ID** | `P5-T04` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | none |
 | **Blocks** | `P5-T07`, `P5-T08`, `P5-T09`, `P5-T31` |
 | **Retires** | none |
@@ -798,7 +798,7 @@ npm run typecheck && npm run test:unit -- semanticscholarRecommendations
 | Field | Value |
 |---|---|
 | **ID** | `P5-T07` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P5-T01`, `P5-T04` |
 | **Blocks** | `P5-T12`, `P5-T23` |
 | **Retires** | part of `R-3` |
@@ -849,7 +849,7 @@ npm run typecheck && npm run test:unit -- europepmc container
 | Field | Value |
 |---|---|
 | **ID** | `P5-T08` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P5-T01`, `P5-T04` |
 | **Blocks** | `P5-T12`, `P5-T23` |
 | **Retires** | part of `R-3` |
@@ -911,7 +911,7 @@ npm run typecheck && npm run test:unit -- pubmed container
 | Field | Value |
 |---|---|
 | **ID** | `P5-T09` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P5-T01`, `P5-T04` |
 | **Blocks** | `P5-T11`, `P5-T12`, `P5-T32` |
 | **Retires** | part of `R-3` |
@@ -961,7 +961,7 @@ npm run typecheck && npm run test:unit -- crossref container
 | Field | Value |
 |---|---|
 | **ID** | `P5-T10` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P5-T01` |
 | **Blocks** | `P5-T12`, `P5-T23` |
 | **Retires** | part of `R-3` |
@@ -1169,7 +1169,7 @@ npm run typecheck && npm run test:unit -- relatedGenerators
 | Field | Value |
 |---|---|
 | **ID** | `P5-T13` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P5-T12` |
 | **Blocks** | `P5-T14` |
 | **Retires** | none |
@@ -1221,7 +1221,7 @@ npm run typecheck && npm run test:unit -- relatedScore
 | Field | Value |
 |---|---|
 | **ID** | `P5-T14` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P5-T11`, `P5-T12`, `P5-T13`, `P5-T19`, `P5-T20` |
 | **Blocks** | `P5-T16` |
 | **Retires** | part of `R-3` |
@@ -1304,7 +1304,7 @@ term; neither was a step.
 | Field | Value |
 |---|---|
 | **ID** | `P5-T15` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P5-T02` |
 | **Blocks** | `P5-T16`, `P5-T26` |
 | **Retires** | none |
@@ -1452,7 +1452,7 @@ npm run typecheck && npm run test:unit -- relatedViewModel && npm run test:integ
 | Field | Value |
 |---|---|
 | **ID** | `P5-T17` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P5-T02`, `P5-T16` |
 | **Blocks** | `P5-T28` |
 | **Retires** | none |
@@ -1524,7 +1524,7 @@ ones)" line is proved here offline and in `P5-T30` live.
 | Field | Value |
 |---|---|
 | **ID** | `P5-T18` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P5-T01`, `P5-T03` |
 | **Blocks** | `P5-T21`, `P5-T22` |
 | **Retires** | none |
@@ -1592,7 +1592,7 @@ this card extends it and grep its importers first. *Re-estimated 2026-11-01, 1.2
 | Field | Value |
 |---|---|
 | **ID** | `P5-T19` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P5-T01` |
 | **Blocks** | `P5-T14`, `P5-T21`, `P5-T24` |
 | **Retires** | part of `R-3` |
@@ -1707,7 +1707,7 @@ npm run typecheck && npm run test:unit -- embeddings semanticscholar
 | Field | Value |
 |---|---|
 | **ID** | `P5-T21` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P5-T18`, `P5-T19`, `P5-T20` |
 | **Blocks** | `P5-T23`, `P5-T24` |
 | **Retires** | none |
@@ -1767,7 +1767,7 @@ npm run typecheck && npm run test:unit -- recommendSeeds
 | Field | Value |
 |---|---|
 | **ID** | `P5-T22` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P5-T18` |
 | **Blocks** | `P5-T25` |
 | **Retires** | none |
@@ -1857,7 +1857,7 @@ changed by `P4-T18` (built); grep before editing. `docs/12` §15's cache key ("s
 | Field | Value |
 |---|---|
 | **ID** | `P5-T23` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P5-T06`, `P5-T07`, `P5-T08`, `P5-T10`, `P5-T21` |
 | **Blocks** | `P5-T24`, `P5-T25` |
 | **Retires** | part of `R-3` |
@@ -1957,7 +1957,7 @@ npm run typecheck && npm run test:unit -- recommendGenerators
 | Field | Value |
 |---|---|
 | **ID** | `P5-T24` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P5-T19`, `P5-T20`, `P5-T21`, `P5-T23` |
 | **Blocks** | `P5-T25` |
 | **Retires** | none |
@@ -2046,7 +2046,7 @@ npm run typecheck && npm run test:unit -- recommendScore
 | Field | Value |
 |---|---|
 | **ID** | `P5-T25` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P5-T03`, `P5-T22`, `P5-T23`, `P5-T24` |
 | **Blocks** | `P5-T26` |
 | **Retires** | none |
@@ -2171,7 +2171,7 @@ npm run typecheck && npm run test:unit -- recommendPipeline container && npm run
 | Field | Value |
 |---|---|
 | **ID** | `P5-T26` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P5-T02`, `P5-T15`, `P5-T25` |
 | **Blocks** | `P5-T27` |
 | **Retires** | none |
@@ -2326,7 +2326,7 @@ npm run typecheck && npm run test:integration -- --exit-on-finish --abort-on-fai
 | Field | Value |
 |---|---|
 | **ID** | `P5-T28` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P5-T17`, `P5-T27` |
 | **Blocks** | `P5-T30` |
 | **Retires** | `R-3` (fallback proven offline) |
@@ -2590,7 +2590,7 @@ is the agent's checking and inventory work; the owner's time is the gate, not de
 | Field | Value |
 |---|---|
 | **ID** | `P5-T32` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P5-T09`, `P5-T12` |
 | **Blocks** | `P5-T30` |
 | **Retires** | part of `R-3` |

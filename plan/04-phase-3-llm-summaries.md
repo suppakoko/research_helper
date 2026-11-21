@@ -230,7 +230,7 @@ start because most cards read its rows.
 | Field | Value |
 |---|---|
 | **ID** | `P3-T01` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | none |
 | **Blocks** | `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10` |
 | **Retires** | part of `R-9` |
@@ -319,7 +319,7 @@ apply in those two files; neither calls `Zotero.HTTP.request`.
 | Field | Value |
 |---|---|
 | **ID** | `P3-T02` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P1-T41`, `P3-T32` |
 | **Blocks** | `P3-T03`, `P3-T04`, `P3-T37` |
 | **Retires** | most of `R-9` |
@@ -400,7 +400,7 @@ npm run typecheck && npm run test:unit -- container && npm run test:integration 
 | Field | Value |
 |---|---|
 | **ID** | `P3-T03` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T02` |
 | **Blocks** | `P3-T04`, `P3-T37` |
 | **Retires** | remainder of `R-9` |
@@ -578,7 +578,7 @@ source-credential blocks, the badge, the residual-risk text and remove-all.
 | Field | Value |
 |---|---|
 | **ID** | `P3-T05` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | none |
 | **Blocks** | `P3-T06`, `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10`, `P3-T17`, `P3-T38` |
 | **Retires** | part of `R-4`, part of `R-6` |
@@ -679,7 +679,7 @@ npm run typecheck && npm run test:unit -- "errorMap|hostLimiter|keys" && npm run
 | Field | Value |
 |---|---|
 | **ID** | `P3-T06` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T05`, `P3-T32` |
 | **Blocks** | `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10`, `P3-T17`, `P3-T35` |
 | **Retires** | part of `R-13` |
@@ -782,7 +782,7 @@ card that depends on them, and the card now creates `registerProviders.ts` and i
 | Field | Value |
 |---|---|
 | **ID** | `P3-T07` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T01`, `P3-T05`, `P3-T06`, `P3-T38` |
 | **Blocks** | `P3-T11`, `P3-T12`, `P3-T13`, `P3-T14`, `P3-T15`, `P3-T30` |
 | **Retires** | part of `R-13` |
@@ -875,7 +875,7 @@ it as the price source for all four providers.
 | Field | Value |
 |---|---|
 | **ID** | `P3-T08` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T01`, `P3-T05`, `P3-T06`, `P3-T38` |
 | **Blocks** | `P3-T11`, `P3-T12`, `P3-T13`, `P3-T14`, `P3-T30` |
 | **Retires** | part of `R-13` |
@@ -949,7 +949,7 @@ inexact at every call site (`docs/03` §10.2 authority note).
 | Field | Value |
 |---|---|
 | **ID** | `P3-T09` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T01`, `P3-T05`, `P3-T06`, `P3-T38` |
 | **Blocks** | `P3-T11`, `P3-T12`, `P3-T13`, `P3-T14`, `P3-T30` |
 | **Retires** | part of `R-13` |
@@ -1027,7 +1027,7 @@ before 2026-10-20 it pointed at `P3-T13`, which depends on this card.
 | Field | Value |
 |---|---|
 | **ID** | `P3-T10` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T01`, `P3-T05`, `P3-T06`, `P3-T38` |
 | **Blocks** | `P3-T11`, `P3-T12`, `P3-T13`, `P3-T14`, `P3-T15`, `P3-T30` |
 | **Retires** | part of `R-13` |
@@ -1110,7 +1110,7 @@ npm run typecheck && npm run test:unit -- "llm/gemini|hostLimiter"
 | Field | Value |
 |---|---|
 | **ID** | `P3-T11` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10` |
 | **Blocks** | `P3-T30` |
 | **Retires** | part of `R-14` |
@@ -1184,7 +1184,7 @@ the shipped transport, which `V-8` showed must be XHR, and the parser already ex
 | Field | Value |
 |---|---|
 | **ID** | `P3-T12` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10` |
 | **Blocks** | `P3-T25`, `P3-T27`, `P3-T30` |
 | **Retires** | part of `R-6` |
@@ -1456,7 +1456,7 @@ Re-estimated 0.5 → 0.75 d on 2026-10-20 for the menulist population moved in f
 | Field | Value |
 |---|---|
 | **ID** | `P3-T15` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T07`, `P3-T10`, `P3-T13`, `P3-T32`, `P3-T36` |
 | **Blocks** | `P3-T16`, `P3-T35` |
 | **Retires** | part of `R-9` |
@@ -1688,7 +1688,7 @@ reason to widen the gate.
 | Field | Value |
 |---|---|
 | **ID** | `P3-T17` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T05`, `P3-T06`, `P3-T32`, `P3-T34` |
 | **Blocks** | `P3-T29` |
 | **Retires** | part of `R-4`, part of `R-10` |
@@ -1757,7 +1757,7 @@ now creates them.
 | Field | Value |
 |---|---|
 | **ID** | `P3-T18` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T32` |
 | **Blocks** | `P3-T19`, `P3-T27` |
 | **Retires** | part of `R-19` |
@@ -1841,7 +1841,7 @@ npm run typecheck && npm run test:unit -- normalizeAbstract && npm run test:inte
 | Field | Value |
 |---|---|
 | **ID** | `P3-T19` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T18`, `P3-T32` |
 | **Blocks** | `P3-T20`, `P3-T21`, `P3-T26` |
 | **Retires** | `R-19` |
@@ -1936,7 +1936,7 @@ npm run typecheck && npm run test:unit -- "pipeline/(clean|jats|languageDetect)"
 | Field | Value |
 |---|---|
 | **ID** | `P3-T20` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T19` |
 | **Blocks** | `P3-T22` |
 | **Retires** | prerequisite for `R-19b` |
@@ -2022,7 +2022,7 @@ is not in the figure.
 | Field | Value |
 |---|---|
 | **ID** | `P3-T21` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T19` |
 | **Blocks** | `P3-T22`, `P3-T23` |
 | **Retires** | part of `R-19b` |
@@ -2102,7 +2102,7 @@ attachment folder (item 274(d)).
 | Field | Value |
 |---|---|
 | **ID** | `P3-T22` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T20`, `P3-T21` |
 | **Blocks** | `P3-T23`, `P3-T31`, `P3-T40` |
 | **Retires** | `R-19b` |
@@ -2171,7 +2171,7 @@ Below 85 %: stop at `G-22` with the overall and per-family figures.
 | Field | Value |
 |---|---|
 | **ID** | `P3-T23` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T13`, `P3-T21`, `P3-T22`, `P3-T41` |
 | **Blocks** | `P3-T25` |
 | **Retires** | part of `R-19` |
@@ -2279,7 +2279,7 @@ npm run typecheck && npm run test:unit -- llm/chunking
 | Field | Value |
 |---|---|
 | **ID** | `P3-T24` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | none |
 | **Blocks** | `P3-T25`, `P3-T26`, `P3-T27` |
 | **Retires** | part of `R-6` |
@@ -2388,7 +2388,7 @@ belongs with the cache surface; raise it then rather than shipping a silent bulk
 | Field | Value |
 |---|---|
 | **ID** | `P3-T25` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T12`, `P3-T16`, `P3-T23`, `P3-T24`, `P3-T26`, `P3-T32`, `P3-T36` |
 | **Blocks** | `P3-T28`, `P3-T29` |
 | **Retires** | part of `R-6`, part of `R-19` |
@@ -2503,7 +2503,7 @@ that pin the schema version) and the redaction-gated persistence.
 | Field | Value |
 |---|---|
 | **ID** | `P3-T26` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T19`, `P3-T24`, `P3-T32`, `P3-T33` |
 | **Blocks** | `P3-T25` |
 | **Retires** | part of `R-4` |
@@ -2575,7 +2575,7 @@ npm run typecheck && npm run test:unit -- summaryKey
 | Field | Value |
 |---|---|
 | **ID** | `P3-T27` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T12`, `P3-T18`, `P3-T24`, `P3-T32`, `P3-T35` |
 | **Blocks** | `P3-T29` |
 | **Retires** | part of `R-6` |
@@ -2669,7 +2669,7 @@ view model, strings) the card named only as `searchDialog.ts`. The `screening.th
 | Field | Value |
 |---|---|
 | **ID** | `P3-T28` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T25`, `P3-T32`, `P3-T35` |
 | **Blocks** | `P3-T31` |
 | **Retires** | none |
@@ -2786,7 +2786,7 @@ the lifecycle assertion. The section shares `item-details` with the reader conte
 | Field | Value |
 |---|---|
 | **ID** | `P3-T29` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T16`, `P3-T17`, `P3-T25`, `P3-T27`, `P3-T32`, `P3-T35` |
 | **Blocks** | `P3-T31` |
 | **Retires** | part of `R-6` |
@@ -3132,7 +3132,7 @@ Phase 7. Only the owner changes a card's state to `DONE`.
 | Field | Value |
 |---|---|
 | **ID** | `P3-T32` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | none |
 | **Blocks** | `P3-T02`, `P3-T04`, `P3-T06`, `P3-T13`, `P3-T14`, `P3-T15`, `P3-T16`, `P3-T17`, `P3-T18`, `P3-T19`, `P3-T25`, `P3-T26`, `P3-T27`, `P3-T28`, `P3-T29`, `P3-T33`, `P3-T39` |
 | **Retires** | none |
@@ -3218,7 +3218,7 @@ are not added here.
 | Field | Value |
 |---|---|
 | **ID** | `P3-T33` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T32` |
 | **Blocks** | `P3-T13`, `P3-T26`, `P3-T35` |
 | **Retires** | part of `R-4` |
@@ -3298,7 +3298,7 @@ npm run typecheck && npm run test:unit -- "core/cache|provenanceRerun" && npm ru
 | Field | Value |
 |---|---|
 | **ID** | `P3-T34` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T36` |
 | **Blocks** | `P3-T14`, `P3-T17`, `P3-T35` |
 | **Retires** | part of `R-10` |
@@ -3375,7 +3375,7 @@ and `checkpoint.ts`, and no card created them. `src/core/jobQueue/` holds `cance
 | Field | Value |
 |---|---|
 | **ID** | `P3-T35` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T06`, `P3-T15`, `P3-T16`, `P3-T33`, `P3-T34` |
 | **Blocks** | `P3-T27`, `P3-T28`, `P3-T29` |
 | **Retires** | none |
@@ -3435,7 +3435,7 @@ ship a component nothing passes to a pipeline.
 | Field | Value |
 |---|---|
 | **ID** | `P3-T36` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | none |
 | **Blocks** | `P3-T14`, `P3-T15`, `P3-T25`, `P3-T34` |
 | **Retires** | part of `R-9` |
@@ -3587,7 +3587,7 @@ so that the gate holds only this card and not the pane and adapters behind `P3-T
 | Field | Value |
 |---|---|
 | **ID** | `P3-T38` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T05` |
 | **Blocks** | `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10` |
 | **Retires** | part of `R-4` |
@@ -3744,7 +3744,7 @@ or raced. This card already edits `docs/07` §7.3 and blocks all four. OpenRoute
 | Field | Value |
 |---|---|
 | **ID** | `P3-T39` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T32` |
 | **Blocks** | `P3-T16` |
 | **Retires** | none |
@@ -3866,7 +3866,7 @@ dollars; the conversion from cents is theirs.
 | Field | Value |
 |---|---|
 | **ID** | `P3-T40` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T22` |
 | **Blocks** | `P3-T41` |
 | **Retires** | part of `R-19b` (with `P3-T41`) |
@@ -3979,7 +3979,7 @@ papers the set holds when the owner labels.
 | Field | Value |
 |---|---|
 | **ID** | `P3-T41` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P3-T40` |
 | **Blocks** | `P3-T23`, `P3-T31` |
 | **Retires** | `R-19b` (with `P3-T22`) |

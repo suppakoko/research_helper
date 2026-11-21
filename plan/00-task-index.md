@@ -3,7 +3,7 @@
 > **Generated from the task cards in `01`–`04` and `07`–`10`** (Phase 4's file, read since 2026-10-26,
 > Phase 5's, read since 2026-11-01, and Phase 6's and Phase 7's, read since 2026-11-16). If a row here disagrees with a card, the card wins — then regenerate
 > this file.
-> **Last updated:** 2026-11-21 · **279 tasks: 112 `DONE`, 167 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **34 of 40**, Phase 3 **0 of 41**, Phase 4 **0 of 25**, Phase 5 **0 of 32**, Phase 6 **0 of 19**, Phase 7 **0 of 41**. **The plan has grown from the 203 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25, plus the 30 Phase 5 was drafted and reviewed with on 2026-11-01; its 31st card, `P5-T31`, added when the owner's decisions were applied, counts as growth; plus the 19 Phase 6 was decomposed into on 2026-11-16; plus the 31 Phase 7 was decomposed into on 2026-11-16) to 279, so 76 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-11-21 · **279 tasks: 235 `DONE`, 44 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **38 of 40**, Phase 3 **34 of 41**, Phase 4 **22 of 25**, Phase 5 **22 of 32**, Phase 6 **16 of 19**, Phase 7 **25 of 41**. **The plan has grown from the 203 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25, plus the 30 Phase 5 was drafted and reviewed with on 2026-11-01; its 31st card, `P5-T31`, added when the owner's decisions were applied, counts as growth; plus the 19 Phase 6 was decomposed into on 2026-11-16; plus the 31 Phase 7 was decomposed into on 2026-11-16) to 279, so 76 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -494,83 +494,83 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P2-T34` | The six schema extensions the owner approved on 2026-10-15… | `P2-T05`, `P2-T28`, `P2-T31` | 1.0 d |  |
 | ✅ `P2-T35` | Let a 4xx response body reach the adapter for hosts whose… | `P2-T06` | 0.25 d |  |
 | ✅ `P2-T36` | The four behaviour changes the owner approved on 2026-10-15 | `P2-T05`, `P2-T30` | 0.75 d |  |
-| `P2-T37` | A re-run finds a record that has no DOI and no PMID | `P2-T36` | 0.5 d |  |
-| `P2-T38` | Merge a paper's reviews and versions (the DOI family) | `P2-T09`, `P2-T10` | 0.75 d |  |
-| `P2-T39` | DOI-family comparison pass; newest F1000 version wins | `P2-T38` | 0.5 d |  |
-| `P2-T40` | Link a paper's attached documents and versions, never merge | `P2-T39` | 0.5 d |  |
+| ✅ `P2-T37` | A re-run finds a record that has no DOI and no PMID | `P2-T36` | 0.5 d |  |
+| ✅ `P2-T38` | Merge a paper's reviews and versions (the DOI family) | `P2-T09`, `P2-T10` | 0.75 d |  |
+| ✅ `P2-T39` | DOI-family comparison pass; newest F1000 version wins | `P2-T38` | 0.5 d |  |
+| ✅ `P2-T40` | Link a paper's attached documents and versions, never merge | `P2-T39` | 0.5 d |  |
 
 ### Phase 3
 
 | Task | Title | Depends on | Est. | Gate |
 |---|---|---|---|---|
-| `P3-T01` | `Secret` wrapper, `loggableHeaders`, `debug: true` lint | — | 0.25 d |  |
-| `P3-T02` | Tier-1 store: LLM presence flags and `clearAll` | `P1-T41`, `P3-T32` | 0.5 d |  |
-| `P3-T03` | Session-only fallback tier and the degradation dialog | `P3-T02` | 0.5 d |  |
+| ✅ `P3-T01` | `Secret` wrapper, `loggableHeaders`, `debug: true` lint | — | 0.25 d |  |
+| ✅ `P3-T02` | Tier-1 store: LLM presence flags and `clearAll` | `P1-T41`, `P3-T32` | 0.5 d |  |
+| ✅ `P3-T03` | Session-only fallback tier and the degradation dialog | `P3-T02` | 0.5 d |  |
 | `P3-T04` | Prefs pane: LLM provider blocks, model, base URL | `P3-T02`, `P3-T03`, `P3-T32` | 1.0 d | 🔒 |
-| `P3-T05` | LLM error mapping and the LLM retry policy | — | 0.5 d |  |
-| `P3-T06` | `LLMProvider` contract, registry, router, mock harness | `P3-T05`, `P3-T32` | 1.0 d |  |
-| `P3-T07` | OpenRouter adapter (the default provider) | `P3-T01`, `P3-T05`, `P3-T06`, `P3-T38` | 1.0 d |  |
-| `P3-T08` | OpenAI adapter (Responses API) | `P3-T01`, `P3-T05`, `P3-T06`, `P3-T38` | 0.5 d |  |
-| `P3-T09` | Anthropic adapter (Messages API) | `P3-T01`, `P3-T05`, `P3-T06`, `P3-T38` | 0.5 d |  |
-| `P3-T10` | Gemini adapter (Interactions API) | `P3-T01`, `P3-T05`, `P3-T06`, `P3-T38` | 0.75 d |  |
-| `P3-T11` | SSE streaming across the four adapters | `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10` | 0.75 d |  |
-| `P3-T12` | Structured output, validation, and the repair path | `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10` | 0.75 d |  |
+| ✅ `P3-T05` | LLM error mapping and the LLM retry policy | — | 0.5 d |  |
+| ✅ `P3-T06` | `LLMProvider` contract, registry, router, mock harness | `P3-T05`, `P3-T32` | 1.0 d |  |
+| ✅ `P3-T07` | OpenRouter adapter (the default provider) | `P3-T01`, `P3-T05`, `P3-T06`, `P3-T38` | 1.0 d |  |
+| ✅ `P3-T08` | OpenAI adapter (Responses API) | `P3-T01`, `P3-T05`, `P3-T06`, `P3-T38` | 0.5 d |  |
+| ✅ `P3-T09` | Anthropic adapter (Messages API) | `P3-T01`, `P3-T05`, `P3-T06`, `P3-T38` | 0.5 d |  |
+| ✅ `P3-T10` | Gemini adapter (Interactions API) | `P3-T01`, `P3-T05`, `P3-T06`, `P3-T38` | 0.75 d |  |
+| ✅ `P3-T11` | SSE streaming across the four adapters | `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10` | 0.75 d |  |
+| ✅ `P3-T12` | Structured output, validation, and the repair path | `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10` | 0.75 d |  |
 | `P3-T13` | Model catalogue, pricing table, token calibration | `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10`, `P3-T32`, `P3-T33` | 0.5 d |  |
 | `P3-T14` | `validateCredentials()` and the Test-key button | `P3-T04`, `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10`, `P3-T13`, `P3-T32`, `P3-T34`, `P3-T36` | 0.75 d | 🔒 |
-| `P3-T15` | Privacy modes, egress disclosure, Gemini free-tier warning | `P3-T07`, `P3-T10`, `P3-T13`, `P3-T32`, `P3-T36` | 1.0 d |  |
+| ✅ `P3-T15` | Privacy modes, egress disclosure, Gemini free-tier warning | `P3-T07`, `P3-T10`, `P3-T13`, `P3-T32`, `P3-T36` | 1.0 d |  |
 | `P3-T16` | Cost estimate, confirmation gate, `BudgetGuard`, usage | `P3-T13`, `P3-T15`, `P3-T32`, `P3-T39` | 1.25 d | 🔒 |
-| `P3-T17` | `llm` worker pool: concurrency, cancel, pause, resume | `P3-T05`, `P3-T06`, `P3-T32`, `P3-T34` | 0.75 d |  |
-| `P3-T18` | Text acquisition tiers 1–2 (abstract, attachment text) | `P3-T32` | 0.5 d |  |
-| `P3-T19` | Tiers 3–4, cleaning pass, OCR probe, language detection | `P3-T18`, `P3-T32` | 0.75 d |  |
-| `P3-T20` | The 40-PDF IMRaD fixture set with ground-truth labels | `P3-T19` | 1.75 d | 🔒 |
-| `P3-T21` | IMRaD section detector | `P3-T19` | 1.5 d |  |
-| `P3-T22` | Detector accuracy harness, 85 % gate, degrade switch | `P3-T20`, `P3-T21` | 0.5 d | 🔒 |
-| `P3-T23` | Chunker: section-aware, flat, and single-shot paths | `P3-T13`, `P3-T21`, `P3-T22`, `P3-T41` | 0.75 d |  |
-| `P3-T24` | Prompt registry with versioned prompt files | — | 0.5 d |  |
-| `P3-T25` | Per-paper summarizer, DR-1, and the grounding check | `P3-T12`, `P3-T16`, `P3-T23`, `P3-T24`, `P3-T26`, `P3-T32`, `P3-T36` | 1.25 d |  |
-| `P3-T26` | Summary cache keyed per `docs/06` §11.2 | `P3-T19`, `P3-T24`, `P3-T32`, `P3-T33` | 0.5 d |  |
-| `P3-T27` | Screening: retractions, non-English, duplicates, relevance | `P3-T12`, `P3-T18`, `P3-T24`, `P3-T32`, `P3-T35` | 1.0 d |  |
-| `P3-T28` | Item-pane AI summary section | `P3-T25`, `P3-T32`, `P3-T35` | 0.75 d |  |
-| `P3-T29` | Summarize-collection pipeline, notes, remove-notes command | `P3-T16`, `P3-T17`, `P3-T25`, `P3-T27`, `P3-T32`, `P3-T35` | 1.25 d |  |
+| ✅ `P3-T17` | `llm` worker pool: concurrency, cancel, pause, resume | `P3-T05`, `P3-T06`, `P3-T32`, `P3-T34` | 0.75 d |  |
+| ✅ `P3-T18` | Text acquisition tiers 1–2 (abstract, attachment text) | `P3-T32` | 0.5 d |  |
+| ✅ `P3-T19` | Tiers 3–4, cleaning pass, OCR probe, language detection | `P3-T18`, `P3-T32` | 0.75 d |  |
+| ✅ `P3-T20` | The 40-PDF IMRaD fixture set with ground-truth labels | `P3-T19` | 1.75 d | 🔒 |
+| ✅ `P3-T21` | IMRaD section detector | `P3-T19` | 1.5 d |  |
+| ✅ `P3-T22` | Detector accuracy harness, 85 % gate, degrade switch | `P3-T20`, `P3-T21` | 0.5 d | 🔒 |
+| ✅ `P3-T23` | Chunker: section-aware, flat, and single-shot paths | `P3-T13`, `P3-T21`, `P3-T22`, `P3-T41` | 0.75 d |  |
+| ✅ `P3-T24` | Prompt registry with versioned prompt files | — | 0.5 d |  |
+| ✅ `P3-T25` | Per-paper summarizer, DR-1, and the grounding check | `P3-T12`, `P3-T16`, `P3-T23`, `P3-T24`, `P3-T26`, `P3-T32`, `P3-T36` | 1.25 d |  |
+| ✅ `P3-T26` | Summary cache keyed per `docs/06` §11.2 | `P3-T19`, `P3-T24`, `P3-T32`, `P3-T33` | 0.5 d |  |
+| ✅ `P3-T27` | Screening: retractions, non-English, duplicates, relevance | `P3-T12`, `P3-T18`, `P3-T24`, `P3-T32`, `P3-T35` | 1.0 d |  |
+| ✅ `P3-T28` | Item-pane AI summary section | `P3-T25`, `P3-T32`, `P3-T35` | 0.75 d |  |
+| ✅ `P3-T29` | Summarize-collection pipeline, notes, remove-notes command | `P3-T16`, `P3-T17`, `P3-T25`, `P3-T27`, `P3-T32`, `P3-T35` | 1.25 d |  |
 | `P3-T30` | LLM fixtures and contract tests | `P3-T07`, `P3-T08`, `P3-T09`, `P3-T10`, `P3-T11`, `P3-T12` | 0.75 d | 🔒 |
 | `P3-T31` | Phase-3 acceptance run against the definition of done | `P3-T14`, `P3-T22`, `P3-T28`, `P3-T29`, `P3-T30`, `P3-T41` | 0.75 d | 🔒 |
-| `P3-T32` | Preference rows Phase 3 reads (`docs/07` §8.5) | — | 0.75 d |  |
-| `P3-T33` | Cache layer: interface, SQLite store, keys, migration | `P3-T32` | 1.0 d |  |
-| `P3-T34` | Job record, `job` table, queue and checkpoint | `P3-T36` | 1.0 d |  |
-| `P3-T35` | Wire the pipeline-context members | `P3-T06`, `P3-T15`, `P3-T16`, `P3-T33`, `P3-T34` | 0.5 d |  |
-| `P3-T36` | One redaction gate for new persisted records | — | 0.25 d |  |
+| ✅ `P3-T32` | Preference rows Phase 3 reads (`docs/07` §8.5) | — | 0.75 d |  |
+| ✅ `P3-T33` | Cache layer: interface, SQLite store, keys, migration | `P3-T32` | 1.0 d |  |
+| ✅ `P3-T34` | Job record, `job` table, queue and checkpoint | `P3-T36` | 1.0 d |  |
+| ✅ `P3-T35` | Wire the pipeline-context members | `P3-T06`, `P3-T15`, `P3-T16`, `P3-T33`, `P3-T34` | 0.5 d |  |
+| ✅ `P3-T36` | One redaction gate for new persisted records | — | 0.25 d |  |
 | `P3-T37` | Detect a keyring-less Linux backend (gate `G-09`) | `P3-T02`, `P3-T03` | 0.25 d | 🔒 |
-| `P3-T38` | Keep an LLM 429's body; never retry a parse failure | `P3-T05` | 0.5 d |  |
-| `P3-T39` | Store money preferences as whole cents | `P3-T32` | 0.5 d |  |
-| `P3-T40` | Held-out IMRaD fixture set (20 papers): text, candidates… | `P3-T22` | 1.0 d | 🔒 |
-| `P3-T41` | Detector improvement, then one held-out measurement | `P3-T40` | 1.5 d | 🔒 |
+| ✅ `P3-T38` | Keep an LLM 429's body; never retry a parse failure | `P3-T05` | 0.5 d |  |
+| ✅ `P3-T39` | Store money preferences as whole cents | `P3-T32` | 0.5 d |  |
+| ✅ `P3-T40` | Held-out IMRaD fixture set (20 papers): text, candidates… | `P3-T22` | 1.0 d | 🔒 |
+| ✅ `P3-T41` | Detector improvement, then one held-out measurement | `P3-T40` | 1.5 d | 🔒 |
 
 ### Phase 4
 
 | Task | Title | Depends on | Est. | Gate |
 |---|---|---|---|---|
-| `P4-T01` | Reconcile the trend types and state machine in `docs/07` | — | 0.75 d |  |
-| `P4-T02` | Preference rows Phase 4 reads | — | 0.5 d |  |
-| `P4-T03` | Synthesis prompt files and their JSON schemas | — | 1.0 d |  |
-| `P4-T04` | Digest projection (no LLM) | `P4-T01` | 0.5 d |  |
-| `P4-T05` | Theme clustering with client-side validation | `P4-T03`, `P4-T04` | 0.75 d |  |
-| `P4-T06` | Two-stage clustering and the theme-merge call | `P4-T05` | 0.75 d |  |
-| `P4-T07` | Per-theme analysis with sub-batching (depth ≤ 2) | `P4-T03`, `P4-T05` | 1.0 d |  |
-| `P4-T08` | Report composition call and structural validation | `P4-T03`, `P4-T04`, `P4-T07`, `P4-T10` | 1.25 d |  |
-| `P4-T09` | Self-critique pass, revision loop, warning banner | `P4-T02`, `P4-T08`, `P4-T12` | 1.0 d |  |
-| `P4-T10` | Citation validator and marker binding | `P4-T01` | 0.75 d |  |
-| `P4-T11` | Bibliography and citation nodes through Zotero | `P4-T10` | 1.25 d |  |
-| `P4-T12` | Client-generated title block, tables and appendices | `P4-T01`, `P4-T04` | 1.0 d |  |
-| `P4-T13` | Markdown → Zotero note HTML, sanitized | `P4-T10`, `P4-T11` | 1.25 d |  |
-| `P4-T14` | Report note writer, `report` table, report file | `P4-T13` | 1.25 d |  |
-| `P4-T15` | "Export as Markdown" | `P4-T10`, `P4-T11` | 0.5 d |  |
-| `P4-T16` | Synthesis cost estimate and the report's confirmation | `P4-T03` | 1.25 d |  |
-| `P4-T17` | Synthesis cache keys (`tc`, `cr`, `rp`) | `P4-T01` | 0.5 d |  |
-| `P4-T18` | Trend-report pipeline: stages, passes, cancel, resume | `P4-T02`, `P4-T06`, `P4-T09`, `P4-T12`, `P4-T14`, `P4-T16`, `P4-T17` | 2.0 d |  |
-| `P4-T19` | Report window surface, menu entry, `reportWindow` bundle | `P4-T02` | 1.0 d |  |
-| `P4-T20` | Report window: progress, streaming preview, delivery | `P4-T15`, `P4-T18`, `P4-T19` | 1.25 d |  |
-| `P4-T21` | Korean report path end to end | `P4-T08`, `P4-T12`, `P4-T18` | 0.75 d |  |
-| `P4-T22` | 400-item scale test on the mock provider | `P4-T18` | 2.25 d |  |
+| ✅ `P4-T01` | Reconcile the trend types and state machine in `docs/07` | — | 0.75 d |  |
+| ✅ `P4-T02` | Preference rows Phase 4 reads | — | 0.5 d |  |
+| ✅ `P4-T03` | Synthesis prompt files and their JSON schemas | — | 1.0 d |  |
+| ✅ `P4-T04` | Digest projection (no LLM) | `P4-T01` | 0.5 d |  |
+| ✅ `P4-T05` | Theme clustering with client-side validation | `P4-T03`, `P4-T04` | 0.75 d |  |
+| ✅ `P4-T06` | Two-stage clustering and the theme-merge call | `P4-T05` | 0.75 d |  |
+| ✅ `P4-T07` | Per-theme analysis with sub-batching (depth ≤ 2) | `P4-T03`, `P4-T05` | 1.0 d |  |
+| ✅ `P4-T08` | Report composition call and structural validation | `P4-T03`, `P4-T04`, `P4-T07`, `P4-T10` | 1.25 d |  |
+| ✅ `P4-T09` | Self-critique pass, revision loop, warning banner | `P4-T02`, `P4-T08`, `P4-T12` | 1.0 d |  |
+| ✅ `P4-T10` | Citation validator and marker binding | `P4-T01` | 0.75 d |  |
+| ✅ `P4-T11` | Bibliography and citation nodes through Zotero | `P4-T10` | 1.25 d |  |
+| ✅ `P4-T12` | Client-generated title block, tables and appendices | `P4-T01`, `P4-T04` | 1.0 d |  |
+| ✅ `P4-T13` | Markdown → Zotero note HTML, sanitized | `P4-T10`, `P4-T11` | 1.25 d |  |
+| ✅ `P4-T14` | Report note writer, `report` table, report file | `P4-T13` | 1.25 d |  |
+| ✅ `P4-T15` | "Export as Markdown" | `P4-T10`, `P4-T11` | 0.5 d |  |
+| ✅ `P4-T16` | Synthesis cost estimate and the report's confirmation | `P4-T03` | 1.25 d |  |
+| ✅ `P4-T17` | Synthesis cache keys (`tc`, `cr`, `rp`) | `P4-T01` | 0.5 d |  |
+| ✅ `P4-T18` | Trend-report pipeline: stages, passes, cancel, resume | `P4-T02`, `P4-T06`, `P4-T09`, `P4-T12`, `P4-T14`, `P4-T16`, `P4-T17` | 2.0 d |  |
+| ✅ `P4-T19` | Report window surface, menu entry, `reportWindow` bundle | `P4-T02` | 1.0 d |  |
+| ✅ `P4-T20` | Report window: progress, streaming preview, delivery | `P4-T15`, `P4-T18`, `P4-T19` | 1.25 d |  |
+| ✅ `P4-T21` | Korean report path end to end | `P4-T08`, `P4-T12`, `P4-T18` | 0.75 d |  |
+| ✅ `P4-T22` | 400-item scale test on the mock provider | `P4-T18` | 2.25 d |  |
 | `P4-T23` | Evaluation set and regression harness | `P4-T20`, `P4-T21` | 1.75 d | 🔒 |
 | `P4-T24` | Determinism check across three runs | `P4-T23` | 0.75 d | 🔒 |
 | `P4-T25` | Phase-4 acceptance run against the definition of done | `P4-T21`, `P4-T22`, `P4-T24` | 0.75 d | 🔒 |
@@ -579,60 +579,60 @@ uses a synthetic API-key-shaped string, never a real key.
 
 | Task | Title | Depends on | Est. | Gate |
 |---|---|---|---|---|
-| `P5-T01` | Reconcile Phase 5 types and state machines in `docs/07` | — | 1.0 d |  |
-| `P5-T02` | Preference rows Phase 5 reads | — | 0.5 d |  |
-| `P5-T03` | Profile, recommendation and embedding tables | `P5-T01` | 1.5 d |  |
-| `P5-T04` | Request builders and the relatedness fixtures | — | 1.75 d |  |
+| ✅ `P5-T01` | Reconcile Phase 5 types and state machines in `docs/07` | — | 1.0 d |  |
+| ✅ `P5-T02` | Preference rows Phase 5 reads | — | 0.5 d |  |
+| ✅ `P5-T03` | Profile, recommendation and embedding tables | `P5-T01` | 1.5 d |  |
+| ✅ `P5-T04` | Request builders and the relatedness fixtures | — | 1.75 d |  |
 | `P5-T05` | Semantic Scholar references, citations, title match | `P5-T01`, `P5-T31` | 0.75 d |  |
 | `P5-T06` | Semantic Scholar Recommendations, one seed and many | `P5-T01`, `P5-T31` | 1.25 d |  |
-| `P5-T07` | Europe PMC citations and references | `P5-T01`, `P5-T04` | 0.75 d |  |
-| `P5-T08` | PubMed related articles (`elink` pmra) | `P5-T01`, `P5-T04` | 1.0 d |  |
-| `P5-T09` | Crossref deposited references and title search | `P5-T01`, `P5-T04` | 0.75 d |  |
-| `P5-T10` | Relatedness cache, negative cache, request budget | `P5-T01` | 1.0 d |  |
+| ✅ `P5-T07` | Europe PMC citations and references | `P5-T01`, `P5-T04` | 0.75 d |  |
+| ✅ `P5-T08` | PubMed related articles (`elink` pmra) | `P5-T01`, `P5-T04` | 1.0 d |  |
+| ✅ `P5-T09` | Crossref deposited references and title search | `P5-T01`, `P5-T04` | 0.75 d |  |
+| ✅ `P5-T10` | Relatedness cache, negative cache, request budget | `P5-T01` | 1.0 d |  |
 | `P5-T11` | Seed resolution with a title-match threshold | `P5-T05`, `P5-T09` | 1.25 d |  |
 | `P5-T12` | Related-paper generators, union and hydration | `P5-T05`, `P5-T06`, `P5-T07`, `P5-T08`, `P5-T09`, `P5-T10` | 1.25 d |  |
-| `P5-T13` | Related scoring, reason chips, recency de-emphasis | `P5-T12` | 1.0 d |  |
-| `P5-T14` | Related pipeline: stages, partial results, wiring | `P5-T11`, `P5-T12`, `P5-T13`, `P5-T19`, `P5-T20` | 1.75 d |  |
-| `P5-T15` | Item menu entry and the window's related mode | `P5-T02` | 1.25 d |  |
+| ✅ `P5-T13` | Related scoring, reason chips, recency de-emphasis | `P5-T12` | 1.0 d |  |
+| ✅ `P5-T14` | Related pipeline: stages, partial results, wiring | `P5-T11`, `P5-T12`, `P5-T13`, `P5-T19`, `P5-T20` | 1.75 d |  |
+| ✅ `P5-T15` | Item menu entry and the window's related mode | `P5-T02` | 1.25 d |  |
 | `P5-T16` | Related results: relation column, picker, key notice | `P5-T14`, `P5-T15` | 1.25 d |  |
-| `P5-T17` | Import from related results, optional *Related* link | `P5-T02`, `P5-T16` | 1.0 d |  |
-| `P5-T18` | Collection reader and statistical profile | `P5-T01`, `P5-T03` | 1.5 d |  |
-| `P5-T19` | Lexical similarity floor (TF-IDF) | `P5-T01` | 0.75 d |  |
+| ✅ `P5-T17` | Import from related results, optional *Related* link | `P5-T02`, `P5-T16` | 1.0 d |  |
+| ✅ `P5-T18` | Collection reader and statistical profile | `P5-T01`, `P5-T03` | 1.5 d |  |
+| ✅ `P5-T19` | Lexical similarity floor (TF-IDF) | `P5-T01` | 0.75 d |  |
 | `P5-T20` | SPECTER2 vectors: fetch, normalise, store | `P5-T03`, `P5-T05` | 1.25 d |  |
-| `P5-T21` | Centroids and seed selection with negatives | `P5-T18`, `P5-T19`, `P5-T20` | 1.0 d |  |
-| `P5-T22` | `COLLECTION_PROFILE` call with estimate and consent | `P5-T18` | 1.5 d |  |
-| `P5-T23` | Recommendation candidate generators | `P5-T06`, `P5-T07`, `P5-T08`, `P5-T10`, `P5-T21` | 1.75 d |  |
-| `P5-T24` | Recommendation filters, scoring, diversity, reasons | `P5-T19`, `P5-T20`, `P5-T21`, `P5-T23` | 1.5 d |  |
-| `P5-T25` | Recommend pipeline: profile check, stages, wiring | `P5-T03`, `P5-T22`, `P5-T23`, `P5-T24` | 2.0 d |  |
-| `P5-T26` | Recommend entry and the editable profile panel | `P5-T02`, `P5-T15`, `P5-T25` | 1.5 d |  |
+| ✅ `P5-T21` | Centroids and seed selection with negatives | `P5-T18`, `P5-T19`, `P5-T20` | 1.0 d |  |
+| ✅ `P5-T22` | `COLLECTION_PROFILE` call with estimate and consent | `P5-T18` | 1.5 d |  |
+| ✅ `P5-T23` | Recommendation candidate generators | `P5-T06`, `P5-T07`, `P5-T08`, `P5-T10`, `P5-T21` | 1.75 d |  |
+| ✅ `P5-T24` | Recommendation filters, scoring, diversity, reasons | `P5-T19`, `P5-T20`, `P5-T21`, `P5-T23` | 1.5 d |  |
+| ✅ `P5-T25` | Recommend pipeline: profile check, stages, wiring | `P5-T03`, `P5-T22`, `P5-T23`, `P5-T24` | 2.0 d |  |
+| ✅ `P5-T26` | Recommend entry and the editable profile panel | `P5-T02`, `P5-T15`, `P5-T25` | 1.5 d |  |
 | `P5-T27` | Recommendation results: dismiss, clusters, import | `P5-T26` | 1.5 d |  |
-| `P5-T28` | Prove the no-key path end to end | `P5-T17`, `P5-T27` | 0.75 d |  |
+| ✅ `P5-T28` | Prove the no-key path end to end | `P5-T17`, `P5-T27` | 0.75 d |  |
 | `P5-T29` | Probe the positive-seed cap with the real key | `P5-T06` | 0.5 d | 🔒 |
 | `P5-T30` | Phase-5 acceptance run against the definition of done | `P5-T28`, `P5-T29`, `P5-T32` | 1.0 d | 🔒 |
 | `P5-T31` | Owner-recorded Semantic Scholar fixtures | `P5-T04` | 0.25 d | 🔒 |
-| `P5-T32` | Crossref lookup by DOI for keyless hydration, and the… | `P5-T09`, `P5-T12` | 0.5 d |  |
+| ✅ `P5-T32` | Crossref lookup by DOI for keyless hydration, and the… | `P5-T09`, `P5-T12` | 0.5 d |  |
 
 ### Phase 6
 
 | Task | Title | Depends on | Est. | Gate |
 |---|---|---|---|---|
-| `P6-T01` | Reconcile Phase 6 types, files and audio states in `docs/07` | — | 1.0 d |  |
-| `P6-T02` | Preference rows Phase 6 reads | — | 0.5 d |  |
-| `P6-T03` | Recorder's Gemini TTS path and synthetic stand-ins | — | 0.75 d |  |
+| ✅ `P6-T01` | Reconcile Phase 6 types, files and audio states in `docs/07` | — | 1.0 d |  |
+| ✅ `P6-T02` | Preference rows Phase 6 reads | — | 0.5 d |  |
+| ✅ `P6-T03` | Recorder's Gemini TTS path and synthetic stand-ins | — | 0.75 d |  |
 | `P6-T04` | Owner-recorded Gemini TTS and script fixtures | `P6-T03` | 0.25 d | 🔒 |
-| `P6-T05` | Gemini TTS client: synthesize, model list, voices | `P6-T01`, `P6-T03` | 1.5 d |  |
-| `P6-T06` | `AUDIO_SCRIPT_EN` and `AUDIO_SCRIPT_KO` prompt files | — | 0.75 d |  |
-| `P6-T07` | Script pass: citation map, target, validation, one retry | `P6-T01`, `P6-T02`, `P6-T06` | 1.5 d |  |
-| `P6-T08` | Korean script path, language default, Korean length check | `P6-T02`, `P6-T06`, `P6-T07` | 0.75 d |  |
-| `P6-T09` | Chunker: sentence- and paragraph-aware splitting | `P6-T01` | 0.75 d |  |
-| `P6-T10` | TTS prices and the two-step audio estimate | `P6-T05`, `P6-T07`, `P6-T09` | 1.25 d |  |
-| `P6-T11` | Synthesis loop: sequential chunks, budget, cancel | `P6-T01`, `P6-T05`, `P6-T09` | 1.0 d |  |
-| `P6-T12` | WAV assembly: silence, one header, sample-rate check | `P6-T01`, `P6-T11` | 0.75 d |  |
-| `P6-T13` | Delivery into Zotero: import or link, naming | `P6-T01`, `P6-T02`, `P6-T12` | 1.5 d |  |
-| `P6-T14` | Failure paths: specific errors, script as text, Save as | `P6-T07`, `P6-T13` | 1.0 d |  |
-| `P6-T15` | Audio confirmation, tier question and both-host disclosure | `P6-T02`, `P6-T05`, `P6-T10` | 1.5 d |  |
-| `P6-T16` | Audio pipeline: stages, job, wiring | `P6-T01`, `P6-T02`, `P6-T05`, `P6-T07`, `P6-T08`, `P6-T10`, `P6-T11`, `P6-T12`, `P6-T13`, `P6-T14`, `P6-T15` | 1.75 d |  |
-| `P6-T17` | Report window audio section and menu entry | `P6-T02`, `P6-T16` | 2.0 d |  |
+| ✅ `P6-T05` | Gemini TTS client: synthesize, model list, voices | `P6-T01`, `P6-T03` | 1.5 d |  |
+| ✅ `P6-T06` | `AUDIO_SCRIPT_EN` and `AUDIO_SCRIPT_KO` prompt files | — | 0.75 d |  |
+| ✅ `P6-T07` | Script pass: citation map, target, validation, one retry | `P6-T01`, `P6-T02`, `P6-T06` | 1.5 d |  |
+| ✅ `P6-T08` | Korean script path, language default, Korean length check | `P6-T02`, `P6-T06`, `P6-T07` | 0.75 d |  |
+| ✅ `P6-T09` | Chunker: sentence- and paragraph-aware splitting | `P6-T01` | 0.75 d |  |
+| ✅ `P6-T10` | TTS prices and the two-step audio estimate | `P6-T05`, `P6-T07`, `P6-T09` | 1.25 d |  |
+| ✅ `P6-T11` | Synthesis loop: sequential chunks, budget, cancel | `P6-T01`, `P6-T05`, `P6-T09` | 1.0 d |  |
+| ✅ `P6-T12` | WAV assembly: silence, one header, sample-rate check | `P6-T01`, `P6-T11` | 0.75 d |  |
+| ✅ `P6-T13` | Delivery into Zotero: import or link, naming | `P6-T01`, `P6-T02`, `P6-T12` | 1.5 d |  |
+| ✅ `P6-T14` | Failure paths: specific errors, script as text, Save as | `P6-T07`, `P6-T13` | 1.0 d |  |
+| ✅ `P6-T15` | Audio confirmation, tier question and both-host disclosure | `P6-T02`, `P6-T05`, `P6-T10` | 1.5 d |  |
+| ✅ `P6-T16` | Audio pipeline: stages, job, wiring | `P6-T01`, `P6-T02`, `P6-T05`, `P6-T07`, `P6-T08`, `P6-T10`, `P6-T11`, `P6-T12`, `P6-T13`, `P6-T14`, `P6-T15` | 1.75 d |  |
+| ✅ `P6-T17` | Report window audio section and menu entry | `P6-T02`, `P6-T16` | 2.0 d |  |
 | `P6-T18` | Prove the offline paths end to end on recorded answers | `P6-T04`, `P6-T17` | 0.75 d |  |
 | `P6-T19` | Phase-6 acceptance run against the definition of done | `P6-T18` | 1.0 d | 🔒 |
 
@@ -640,27 +640,27 @@ uses a synthetic API-key-shaped string, never a real key.
 
 | Task | Title | Depends on | Est. | Gate |
 |---|---|---|---|---|
-| `P7-T01` | Reconcile Phase 7 documents: debug bundle, pane sections… | — | 0.75 d |  |
-| `P7-T02` | Key-parity check script as a blocking CI step | `P7-T04` | 0.75 d |  |
-| `P7-T03` | Hard-coded string and `Intl` sweep | `P7-T08`, `P7-T09`, `P7-T10`, `P7-T11`, `P7-T12`, `P7-T13`, `P7-T33` | 1.75 d |  |
-| `P7-T04` | Retire the spike command; keep its fixture in the tests | — | 0.75 d |  |
+| ✅ `P7-T01` | Reconcile Phase 7 documents: debug bundle, pane sections… | — | 0.75 d |  |
+| ✅ `P7-T02` | Key-parity check script as a blocking CI step | `P7-T04` | 0.75 d |  |
+| ✅ `P7-T03` | Hard-coded string and `Intl` sweep | `P7-T08`, `P7-T09`, `P7-T10`, `P7-T11`, `P7-T12`, `P7-T13`, `P7-T33` | 1.75 d |  |
+| ✅ `P7-T04` | Retire the spike command; keep its fixture in the tests | — | 0.75 d |  |
 | `P7-T05` | Korean review of the UI, the prompts and `README.ko.md` | `P7-T02`, `P7-T03`, `P7-T20`, `P7-T35` | 0.75 d | 🔒 |
-| `P7-T06` | Keyboard, focus, accessible names and contrast pass | `P7-T03` | 2.0 d |  |
+| ✅ `P7-T06` | Keyboard, focus, accessible names and contrast pass | `P7-T03` | 2.0 d |  |
 | `P7-T07` | NVDA smoke test on the release candidate | `P7-T06`, `P7-T26` | 0.25 d | 🔒 |
-| `P7-T08` | Pane: Search, Report & audio, Privacy; defaults review | `P7-T01` | 1.5 d |  |
-| `P7-T09` | Pane: Advanced section, cache usage, verbose logging, data… | `P7-T01`, `P7-T08` | 1.0 d |  |
-| `P7-T10` | Clear actions, delete all plugin data, reset, uninstall… | `P7-T09` | 1.5 d |  |
-| `P7-T11` | Remove all Research Helper content | `P7-T01`, `P7-T10` | 1.5 d |  |
-| `P7-T12` | Error-message audit against NFR-14 | — | 1.25 d |  |
-| `P7-T13` | Log ring buffer and diagnostics: save and copy | `P7-T01`, `P7-T09` | 1.5 d |  |
-| `P7-T14` | Log-redaction audit of a full job at debug level | `P7-T13` | 0.75 d |  |
+| ✅ `P7-T08` | Pane: Search, Report & audio, Privacy; defaults review | `P7-T01` | 1.5 d |  |
+| ✅ `P7-T09` | Pane: Advanced section, cache usage, verbose logging, data… | `P7-T01`, `P7-T08` | 1.0 d |  |
+| ✅ `P7-T10` | Clear actions, delete all plugin data, reset, uninstall… | `P7-T09` | 1.5 d |  |
+| ✅ `P7-T11` | Remove all Research Helper content | `P7-T01`, `P7-T10` | 1.5 d |  |
+| ✅ `P7-T12` | Error-message audit against NFR-14 | — | 1.25 d |  |
+| ✅ `P7-T13` | Log ring buffer and diagnostics: save and copy | `P7-T01`, `P7-T09` | 1.5 d |  |
+| ✅ `P7-T14` | Log-redaction audit of a full job at debug level | `P7-T13` | 0.75 d |  |
 | `P7-T15` | Startup, memory and main-thread profiling | `P7-T06`, `P7-T13` | 2.25 d | 🔒 |
-| `P7-T16` | `docs/09` §7 security review, `SECURITY.md`, dependency audit | `P7-T10`, `P7-T14`, `P7-T21`, `P7-T32` | 1.5 d |  |
-| `P7-T17` | Provider-policy re-verification and dated retention text | `P7-T08` | 0.75 d |  |
-| `P7-T18` | Offline verification | `P7-T12` | 1.0 d |  |
-| `P7-T19` | README and CHANGELOG | `P7-T11`, `P7-T13`, `P7-T17` | 1.5 d |  |
-| `P7-T20` | `README.ko.md` | `P7-T19` | 0.5 d |  |
-| `P7-T21` | Release workflow hardening | — | 1.0 d |  |
+| ✅ `P7-T16` | `docs/09` §7 security review, `SECURITY.md`, dependency audit | `P7-T10`, `P7-T14`, `P7-T21`, `P7-T32` | 1.5 d |  |
+| ✅ `P7-T17` | Provider-policy re-verification and dated retention text | `P7-T08` | 0.75 d |  |
+| ✅ `P7-T18` | Offline verification | `P7-T12` | 1.0 d |  |
+| ✅ `P7-T19` | README and CHANGELOG | `P7-T11`, `P7-T13`, `P7-T17` | 1.5 d |  |
+| ✅ `P7-T20` | `README.ko.md` | `P7-T19` | 0.5 d |  |
+| ✅ `P7-T21` | Release workflow hardening | — | 1.0 d |  |
 | `P7-T22` | `compat.yml`: the scheduled Zotero-beta job | — | 0.5 d |  |
 | `P7-T23` | Forum announcement and community-list drafts | `P7-T19` | 0.5 d |  |
 | `P7-T24` | The release checklist document | `P7-T02`, `P7-T15`, `P7-T16`, `P7-T17`, `P7-T18`, `P7-T22`, `P7-T34`, `P7-T35`, `P7-T36`, `P7-T37`, `P7-T39`, `P7-T40`, `P7-T41` | 1.0 d |  |
@@ -671,13 +671,13 @@ uses a synthetic API-key-shaped string, never a real key.
 | `P7-T29` | Release checklist sign-off | `P7-T07`, `P7-T25`, `P7-T27`, `P7-T28` | 0.25 d | 🔒 |
 | `P7-T30` | Publish v1.0.0 and verify the upgrade from v0.9.0 | `P7-T29` | 0.5 d | 🔒 |
 | `P7-T31` | Forum post and community-list submissions | `P7-T23`, `P7-T30` | 0.25 d | 🔒 |
-| `P7-T32` | Gemini in balanced mode: warn and confirm, not refuse | — | 0.75 d |  |
-| `P7-T33` | Offline message in report, related and summarize windows | `P7-T12`, `P7-T18` | 0.5 d |  |
-| `P7-T34` | Summary prompts send no tags | `P7-T16` | 0.5 d |  |
-| `P7-T35` | Semantic Scholar attribution under the report's references | `P7-T16` | 0.5 d |  |
-| `P7-T36` | Teardown error line through `redact` | `P7-T16` | 0.25 d |  |
-| `P7-T37` | Redaction audit reads the plugin database | `P7-T16` | 0.25 d |  |
-| `P7-T38` | `npm audit fix` as its own reviewed change | `P7-T16` | 0.5 d |  |
+| ✅ `P7-T32` | Gemini in balanced mode: warn and confirm, not refuse | — | 0.75 d |  |
+| ✅ `P7-T33` | Offline message in report, related and summarize windows | `P7-T12`, `P7-T18` | 0.5 d |  |
+| ✅ `P7-T34` | Summary prompts send no tags | `P7-T16` | 0.5 d |  |
+| ✅ `P7-T35` | Semantic Scholar attribution under the report's references | `P7-T16` | 0.5 d |  |
+| ✅ `P7-T36` | Teardown error line through `redact` | `P7-T16` | 0.25 d |  |
+| ✅ `P7-T37` | Redaction audit reads the plugin database | `P7-T16` | 0.25 d |  |
+| ✅ `P7-T38` | `npm audit fix` as its own reviewed change | `P7-T16` | 0.5 d |  |
 | `P7-T39` | Closed plugin windows are freed | `P7-T15` | 1.0 d |  |
 | `P7-T40` | The 500-item full-text job within 400 MB | `P7-T15` | 1.0 d |  |
 | `P7-T41` | The duplicate screen yields and compares only likely pairs | `P7-T15` | 1.0 d |  |
@@ -3707,6 +3707,10 @@ the caller of what the card builds; if it does not, the caller is added with a d
     - (a) **`SECURITY.md`'s contact (item 395(h)).** **DECIDED 2026-11-21 (owner, plan/00 §6 item 408(a)): "GitHub 비공개 신고".** The contact is GitHub's private vulnerability reporting for the repository; no address is published. The owner turns the feature on in the repository's Settings → Security before `P7-T26` (checklist A.2). The coordinator does not change repository settings.
     - (b) **`G-23` expected themes.** **DECIDED 2026-11-21 (owner, plan/00 §6 item 408(b)): "채팅으로, 모음 하나씩".** The owner exports each collection from Zotero as CSV into `D:\KIST\projects\research_helper-g23\` (outside the repository) and gives, in chat, the collection name, the file name and the expected themes. The coordinator reads only the CSV's key column and writes `test/fixtures/trend-eval/<set>/expected-themes.json` with `writtenBy` `owner`. No agent or model writes or suggests a theme. Starts with `small`. The page of item 335(b) is not used.
     - (c) **Started in chat the same day:** the review of cards for `DONE` (`plan/reports/done-review-2026-11-21.md`) and `P7-T05` step 1, the Korean review (`plan/reports/ko-review-p7-chat.md`).
+
+409. **Answered 2026-11-21: the review of cards for `DONE`, and `P7-T05`'s Korean review.** Tag: all phases.
+    - (a) **DECIDED 2026-11-21 (owner, plan/00 §6 item 409(a)): "A 123장 모두 완료".** The 123 cards of group A in `plan/reports/done-review-2026-11-21.md` (list in its `.json` companion) are `DONE`; each State row keeps what it said before after "Was:". Their recorded integration runs were on Zotero 10.0.3; if the three recorded runs on 10.0.8 (item 405(d)) fail, the affected cards are reopened and reported. Groups B (27) and C (17) are unchanged.
+    - (b) **DECIDED 2026-11-21 (owner, plan/00 §6 item 409(b)): "모두 승인".** `TREND_REPORT_KO` 1.0.1 and `AUDIO_SCRIPT_KO` 1.0.0 (47 entries in `plan/reports/ko-review-p7-chat.md`) are approved as they are. No text changes, so no version bump and no cached output is invalidated. With every `ko-KR` UI id already reviewed and `README.ko.md` approved in item 401(c), `G-31` is met; `P7-T05` awaits the owner's `DONE`.
 
 
 ## 7. Regenerating this file

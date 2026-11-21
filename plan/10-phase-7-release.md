@@ -303,7 +303,7 @@ human-gated, and six of those sit on the path: the calendar time of `P7-T15`, `P
 | Field | Value |
 |---|---|
 | **ID** | `P7-T01` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T01.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T01.md`. |
 | **Depends on** | none |
 | **Blocks** | `P7-T08`, `P7-T09`, `P7-T11`, `P7-T13` |
 | **Retires** | none |
@@ -375,7 +375,7 @@ grep -n "2026-11-16" docs/07-architecture-and-data-model.md docs/08-ui-ux-spec.m
 | Field | Value |
 |---|---|
 | **ID** | `P7-T02` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T02.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T02.md`. |
 | **Depends on** | `P7-T04` |
 | **Blocks** | `P7-T05`, `P7-T24` |
 | **Retires** | `R-22` |
@@ -433,7 +433,7 @@ npm run l10n:check && npm run test:unit -- checkL10n && npm run lint:check
 | Field | Value |
 |---|---|
 | **ID** | `P7-T03` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T03.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T03.md`. |
 | **Depends on** | `P7-T08`, `P7-T09`, `P7-T10`, `P7-T11`, `P7-T12`, `P7-T13`, `P7-T33` |
 | **Blocks** | `P7-T05`, `P7-T06` |
 | **Retires** | none |
@@ -527,7 +527,7 @@ section. Callers of `format.ts`: the dialogs, panes and view models it is wired 
 | Field | Value |
 |---|---|
 | **ID** | `P7-T04` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T04.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T04.md`. |
 | **Depends on** | none |
 | **Blocks** | `P7-T02` |
 | **Retires** | `plan/00` §5 backlog item 25 |
@@ -585,7 +585,7 @@ npm run typecheck && npm run lint:check && npm run test:unit && npm run test:int
 | Field | Value |
 |---|---|
 | **ID** | `P7-T05` |
-| **State** | `TODO` |
+| **State** | `TODO` — step 1 done 2026-11-21 (`plan/reports/ko-review-p7-chat.md`, `ko-review-p7.ftl`, `ko-review-p7-prompts.md`): no `ko-KR` UI id was unreviewed. The owner answered the prompt review "모두 승인" (`plan/00` §6 item 409(b)), so step 2 applies no change and bumps no prompt version, and step 3 does not arise. Awaiting the owner's `DONE`. |
 | **Depends on** | `P7-T02`, `P7-T03`, `P7-T20`, `P7-T35` |
 | **Blocks** | `P7-T26` |
 | **Retires** | none |
@@ -648,7 +648,7 @@ npm run l10n:check && npm run test:unit -- i18n prompts
 | Field | Value |
 |---|---|
 | **ID** | `P7-T06` |
-| **State** | `TODO` — built 2026-11-18, awaiting the owner's review (only the owner sets `DONE`); the NVDA half is `P7-T07`'s (`G-33`). Report at `plan/reports/P7-T06.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-18, awaiting the owner's review (only the owner sets `DONE`); the NVDA half is `P7-T07`'s (`G-33`). Report at `plan/reports/P7-T06.md`. |
 | **Depends on** | `P7-T03` |
 | **Blocks** | `P7-T07`, `P7-T15` |
 | **Retires** | none |
@@ -764,7 +764,7 @@ release checklist.
 | Field | Value |
 |---|---|
 | **ID** | `P7-T08` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T08.md`. Korean for 25 ids awaits `G-41`. *Updated 2026-11-17: the owner approved the 25 and they are live (`plan/00` §6 item 394).* |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T08.md`. Korean for 25 ids awaits `G-41`. *Updated 2026-11-17: the owner approved the 25 and they are live (`plan/00` §6 item 394).* |
 | **Depends on** | `P7-T01` |
 | **Blocks** | `P7-T03`, `P7-T09`, `P7-T17` |
 | **Retires** | none |
@@ -826,7 +826,7 @@ npm run typecheck && npm run lint:check && npm run test:unit -- preferencesPane 
 | Field | Value |
 |---|---|
 | **ID** | `P7-T09` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T09.md`. Korean for 12 ids awaits `G-41`. *Updated 2026-11-17: the owner approved the 12 and they are live (`plan/00` §6 item 394).* |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T09.md`. Korean for 12 ids awaits `G-41`. *Updated 2026-11-17: the owner approved the 12 and they are live (`plan/00` §6 item 394).* |
 | **Depends on** | `P7-T01`, `P7-T08` |
 | **Blocks** | `P7-T03`, `P7-T10`, `P7-T13` |
 | **Retires** | none |
@@ -881,7 +881,7 @@ npm run typecheck && npm run lint:check && npm run test:unit -- preferencesPane 
 | Field | Value |
 |---|---|
 | **ID** | `P7-T10` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T10.md`. Korean for 16 ids awaits `G-41`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T10.md`. Korean for 16 ids awaits `G-41`. |
 | **Depends on** | `P7-T09` |
 | **Blocks** | `P7-T03`, `P7-T11`, `P7-T16` |
 | **Retires** | none |
@@ -942,7 +942,7 @@ the pane's host, `onUninstall`.
 | Field | Value |
 |---|---|
 | **ID** | `P7-T11` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T11.md`. Korean for 4 ids awaits `G-41`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T11.md`. Korean for 4 ids awaits `G-41`. |
 | **Depends on** | `P7-T01`, `P7-T10` |
 | **Blocks** | `P7-T03`, `P7-T19` |
 | **Retires** | none |
@@ -1014,7 +1014,7 @@ host in `registerUI.ts`.
 | Field | Value |
 |---|---|
 | **ID** | `P7-T12` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T12.md`. Korean for 23 ids awaits `G-41` (`plan/00` §6 item 389(b)). *Updated 2026-11-17: the owner approved the 23 and they are live (item 389(g)).* |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T12.md`. Korean for 23 ids awaits `G-41` (`plan/00` §6 item 389(b)). *Updated 2026-11-17: the owner approved the 23 and they are live (item 389(g)).* |
 | **Depends on** | none |
 | **Blocks** | `P7-T03`, `P7-T18`, `P7-T33` |
 | **Retires** | none |
@@ -1074,7 +1074,7 @@ npm run typecheck && npm run lint:check && npm run test:unit -- errorMessages ke
 | Field | Value |
 |---|---|
 | **ID** | `P7-T13` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T13.md`. Korean for 7 ids awaits `G-41`. *Updated 2026-11-17: the owner approved the 7 and they are live (`plan/00` §6 item 394).* |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T13.md`. Korean for 7 ids awaits `G-41`. *Updated 2026-11-17: the owner approved the 7 and they are live (`plan/00` §6 item 394).* |
 | **Depends on** | `P7-T01`, `P7-T09` |
 | **Blocks** | `P7-T03`, `P7-T14`, `P7-T15`, `P7-T19` |
 | **Retires** | none |
@@ -1132,7 +1132,7 @@ npm run typecheck && npm run lint:check && npm run test:unit -- diagnostics logg
 | Field | Value |
 |---|---|
 | **ID** | `P7-T14` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T14.md`. The audit found no planted key. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T14.md`. The audit found no planted key. |
 | **Depends on** | `P7-T13` |
 | **Blocks** | `P7-T16` |
 | **Retires** | none |
@@ -1274,7 +1274,7 @@ Then the owner's run of the written procedure.
 | Field | Value |
 |---|---|
 | **ID** | `P7-T16` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T16.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T16.md`. |
 | **Depends on** | `P7-T10`, `P7-T14`, `P7-T21`, `P7-T32` |
 | **Blocks** | `P7-T24`, `P7-T26`, `P7-T34`, `P7-T35`, `P7-T36`, `P7-T37`, `P7-T38` |
 | **Retires** | none |
@@ -1335,7 +1335,7 @@ npm audit --omit=dev; npm run build && npm run test:unit
 | Field | Value |
 |---|---|
 | **ID** | `P7-T17` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T17.md`. Korean for 6 ids awaits `G-41`. *Updated 2026-11-17: the owner approved the 6 and they are live (`plan/00` §6 item 394).* |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T17.md`. Korean for 6 ids awaits `G-41`. *Updated 2026-11-17: the owner approved the 6 and they are live (`plan/00` §6 item 394).* |
 | **Depends on** | `P7-T08` |
 | **Blocks** | `P7-T19`, `P7-T24` |
 | **Retires** | none |
@@ -1392,7 +1392,7 @@ npm run typecheck && npm run lint:check && npm run test:unit -- policyNotes pref
 | Field | Value |
 |---|---|
 | **ID** | `P7-T18` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T18.md`. `Do` step 1 is not met: owner question `plan/00` §6 item 393. *Updated 2026-11-17: the owner answered item 393 (393(d)); `P7-T33` builds the message.* |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T18.md`. `Do` step 1 is not met: owner question `plan/00` §6 item 393. *Updated 2026-11-17: the owner answered item 393 (393(d)); `P7-T33` builds the message.* |
 | **Depends on** | `P7-T12` |
 | **Blocks** | `P7-T24`, `P7-T33` |
 | **Retires** | none |
@@ -1439,7 +1439,7 @@ npm run test:integration -- offline
 | Field | Value |
 |---|---|
 | **ID** | `P7-T19` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T19.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T19.md`. |
 | **Depends on** | `P7-T11`, `P7-T13`, `P7-T17` |
 | **Blocks** | `P7-T20`, `P7-T23`, `P7-T26` |
 | **Retires** | none |
@@ -1492,7 +1492,7 @@ npm run test:integration -- offline
 | Field | Value |
 |---|---|
 | **ID** | `P7-T20` |
-| **State** | `TODO` — built 2026-11-18 as a draft; approved by the owner as written the same day (`G-41`, `plan/00` §6 item 401(c)), so the draft banner is gone; awaiting the owner's `DONE` (only the owner sets it). Reports at `plan/reports/P7-T20.md` and `plan/reports/P7-batchF.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-18 as a draft; approved by the owner as written the same day (`G-41`, `plan/00` §6 item 401(c)), so the draft banner is gone; awaiting the owner's `DONE` (only the owner sets it). Reports at `plan/reports/P7-T20.md` and `plan/reports/P7-batchF.md`. |
 | **Depends on** | `P7-T19` |
 | **Blocks** | `P7-T05`, `P7-T26` |
 | **Retires** | none |
@@ -1534,7 +1534,7 @@ npm run test:integration -- offline
 | Field | Value |
 |---|---|
 | **ID** | `P7-T21` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T21.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T21.md`. |
 | **Depends on** | none |
 | **Blocks** | `P7-T16`, `P7-T26` |
 | **Retires** | none |
@@ -2042,7 +2042,7 @@ npm run typecheck && npm run lint:check && npm run test:unit && npm run l10n:che
 | Field | Value |
 |---|---|
 | **ID** | `P7-T32` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T32.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T32.md`. |
 | **Depends on** | none |
 | **Blocks** | `P7-T16` |
 | **Retires** | none |
@@ -2119,7 +2119,7 @@ security review walks §7's "warned elsewhere" line against the final rule.
 | Field | Value |
 |---|---|
 | **ID** | `P7-T33` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T33.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T33.md`. |
 | **Depends on** | `P7-T12`, `P7-T18` |
 | **Blocks** | `P7-T03` |
 | **Retires** | none |
@@ -2192,7 +2192,7 @@ written by `P7-T18`. Callers: `drawFailure` (related), `finishRun` and `runJob`'
 | Field | Value |
 |---|---|
 | **ID** | `P7-T34` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T34.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T34.md`. |
 | **Depends on** | `P7-T16` |
 | **Blocks** | `P7-T24` |
 | **Retires** | none |
@@ -2252,7 +2252,7 @@ called by `summarizePipeline.ts`, wired in `src/bootstrap/registerPipelines.ts`)
 | Field | Value |
 |---|---|
 | **ID** | `P7-T35` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T35.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T35.md`. |
 | **Depends on** | `P7-T16` |
 | **Blocks** | `P7-T05`, `P7-T24` |
 | **Retires** | none |
@@ -2313,7 +2313,7 @@ constant passed in by `trendReportPipeline.ts`), `renderReportNote` and `labelsO
 | Field | Value |
 |---|---|
 | **ID** | `P7-T36` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T36.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T36.md`. |
 | **Depends on** | `P7-T16` |
 | **Blocks** | `P7-T24` |
 | **Retires** | none |
@@ -2357,7 +2357,7 @@ Caller: `onError`, handed to `createScope` in the `Addon` constructor; construct
 | Field | Value |
 |---|---|
 | **ID** | `P7-T37` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T37.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T37.md`. |
 | **Depends on** | `P7-T16` |
 | **Blocks** | `P7-T24` |
 | **Retires** | none |
@@ -2399,7 +2399,7 @@ production caller and nothing constructed.
 | Field | Value |
 |---|---|
 | **ID** | `P7-T38` |
-| **State** | `TODO` — attempted 2026-11-18: `npm audit fix` stopped with an internal npm error and changed nothing; owner question `plan/00` §6 item 401(d). Report at `plan/reports/P7-T38.md`. *2026-11-18, batch F:* run once with npm 11.21.3 (item 401(d)'s answer). It changed `package-lock.json`, but the remaining `picomatch` advisory can be fixed only by a breaking change, so the package files were restored to HEAD and nothing is to commit; owner question `plan/00` §6 item 403(d). *2026-11-18, batch G:* the owner accepted the development-only advisories for v1.0 (item 403(d)); the closure is recorded, awaiting the owner's review. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: attempted 2026-11-18: `npm audit fix` stopped with an internal npm error and changed nothing; owner question `plan/00` §6 item 401(d). Report at `plan/reports/P7-T38.md`. *2026-11-18, batch F:* run once with npm 11.21.3 (item 401(d)'s answer). It changed `package-lock.json`, but the remaining `picomatch` advisory can be fixed only by a breaking change, so the package files were restored to HEAD and nothing is to commit; owner question `plan/00` §6 item 403(d). *2026-11-18, batch G:* the owner accepted the development-only advisories for v1.0 (item 403(d)); the closure is recorded, awaiting the owner's review. |
 | **Depends on** | `P7-T16` |
 | **Blocks** | `P7-T26` |
 | **Retires** | none |

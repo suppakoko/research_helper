@@ -281,7 +281,7 @@ and before **2026-12-01** if it is to serve as `docs/04` §4.2's re-verification
 | Field | Value |
 |---|---|
 | **ID** | `P6-T01` |
-| **State** | `TODO` — built 2026-11-16, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T01.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-16, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T01.md`. |
 | **Depends on** | none |
 | **Blocks** | `P6-T05`, `P6-T07`, `P6-T09`, `P6-T11`, `P6-T12`, `P6-T13`, `P6-T16` |
 | **Retires** | none |
@@ -381,7 +381,7 @@ tests, build; typings unchanged.
 | Field | Value |
 |---|---|
 | **ID** | `P6-T02` |
-| **State** | `TODO` — built 2026-11-16, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T02.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-16, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T02.md`. |
 | **Depends on** | none |
 | **Blocks** | `P6-T07`, `P6-T08`, `P6-T13`, `P6-T15`, `P6-T16`, `P6-T17` |
 | **Retires** | none |
@@ -454,7 +454,7 @@ three integration runs of 355 passed.
 | Field | Value |
 |---|---|
 | **ID** | `P6-T03` |
-| **State** | `TODO` — built 2026-11-16, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T03.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-16, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T03.md`. |
 | **Depends on** | none |
 | **Blocks** | `P6-T04`, `P6-T05` |
 | **Retires** | none |
@@ -595,7 +595,7 @@ of what it records: the contract and pipeline tests of `P6-T05`, `P6-T07` and `P
 | Field | Value |
 |---|---|
 | **ID** | `P6-T05` |
-| **State** | `TODO` — built 2026-11-16, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T05.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-16, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T05.md`. |
 | **Depends on** | `P6-T01`, `P6-T03` |
 | **Blocks** | `P6-T10`, `P6-T11`, `P6-T15`, `P6-T16` |
 | **Retires** | part of `R-8` |
@@ -675,7 +675,7 @@ decided on 2026-11-16.
 | Field | Value |
 |---|---|
 | **ID** | `P6-T06` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Partly built 2026-11-16 and blocked on `plan/00` §6 item 382, which the owner decided on 2026-11-17; both prompts now load. Report at `plan/reports/P6-T06.md`, with an addendum of 2026-11-17. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Partly built 2026-11-16 and blocked on `plan/00` §6 item 382, which the owner decided on 2026-11-17; both prompts now load. Report at `plan/reports/P6-T06.md`, with an addendum of 2026-11-17. |
 | **Depends on** | none |
 | **Blocks** | `P6-T07`, `P6-T08` |
 | **Retires** | none |
@@ -741,7 +741,7 @@ build with unchanged typings; no integration run, since nothing that runs inside
 | Field | Value |
 |---|---|
 | **ID** | `P6-T07` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T07.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T07.md`. |
 | **Depends on** | `P6-T01`, `P6-T02`, `P6-T06` |
 | **Blocks** | `P6-T08`, `P6-T10`, `P6-T14`, `P6-T16` |
 | **Retires** | none |
@@ -838,7 +838,7 @@ records it.
 | Field | Value |
 |---|---|
 | **ID** | `P6-T08` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T08.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T08.md`. |
 | **Depends on** | `P6-T02`, `P6-T06`, `P6-T07` |
 | **Blocks** | `P6-T16` |
 | **Retires** | part of `R-8` |
@@ -904,7 +904,7 @@ report.
 | Field | Value |
 |---|---|
 | **ID** | `P6-T09` |
-| **State** | `TODO` — built 2026-11-16, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T09.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-16, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T09.md`. |
 | **Depends on** | `P6-T01` |
 | **Blocks** | `P6-T10`, `P6-T11` |
 | **Retires** | none |
@@ -958,7 +958,7 @@ npm run typecheck && npm run lint:check && npm run test:unit -- chunk
 | Field | Value |
 |---|---|
 | **ID** | `P6-T10` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T10.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T10.md`. |
 | **Depends on** | `P6-T05`, `P6-T07`, `P6-T09` |
 | **Blocks** | `P6-T15`, `P6-T16` |
 | **Retires** | none |
@@ -1030,7 +1030,7 @@ until then it uses `P3-T13`'s ratios, as every other call does.
 | Field | Value |
 |---|---|
 | **ID** | `P6-T11` |
-| **State** | `TODO` — built 2026-11-16, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T11.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-16, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T11.md`. |
 | **Depends on** | `P6-T01`, `P6-T05`, `P6-T09` |
 | **Blocks** | `P6-T12`, `P6-T16` |
 | **Retires** | none |
@@ -1105,7 +1105,7 @@ npm run typecheck && npm run lint:check && npm run test:unit -- audioSynthesize
 | Field | Value |
 |---|---|
 | **ID** | `P6-T12` |
-| **State** | `TODO` — built 2026-11-16, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T12.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-16, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T12.md`. |
 | **Depends on** | `P6-T01`, `P6-T11` |
 | **Blocks** | `P6-T13`, `P6-T16` |
 | **Retires** | part of `R-8` |
@@ -1166,7 +1166,7 @@ npm run typecheck && npm run lint:check && npm run test:unit -- audioStore
 | Field | Value |
 |---|---|
 | **ID** | `P6-T13` |
-| **State** | `TODO` — built 2026-11-16, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T13.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-16, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T13.md`. |
 | **Depends on** | `P6-T01`, `P6-T02`, `P6-T12` |
 | **Blocks** | `P6-T14`, `P6-T16` |
 | **Retires** | none |
@@ -1247,7 +1247,7 @@ a WAV over 10 MiB is linked, not imported.
 | Field | Value |
 |---|---|
 | **ID** | `P6-T14` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T14.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T14.md`. |
 | **Depends on** | `P6-T07`, `P6-T13` |
 | **Blocks** | `P6-T16` |
 | **Retires** | part of `R-8` |
@@ -1327,7 +1327,7 @@ string (§0.4 line 30); the English lands with the card.
 | Field | Value |
 |---|---|
 | **ID** | `P6-T15` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T15.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T15.md`. |
 | **Depends on** | `P6-T02`, `P6-T05`, `P6-T10` |
 | **Blocks** | `P6-T16` |
 | **Retires** | none |
@@ -1425,7 +1425,7 @@ unchanged, since the warn-and-confirm path is the one full mode already needed.
 | Field | Value |
 |---|---|
 | **ID** | `P6-T16` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T16.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T16.md`. |
 | **Depends on** | `P6-T01`, `P6-T02`, `P6-T05`, `P6-T07`, `P6-T08`, `P6-T10`, `P6-T11`, `P6-T12`, `P6-T13`, `P6-T14`, `P6-T15` |
 | **Blocks** | `P6-T17` |
 | **Retires** | none |
@@ -1512,7 +1512,7 @@ editing. Caller: `createReportWindowSession` (`P6-T17`).
 | Field | Value |
 |---|---|
 | **ID** | `P6-T17` |
-| **State** | `TODO` — built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T17.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-17, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P6-T17.md`. |
 | **Depends on** | `P6-T02`, `P6-T16` |
 | **Blocks** | `P6-T18` |
 | **Retires** | none |

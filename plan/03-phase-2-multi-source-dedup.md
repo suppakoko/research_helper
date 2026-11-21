@@ -5288,7 +5288,7 @@ fall under the five-token short-title guard (items 172, 173).
 | Field | Value |
 |---|---|
 | **ID** | `P2-T37` |
-| **State** | `TODO` |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). |
 | **Depends on** | `P2-T36` |
 | **Blocks** | `P2-T16` |
 | **Retires** | `plan/00` §6 items 105 and 235 |
@@ -5362,7 +5362,7 @@ green, the coordinator removes `continue-on-error` from the CI integration job a
 | Field | Value |
 |---|---|
 | **ID** | `P2-T38` |
-| **State** | `TODO` — built 2026-11-10, awaiting the coordinator's review; the report goes to `plan/reports/P2-T38.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-10, awaiting the coordinator's review; the report goes to `plan/reports/P2-T38.md`. |
 | **Depends on** | `P2-T09`, `P2-T10` |
 | **Blocks** | `P2-T13`, `P2-T16`, `P2-T39` |
 | **Retires** | `plan/00` §6 item 362(b) |
@@ -5455,7 +5455,7 @@ engine and the same origin in `candidatePairs`, which changes the labelled fixtu
 | Field | Value |
 |---|---|
 | **ID** | `P2-T39` |
-| **State** | `TODO` — built 2026-11-10, awaiting the coordinator's review; the report goes to `plan/reports/P2-T39.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-10, awaiting the coordinator's review; the report goes to `plan/reports/P2-T39.md`. |
 | **Depends on** | `P2-T38` |
 | **Blocks** | `P2-T13`, `P2-T16`, `P2-T40` |
 | **Retires** | `plan/00` §6 item 366(b) and (c) |
@@ -5536,7 +5536,7 @@ follows this card and is the owner's.
 | Field | Value |
 |---|---|
 | **ID** | `P2-T40` |
-| **State** | `TODO` — built 2026-11-12, awaiting the coordinator's review; the report goes to `plan/reports/P2-T40.md`. |
+| **State** | `DONE` — approved 2026-11-21 by the project owner (`plan/00` §6 item 409(a), the A group of `plan/reports/done-review-2026-11-21.md`). Was: built 2026-11-12, awaiting the coordinator's review; the report goes to `plan/reports/P2-T40.md`. |
 | **Depends on** | `P2-T39` |
 | **Blocks** | `P2-T13`, `P2-T16` |
 | **Retires** | `plan/00` §6 item 370(a)–(c) |
