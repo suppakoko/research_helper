@@ -14,11 +14,13 @@ ever found to be compromised.
 
 ## Reporting a vulnerability
 
-**Contact: _to be filled in by the maintainer before the first release._**
+**Contact: GitHub's private vulnerability reporting for this repository.** Open
+<https://github.com/suppakoko/research_helper/security/advisories/new>, or go to the repository's
+**Security** tab and choose **Report a vulnerability**. Only the maintainer sees the report.
 
-<!-- OWNER: put the reporting channel here (an address or GitHub's private vulnerability
-reporting), then remove this comment. It is left blank on purpose: plan/00-task-index.md §6,
-the P7-T16 owner question. -->
+<!-- Decided 2026-11-21 by the owner (plan/00 §6 item 408(a)). The owner turns the feature on in
+the repository's Settings → Security → Private vulnerability reporting before the first release;
+release checklist row "Security contact". -->
 
 Please do not open a public issue for a security problem. Send:
 
@@ -31,7 +33,7 @@ of the problem, rotate it first and describe it by its provider only.
 
 ## What to expect
 
-_The maintainer confirms these times before the first release._
+<!-- The 7-day and 30-day times were decided by the owner on 2026-11-17 (plan/00 §6 item 395(h)). -->
 
 - We acknowledge a report within **7 days**.
 - Within **30 days** we say what we will do: a fixed release, an advisory, or why we do not
