@@ -1,0 +1,1004 @@
+[
+  {
+    "id": "P0-T35",
+    "phase": 0,
+    "group": "B",
+    "reason": "아직 만들지 않음"
+  },
+  {
+    "id": "P1-T37",
+    "phase": 1,
+    "group": "B",
+    "reason": "아직 만들지 않음"
+  },
+  {
+    "id": "P1-T38",
+    "phase": 1,
+    "group": "B",
+    "reason": "아직 만들지 않음"
+  },
+  {
+    "id": "P2-T13",
+    "phase": 2,
+    "group": "B",
+    "reason": "측정 끝남, 직접 하실 승인 G-17만 남음"
+  },
+  {
+    "id": "P2-T16",
+    "phase": 2,
+    "group": "B",
+    "reason": "뒷부분 남음: 중복 정리 최종 기록과 단계 마감"
+  },
+  {
+    "id": "P2-T37",
+    "phase": 2,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P2-T38",
+    "phase": 2,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 반영됨 (카드에는 아직 \"관리자 검토 대기\"로 적힘)"
+  },
+  {
+    "id": "P2-T39",
+    "phase": 2,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 반영됨 (카드에는 아직 \"관리자 검토 대기\"로 적힘)"
+  },
+  {
+    "id": "P2-T40",
+    "phase": 2,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 반영됨 (카드에는 아직 \"관리자 검토 대기\"로 적힘)"
+  },
+  {
+    "id": "P3-T01",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T02",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T03",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T04",
+    "phase": 3,
+    "group": "B",
+    "reason": "직접 하실 키 입력 G-18 대기"
+  },
+  {
+    "id": "P3-T05",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T06",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T07",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T08",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T09",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T10",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T11",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T12",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T13",
+    "phase": 3,
+    "group": "B",
+    "reason": "키 넣으실 때 모델 이름과 가격 확인 남음 (G-18)"
+  },
+  {
+    "id": "P3-T14",
+    "phase": 3,
+    "group": "B",
+    "reason": "직접 하실 키 입력과 확인 G-18 대기"
+  },
+  {
+    "id": "P3-T15",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T16",
+    "phase": 3,
+    "group": "B",
+    "reason": "첫 실제 비용 승인 G-21 대기"
+  },
+  {
+    "id": "P3-T17",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T18",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T19",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T20",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 정답 표시 끝남, 남은 일 없음"
+  },
+  {
+    "id": "P3-T21",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T22",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 결정 G-22 끝남, 남은 일 없음"
+  },
+  {
+    "id": "P3-T23",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T24",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T25",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T26",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T27",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T28",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T29",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T30",
+    "phase": 3,
+    "group": "B",
+    "reason": "실제 키로 하실 녹음 대기 (비용 승인 포함)"
+  },
+  {
+    "id": "P3-T31",
+    "phase": 3,
+    "group": "C",
+    "reason": "직접 하실 실제 비용 실행 (G-18, G-21)"
+  },
+  {
+    "id": "P3-T32",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T33",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T34",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T35",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T36",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T37",
+    "phase": 3,
+    "group": "B",
+    "reason": "아직 만들지 않음, 미룸: 리눅스 기계(G-09) 생긴 뒤, 1.0 출시 이후"
+  },
+  {
+    "id": "P3-T38",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T39",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P3-T40",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 정답 표시 끝남, 남은 일 없음"
+  },
+  {
+    "id": "P3-T41",
+    "phase": 3,
+    "group": "A",
+    "reason": "만듦, 기준 넘김(92.94 %), 남은 일 없음"
+  },
+  {
+    "id": "P4-T01",
+    "phase": 4,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P4-T02",
+    "phase": 4,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P4-T03",
+    "phase": 4,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P4-T04",
+    "phase": 4,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P4-T05",
+    "phase": 4,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P4-T06",
+    "phase": 4,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P4-T07",
+    "phase": 4,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P4-T08",
+    "phase": 4,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P4-T09",
+    "phase": 4,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P4-T10",
+    "phase": 4,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P4-T11",
+    "phase": 4,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P4-T12",
+    "phase": 4,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P4-T13",
+    "phase": 4,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P4-T14",
+    "phase": 4,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P4-T15",
+    "phase": 4,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P4-T16",
+    "phase": 4,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P4-T17",
+    "phase": 4,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P4-T18",
+    "phase": 4,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P4-T19",
+    "phase": 4,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P4-T20",
+    "phase": 4,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P4-T21",
+    "phase": 4,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P4-T22",
+    "phase": 4,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P4-T23",
+    "phase": 4,
+    "group": "B",
+    "reason": "직접 하실 일 대기: 예상 주제 G-23 (2026-11-21 시작), 비용 승인 G-42"
+  },
+  {
+    "id": "P4-T24",
+    "phase": 4,
+    "group": "C",
+    "reason": "유료 실행 세 번 승인(G-42)과 주제 이름 읽기(G-24)"
+  },
+  {
+    "id": "P4-T25",
+    "phase": 4,
+    "group": "C",
+    "reason": "키 입력, 비용 승인, 보고서 직접 읽기 (G-18, G-42, G-24)"
+  },
+  {
+    "id": "P5-T01",
+    "phase": 5,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P5-T02",
+    "phase": 5,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P5-T03",
+    "phase": 5,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P5-T04",
+    "phase": 5,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P5-T05",
+    "phase": 5,
+    "group": "B",
+    "reason": "Semantic Scholar 녹음(P5-T31) 뒤 다시 확인 대기"
+  },
+  {
+    "id": "P5-T06",
+    "phase": 5,
+    "group": "B",
+    "reason": "Semantic Scholar 녹음(P5-T31) 뒤 다시 확인 대기"
+  },
+  {
+    "id": "P5-T07",
+    "phase": 5,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P5-T08",
+    "phase": 5,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P5-T09",
+    "phase": 5,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P5-T10",
+    "phase": 5,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P5-T11",
+    "phase": 5,
+    "group": "B",
+    "reason": "Semantic Scholar 녹음(P5-T31) 뒤 다시 확인 대기"
+  },
+  {
+    "id": "P5-T12",
+    "phase": 5,
+    "group": "B",
+    "reason": "Semantic Scholar 녹음(P5-T31) 뒤 다시 확인 대기"
+  },
+  {
+    "id": "P5-T13",
+    "phase": 5,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P5-T14",
+    "phase": 5,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P5-T15",
+    "phase": 5,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P5-T16",
+    "phase": 5,
+    "group": "B",
+    "reason": "실제 제목 찾기 확인 하나가 P5-T30으로 넘어감"
+  },
+  {
+    "id": "P5-T17",
+    "phase": 5,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P5-T18",
+    "phase": 5,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P5-T19",
+    "phase": 5,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P5-T20",
+    "phase": 5,
+    "group": "B",
+    "reason": "Semantic Scholar 녹음(P5-T31) 뒤 다시 확인 대기"
+  },
+  {
+    "id": "P5-T21",
+    "phase": 5,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P5-T22",
+    "phase": 5,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P5-T23",
+    "phase": 5,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P5-T24",
+    "phase": 5,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P5-T25",
+    "phase": 5,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P5-T26",
+    "phase": 5,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P5-T27",
+    "phase": 5,
+    "group": "B",
+    "reason": "주제 묶음 제목 줄 확인 하나가 P5-T30으로 넘어감"
+  },
+  {
+    "id": "P5-T28",
+    "phase": 5,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P5-T29",
+    "phase": 5,
+    "group": "C",
+    "reason": "Semantic Scholar 키 새로 넣기와 시험 승인 (G-26)"
+  },
+  {
+    "id": "P5-T30",
+    "phase": 5,
+    "group": "C",
+    "reason": "키 입력, 추천 결과 판단, 비용 승인 (G-26, G-27, G-43)"
+  },
+  {
+    "id": "P5-T31",
+    "phase": 5,
+    "group": "C",
+    "reason": "녹음 대기 (키를 새로 받아 직접 실행)"
+  },
+  {
+    "id": "P5-T32",
+    "phase": 5,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P6-T01",
+    "phase": 6,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P6-T02",
+    "phase": 6,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P6-T03",
+    "phase": 6,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P6-T04",
+    "phase": 6,
+    "group": "C",
+    "reason": "직접 하실 녹음 (비용 승인 뒤 직접 키를 넣어 실행)"
+  },
+  {
+    "id": "P6-T05",
+    "phase": 6,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P6-T06",
+    "phase": 6,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P6-T07",
+    "phase": 6,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P6-T08",
+    "phase": 6,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P6-T09",
+    "phase": 6,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P6-T10",
+    "phase": 6,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P6-T11",
+    "phase": 6,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P6-T12",
+    "phase": 6,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P6-T13",
+    "phase": 6,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P6-T14",
+    "phase": 6,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P6-T15",
+    "phase": 6,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P6-T16",
+    "phase": 6,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P6-T17",
+    "phase": 6,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P6-T18",
+    "phase": 6,
+    "group": "B",
+    "reason": "직접 하실 녹음(P6-T04) 대기"
+  },
+  {
+    "id": "P6-T19",
+    "phase": 6,
+    "group": "C",
+    "reason": "실제 비용 실행과 한국어 음성 평가 (G-06, G-18, G-30, G-44)"
+  },
+  {
+    "id": "P7-T01",
+    "phase": 7,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P7-T02",
+    "phase": 7,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P7-T03",
+    "phase": 7,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P7-T04",
+    "phase": 7,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P7-T05",
+    "phase": 7,
+    "group": "C",
+    "reason": "직접 하실 한국어 검토 (G-31, G-41), 오늘 채팅으로 시작"
+  },
+  {
+    "id": "P7-T06",
+    "phase": 7,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P7-T07",
+    "phase": 7,
+    "group": "C",
+    "reason": "직접 하실 시험 (G-33)"
+  },
+  {
+    "id": "P7-T08",
+    "phase": 7,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P7-T09",
+    "phase": 7,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P7-T10",
+    "phase": 7,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P7-T11",
+    "phase": 7,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P7-T12",
+    "phase": 7,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P7-T13",
+    "phase": 7,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P7-T14",
+    "phase": 7,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P7-T15",
+    "phase": 7,
+    "group": "B",
+    "reason": "큰 서재 사본 측정 G-34 대기, Zotero 안 시험 기록 대기"
+  },
+  {
+    "id": "P7-T16",
+    "phase": 7,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P7-T17",
+    "phase": 7,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P7-T18",
+    "phase": 7,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일은 P7-T33으로 해결"
+  },
+  {
+    "id": "P7-T19",
+    "phase": 7,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P7-T20",
+    "phase": 7,
+    "group": "A",
+    "reason": "만듦, 2026-11-18 승인됨, 남은 일 없음"
+  },
+  {
+    "id": "P7-T21",
+    "phase": 7,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P7-T22",
+    "phase": 7,
+    "group": "B",
+    "reason": "첫 올리기와 첫 주간 자동 실행 기록 대기"
+  },
+  {
+    "id": "P7-T23",
+    "phase": 7,
+    "group": "B",
+    "reason": "목록별 제출 방법 확인 안 됨 (관리자 결정으로 P7-T31로 옮김)"
+  },
+  {
+    "id": "P7-T24",
+    "phase": 7,
+    "group": "B",
+    "reason": "먼저 끝나야 할 카드 대기 (P7-T22, P7-T39~P7-T41)"
+  },
+  {
+    "id": "P7-T25",
+    "phase": 7,
+    "group": "C",
+    "reason": "직접 하실 점검 실행 (G-34, G-18, G-45)"
+  },
+  {
+    "id": "P7-T26",
+    "phase": 7,
+    "group": "C",
+    "reason": "직접 하실 공개(G-35)"
+  },
+  {
+    "id": "P7-T27",
+    "phase": 7,
+    "group": "C",
+    "reason": "직접 하실 실행 (키 입력, 비용 승인: G-18, G-06, G-45)"
+  },
+  {
+    "id": "P7-T28",
+    "phase": 7,
+    "group": "C",
+    "reason": "직접 하실 등록 확인(G-04)"
+  },
+  {
+    "id": "P7-T29",
+    "phase": 7,
+    "group": "C",
+    "reason": "직접 하실 서명(G-37)"
+  },
+  {
+    "id": "P7-T30",
+    "phase": 7,
+    "group": "C",
+    "reason": "직접 하실 공개(G-35)"
+  },
+  {
+    "id": "P7-T31",
+    "phase": 7,
+    "group": "C",
+    "reason": "직접 하실 게시(G-36)"
+  },
+  {
+    "id": "P7-T32",
+    "phase": 7,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P7-T33",
+    "phase": 7,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P7-T34",
+    "phase": 7,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P7-T35",
+    "phase": 7,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P7-T36",
+    "phase": 7,
+    "group": "A",
+    "reason": "만듦, 검사 통과, 남은 일 없음"
+  },
+  {
+    "id": "P7-T37",
+    "phase": 7,
+    "group": "A",
+    "reason": "만듦, 검사와 Zotero 안 시험 통과, 남은 일 없음"
+  },
+  {
+    "id": "P7-T38",
+    "phase": 7,
+    "group": "A",
+    "reason": "1.0에서는 경고 허용으로 마무리, 남은 일 없음"
+  },
+  {
+    "id": "P7-T39",
+    "phase": 7,
+    "group": "B",
+    "reason": "Zotero 10.0.8 설치 뒤 Zotero 안 시험 기록 대기"
+  },
+  {
+    "id": "P7-T40",
+    "phase": 7,
+    "group": "B",
+    "reason": "Zotero 10.0.8 설치 뒤 Zotero 안 시험 기록 대기"
+  },
+  {
+    "id": "P7-T41",
+    "phase": 7,
+    "group": "B",
+    "reason": "Zotero 10.0.8 설치 뒤 Zotero 안 시험 기록 대기"
+  }
+]
