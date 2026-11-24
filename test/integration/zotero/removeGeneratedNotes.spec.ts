@@ -56,7 +56,7 @@ const FIXTURE_TAG = "rh-p3t29-fixture";
 const GENERATED = 40;
 /**
  * The 40-note test writes 81 items and notes, one transaction each. Earlier
- * runs logged 13.6 to 20.5 s; one run on Zotero 10.0.8 with the debugger
+ * runs logged 12.9 to 20.5 s; one run on Zotero 10.0.8 with the debugger
  * (2026-11-21) ran over the runner's 30 s default (`plan/reports/P7-batchI.md`
  * §2). DECIDED 2026-11-24 (coordinator, under item 313; plan/00 §6 item 410).
  */

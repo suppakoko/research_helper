@@ -45,7 +45,8 @@
  * 3. **`P7-T39`** (owner, `plan/00` §6 item 403(a)): a closed summarize or
  *    report window leaves the plugin's hold as it closes (`heldCount`), and
  *    every window the reference workload closed is freed, in a run where a
- *    closed window can be freed at all (`windowsCanBeFreed`).
+ *    closed window can be freed at all (`windowsCanBeFreed`); since batch J
+ *    (item 411(c)), the 500-item job's closed window too.
  * 4. **`P7-T40`** (owner, item 403(e)): an acquired paper keeps one compact
  *    copy of its text, measured as the strings fifty held acquisitions add.
  * 5. **Item 405(c)** (owner): §8.8's growth line is read as "no plugin window
@@ -783,6 +784,48 @@ async function runSummarize(win: SummarizeWindow): Promise<SummarizeOutcome> {
   };
 }
 
+/**
+ * The 500-item job's window, opened, run and closed in a function of its own,
+ * so that the test's own frame keeps no reference to the closed window: only
+ * the weak reference to its document comes back. *Batch J, 2026-11-24
+ * (`plan/reports/P7-batchJ.md`; item 411(c)):* with the window held in the
+ * test's own scope, the closed window stayed alive after the job in every run,
+ * and a heap snapshot's retaining paths named no plugin object.
+ */
+async function summarizeAndClose(collectionID: number): Promise<{
+  summarized: SummarizeOutcome;
+  closedDocument: WeakRef<Document>;
+}> {
+  const win = await openSummarize(collectionID);
+  whereNow = summarizeWhere(win);
+  const summarized = await runSummarize(win);
+  const closedDocument = new WeakRef(win.document);
+  await closeWindow(win);
+  whereNow = () => "summarize window closed";
+  return { summarized, closedDocument };
+}
+
+/**
+ * Whether Gecko's accessibility service runs in this Zotero, for the
+ * `P7-T41` line. *Measured 2026-11-24 (batch J, `plan/reports/P7-batchJ.md`):*
+ * with it on, the 500-item job's main thread was 96 % in the accessibility
+ * notification controller (`NotificationController::WillRefresh`), with gaps of
+ * 1 to 4 s; with it off (`accessibility.force_disabled`, a development run) the
+ * job took 9.5 s and its longest gap was 238 ms. It is on when an
+ * accessibility client on the machine asks for it, so it can differ between
+ * runs.
+ */
+function accessibilityState(): string {
+  const info = Services.appinfo as unknown as {
+    accessibilityEnabled?: boolean;
+  };
+  return info.accessibilityEnabled === true
+    ? "on"
+    : info.accessibilityEnabled === false
+      ? "off"
+      : "unknown";
+}
+
 async function openReport(collectionID: number): Promise<ReportWindow> {
   const commands = pluginInstance()?.api.reportWindow;
   if (!commands) assert.fail("registerUI() published no api.reportWindow");
@@ -1421,11 +1464,8 @@ describe("P7-T15 (item 401(a)): NFR-7's workload memory in the test profile", fu
     const startedAt = Date.now();
     whereNow = () => "opening the summarize window";
     const sampler = startSampler();
-    const win = await openSummarize(collection.id);
-    whereNow = summarizeWhere(win);
-    const summarized = await runSummarize(win);
-    const fullTextWindow = new WeakRef(win.document);
-    await closeWindow(win);
+    const { summarized, closedDocument: fullTextWindow } =
+      await summarizeAndClose(collection.id);
     const sampled = sampler.stop();
     whereNow = () => "-";
     const peak = sampled.peak.heap - idle.heap;
@@ -1452,7 +1492,8 @@ describe("P7-T15 (item 401(a)): NFR-7's workload memory in the test profile", fu
     log(
       `P7-T41: the 500-item job's longest sampler gap ${String(sampled.longestGapMs)} ms ` +
         `(Done when: no gap over ${String(LONG_GAP_MS)} ms): ` +
-        (sampled.longestGapMs <= LONG_GAP_MS ? "met" : "NOT MET"),
+        (sampled.longestGapMs <= LONG_GAP_MS ? "met" : "NOT MET") +
+        `; the accessibility service is ${accessibilityState()} (batch J)`,
     );
     const afterJob = await idleReading("after the full-text job");
     log(
@@ -1460,8 +1501,20 @@ describe("P7-T15 (item 401(a)): NFR-7's workload memory in the test profile", fu
         `${mib(afterJob.heap - idle.heap)} MiB; largest explicit/ groups (MiB): ` +
         largestGrowth(idle.reports, afterJob.reports, 10) +
         `; its summarize window is ${fullTextWindow.deref() === undefined ? "freed" : "still alive"}` +
-        ` (P7-T39; logged, not asserted), held handles ${JSON.stringify(heldCounts())}`,
+        ` (P7-T39; asserted where a closed window can be freed), held handles ` +
+        JSON.stringify(heldCounts()),
     );
+    // `P7-T39` (item 411(c)): the job's closed window is freed, in a run where
+    // a closed window can be (`windowsCanBeFreed`, set by the reference
+    // workload). DECIDED 2026-11-24 (coordinator, under item 313; plan/00 §6
+    // item 412).
+    if (windowsCanBeFreed()) {
+      assert.strictEqual(
+        fullTextWindow.deref() === undefined,
+        true,
+        "the full-text job's closed summarize window is freed",
+      );
+    }
     assert.strictEqual(
       summarized.done,
       FULL_TEXT_PAPERS,
