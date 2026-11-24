@@ -2459,7 +2459,7 @@ can break the scaffold. Not built in batch D, as the brief says. No caller and n
 | Field | Value |
 |---|---|
 | **ID** | `P7-T39` |
-| **State** | `TODO` — built 2026-11-18 (batch G), awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T39.md`. *Not finished in the batch:* its recorded integration runs and its integration mutants wait on Zotero starting again in the test profile (`plan/00` §6 item 405(d)); the figures so far come from one development run. |
+| **State** | `TODO` — built 2026-11-18 (batch G), awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T39.md`. *Not finished in the batch:* its recorded integration runs and its integration mutants wait on Zotero starting again in the test profile (`plan/00` §6 item 405(d)); the figures so far come from one development run. *2026-11-24, batch I: integration runs recorded* (`plan/reports/P7-batchI.md`): six runs on Zotero 10.0.8, each 388 passed; without the debugger, 0 of 20 closed windows alive and the plugin's share grew +0.1 MiB across five jobs; integration mutants 5 of 8 killed (the 3 predicted survived). Open: the 500-item job's summarize window stays alive after the job (item 411(c)). State unchanged. |
 | **Depends on** | `P7-T15` |
 | **Blocks** | `P7-T24` |
 | **Retires** | none |
@@ -2521,7 +2521,7 @@ feeds the checklist's §8.8 row.
 | Field | Value |
 |---|---|
 | **ID** | `P7-T40` |
-| **State** | `TODO` — built 2026-11-18 (batch G), awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T40.md`. *Not finished in the batch:* its recorded integration runs and its integration mutants wait on Zotero starting again in the test profile (`plan/00` §6 item 405(d)); the figures so far come from one development run. |
+| **State** | `TODO` — built 2026-11-18 (batch G), awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T40.md`. *Not finished in the batch:* its recorded integration runs and its integration mutants wait on Zotero starting again in the test profile (`plan/00` §6 item 405(d)); the figures so far come from one development run. *2026-11-24, batch I: integration runs recorded* (`plan/reports/P7-batchI.md`): six runs on Zotero 10.0.8, each 388 passed; the 500-item job's peak without the debugger 271.9, 265.5 and 282.2 MB, within 400 MB; memory-only integration mutants 3 of 3 killed; the breakdown probe found one compact copy of about 41 KB a paper and no unexplained 25 KB. The per-paper test takes the least of three rounds (item 410(a)). State unchanged. |
 | **Depends on** | `P7-T15` |
 | **Blocks** | `P7-T24` |
 | **Retires** | none |
@@ -2577,7 +2577,7 @@ owner's answer. Edges as `P7-T39`'s, a coordinator decision (item 404(a)).
 | Field | Value |
 |---|---|
 | **ID** | `P7-T41` |
-| **State** | `TODO` — built 2026-11-18 (batch H), awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T41.md`. *Not finished in the batch:* the 500-item job's sampler gap (the first Done-when line) waits on Zotero 10.0.8 being installed (`plan/00` §6 item 405(d)). |
+| **State** | `TODO` — built 2026-11-18 (batch H), awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T41.md`. *Not finished in the batch:* the 500-item job's sampler gap (the first Done-when line) waits on Zotero 10.0.8 being installed (`plan/00` §6 item 405(d)). *2026-11-24, batch I: integration runs recorded* (`plan/reports/P7-batchI.md`): six runs on Zotero 10.0.8, each 388 passed, the duplicate tests unchanged. The first Done-when line is **not met** in four of six runs (longest gaps 4,298 to 5,117 ms, through the summarize phase, not the screen); met in two (265 and 672 ms). Cause not measured (items 410(i), 411(a)). State unchanged. |
 | **Depends on** | `P7-T15` |
 | **Blocks** | `P7-T24` |
 | **Retires** | none |

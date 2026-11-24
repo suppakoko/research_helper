@@ -705,6 +705,16 @@ describe("P1-T44 — the preference pane", function () {
     // Rule 3: the badge says something, in the window's own language.
     const badge = doc.getElementById("rh-prefs-backend");
     assert.isNotNull(badge, "the badge exists");
+    // The controller sets the badge's Fluent id (`localize`), and Fluent
+    // fills its text on a later refresh, so the text is awaited before it is
+    // read; a badge that stays blank still fails, after the wait. One run on
+    // 2026-11-21 read it blank (`plan/reports/P7-batchI.md` §2).
+    // DECIDED 2026-11-24 (coordinator, under item 313; plan/00 §6 item 410).
+    await waitUntil(
+      () => (badge!.textContent ?? "").trim().length > 0,
+      "Fluent to fill the badge",
+      5_000,
+    ).catch(() => undefined);
     const badgeText = (badge!.textContent ?? "").trim();
     log(
       `badge: l10n=${badge!.getAttribute("data-l10n-id")} text="${badgeText}"`,

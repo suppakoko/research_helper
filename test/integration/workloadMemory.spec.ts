@@ -1195,17 +1195,31 @@ describe("P7-T15 (item 401(a)): NFR-7's workload memory in the test profile", fu
       });
       return total;
     };
+    // Three rounds of 50, every result held to the end, and the least round
+    // is the paper's figure: a string the rest of Zotero makes during one
+    // round adds to that round only, while a second copy of the text adds to
+    // every round. Batch I, 2026-11-24 (`plan/reports/P7-batchI.md` §2): one
+    // run with the debugger read 280.7 KiB a paper from a single round, two
+    // others 68.6 and 69.2 KiB, and the breakdown probe held about 41.5 KB a
+    // paper, 40,960 bytes of it the one Latin-1 copy. DECIDED 2026-11-24 (coordinator, under item 313;
+    // plan/00 §6 item 410).
     const copies = 50;
-    const before = await strings();
+    const roundsOf = 3;
     const held: unknown[] = [];
-    for (let i = 0; i < copies; i += 1) {
-      held.push(await acquireZoteroSource(item, options));
+    const rounds: number[] = [];
+    for (let round = 0; round < roundsOf; round += 1) {
+      const before = await strings();
+      for (let i = 0; i < copies; i += 1) {
+        held.push(await acquireZoteroSource(item, options));
+      }
+      rounds.push(((await strings()) - before) / copies);
     }
-    const perPaper = ((await strings()) - before) / copies;
+    const perPaper = Math.min(...rounds);
     log(
       `P7-T40: one acquired paper of ${String(first.text.length)} characters ` +
-        `holds ${(perPaper / 1024).toFixed(1)} KiB of strings ` +
-        `(${String(copies)} held at once; ${String(first.sections.length)} sections)`,
+        `holds ${(perPaper / 1024).toFixed(1)} KiB of strings, the least of ` +
+        `${String(roundsOf)} rounds (${rounds.map((one) => (one / 1024).toFixed(1)).join(", ")} KiB; ` +
+        `${String(copies)} held a round; ${String(first.sections.length)} sections)`,
     );
     // Below one two-byte copy of the text. Before `P7-T40` a paper held two
     // two-byte copies with power-of-two capacity, about 6.4 bytes a
@@ -1218,7 +1232,7 @@ describe("P7-T15 (item 401(a)): NFR-7's workload memory in the test profile", fu
       2 * first.text.length,
       "one compact copy of the paper is held",
     );
-    assert.strictEqual(held.length, copies);
+    assert.strictEqual(held.length, copies * roundsOf);
   });
 
   it("the reference workload (100 abstracts and one report), five times: each peak, and the growth across five jobs", async function () {

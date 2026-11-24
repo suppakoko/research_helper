@@ -34,7 +34,10 @@ import {
 } from "../../../src/zotero/notes";
 
 declare function describe(title: string, body: () => void): void;
-declare function it(title: string, body: () => Promise<void> | void): void;
+declare function it(
+  title: string,
+  body: (this: { timeout(ms: number): void }) => Promise<void> | void,
+): void;
 declare function before(body: () => Promise<void>): void;
 declare function after(body: () => Promise<void>): void;
 declare const assert: {
@@ -51,6 +54,13 @@ declare function debug(line: string): void;
 const LOG_PREFIX = "[P3-T29]";
 const FIXTURE_TAG = "rh-p3t29-fixture";
 const GENERATED = 40;
+/**
+ * The 40-note test writes 81 items and notes, one transaction each. Earlier
+ * runs logged 13.6 to 20.5 s; one run on Zotero 10.0.8 with the debugger
+ * (2026-11-21) ran over the runner's 30 s default (`plan/reports/P7-batchI.md`
+ * §2). DECIDED 2026-11-24 (coordinator, under item 313; plan/00 §6 item 410).
+ */
+const FORTY_NOTES_TIMEOUT_MS = 120_000;
 const MODEL = "mock-small-2026-01-01";
 
 const createdItemIDs: number[] = [];
@@ -227,6 +237,7 @@ describe("P3-T29 — the summary note and FR-20's removal command", function () 
   });
 
   it("over one user note and 40 generated notes, confirms 40 and moves exactly those", async function () {
+    this.timeout(FORTY_NOTES_TIMEOUT_MS);
     if (collection === undefined) assert.fail("no collection");
     // The first test left one generated note; 39 more, one per new item.
     const started = Date.now();
