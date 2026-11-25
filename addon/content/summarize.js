@@ -58,6 +58,8 @@ var RHSummarizeWindow = {
     started: false,
     running: false,
     pendingAnswer: null,
+    /** P7-T42: each row's element and the line it shows, by row key. */
+    rowElements: new Map(),
   },
 
   /** `window.arguments[0]`, or an empty object when opened without one. */
@@ -247,19 +249,60 @@ var RHSummarizeWindow = {
     }
   },
 
+  /**
+   * P7-T42 (owner, plan/00 §6 item 413(a)): the rows are kept between updates,
+   * one `<p>` per row key (the item's key; a row without one is keyed by its
+   * place), and only a row whose Fluent id or arguments changed is set again.
+   * A row is created, removed or moved only when the set or the order of the
+   * rows changes. Recreating every row on each update made Gecko's
+   * accessibility service pass about a thousand show and hide events to the
+   * operating system per update, 0.7 s a refresh with 500 rows
+   * (plan/reports/P7-batchJ.md §2).
+   */
   renderRows(rows) {
     const container = this.el(this.spec.rows);
     if (!container) {
       return;
     }
-    while (container.firstChild) {
-      container.firstChild.remove();
+    const kept = this.state.rowElements;
+    const next = new Map();
+    const order = [];
+    rows.forEach((line, index) => {
+      let key =
+        line && typeof line.key === "string" && line.key !== ""
+          ? "k:" + line.key
+          : "i:" + index;
+      while (next.has(key)) {
+        key += "+";
+      }
+      const signature = JSON.stringify([line.id, line.args || null]);
+      let entry = kept.get(key);
+      if (!entry || entry.element.parentNode !== container) {
+        const p = document.createElementNS("http://www.w3.org/1999/xhtml", "p");
+        entry = { element: p, signature: "" };
+      }
+      if (entry.signature !== signature) {
+        this.setL10n(entry.element, line);
+        entry.signature = signature;
+      }
+      next.set(key, entry);
+      order.push(entry.element);
+    });
+    const wanted = new Set(order);
+    for (const child of [...container.childNodes]) {
+      if (!wanted.has(child)) {
+        child.remove();
+      }
     }
-    for (const line of rows) {
-      const p = document.createElementNS("http://www.w3.org/1999/xhtml", "p");
-      this.setL10n(p, line);
-      container.appendChild(p);
+    let cursor = container.firstChild;
+    for (const element of order) {
+      if (cursor === element) {
+        cursor = cursor.nextSibling;
+      } else {
+        container.insertBefore(element, cursor);
+      }
     }
+    this.state.rowElements = next;
   },
 
   /** Place a line, or empty and hide the element when there is none. */

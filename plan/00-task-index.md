@@ -3,7 +3,7 @@
 > **Generated from the task cards in `01`–`04` and `07`–`10`** (Phase 4's file, read since 2026-10-26,
 > Phase 5's, read since 2026-11-01, and Phase 6's and Phase 7's, read since 2026-11-16). If a row here disagrees with a card, the card wins — then regenerate
 > this file.
-> **Last updated:** 2026-11-25 · **279 tasks: 235 `DONE`, 44 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **38 of 40**, Phase 3 **34 of 41**, Phase 4 **22 of 25**, Phase 5 **22 of 32**, Phase 6 **16 of 19**, Phase 7 **25 of 41**. **The plan has grown from the 203 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25, plus the 30 Phase 5 was drafted and reviewed with on 2026-11-01; its 31st card, `P5-T31`, added when the owner's decisions were applied, counts as growth; plus the 19 Phase 6 was decomposed into on 2026-11-16; plus the 31 Phase 7 was decomposed into on 2026-11-16) to 279, so 76 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-11-25 · **280 tasks: 235 `DONE`, 45 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 46 `DONE`**, Phase 2 **38 of 40**, Phase 3 **34 of 41**, Phase 4 **22 of 25**, Phase 5 **22 of 32**, Phase 6 **16 of 19**, Phase 7 **25 of 42**. **The plan has grown from the 203 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25, plus the 30 Phase 5 was drafted and reviewed with on 2026-11-01; its 31st card, `P5-T31`, added when the owner's decisions were applied, counts as growth; plus the 19 Phase 6 was decomposed into on 2026-11-16; plus the 31 Phase 7 was decomposed into on 2026-11-16) to 280, so 77 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -29,8 +29,18 @@ Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0
 | 4 — Trend report | 25 | 25.75 d | 25.75–36 d | 8–11 d (+134%) |
 | 5 — Related + recommendations | 32 | 36.25 d | 36.25–51 d | 10–14 d (+159%) |
 | 6 — TTS audio report | 19 | 20.25 d | 20.25–28 d | 7–10 d (+103%) |
-| 7 — Polish, i18n, release | 41 | 35.75 d | 35.75–50 d | 10–14 d (+155%) |
-| **All phases** | **279** | **232.00 d** | **232.00–325 d** | 74–101 d |
+| 7 — Polish, i18n, release | 42 | 36.75 d | 36.75–51 d | 10–14 d (+163%) |
+| **All phases** | **280** | **233.00 d** | **233.00–326 d** | 74–101 d |
+
+**2026-11-25: `P7-T42` added, Phase 7 42 cards, 36.75 d** (§6 items 413(a), 414(a)). The owner's answer
+to item 413(a) is carded as `P7-T42` (1.0 d); 36.75 × 1.4 = 51.45 → 51, so the band is 36.75–51 d (was 35.75–50). The
+last column is 36.75 ÷ 14 = 2.625 → +163% (was +155%). The project total is 114.00 + 25.75 + 36.25 + 20.25 + 36.75 =
+**233.00 d** low and 160 + 36 + 51 + 28 + 51 = **326 d** high (was 232.00–325), still ≈ 11–15 months at 21 working days
+(233.00 ÷ 21 ≈ 11.1; 326 ÷ 21 ≈ 15.5). The critical path P0 → P1 → P2 → P4 → P6 → P7 becomes **164.75–230** (was
+163.75–229) and the Phase 3 route 161.75–226, so the 3 d / 4 d margin is unchanged; Phase 7 lies on Phase 5's route
+too (now 155.00–217), so Phase 5's float is unchanged at 9.75–13 d. Inside Phase 7 the critical path stays 16.50 d:
+`P7-T42` depends on `P7-T15`, blocks `P7-T24` and ends at 13.25 d, like `P7-T39`–`P7-T41` (recomputed by script
+from the card bodies the same day).
 
 **2026-11-18, later still: `P7-T41` added, Phase 7 41 cards, 35.75 d** (§6 items 405(a), 406(a)). The owner's answer
 to item 405(a) is carded as `P7-T41` (1.0 d); 35.75 × 1.4 = 50.05 → 50, so the band is 35.75–50 d (was 34.75–49). The
@@ -663,7 +673,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P7-T21` | Release workflow hardening | — | 1.0 d |  |
 | `P7-T22` | `compat.yml`: the scheduled Zotero-beta job | — | 0.5 d |  |
 | `P7-T23` | Forum announcement and community-list drafts | `P7-T19` | 0.5 d |  |
-| `P7-T24` | The release checklist document | `P7-T02`, `P7-T15`, `P7-T16`, `P7-T17`, `P7-T18`, `P7-T22`, `P7-T34`, `P7-T35`, `P7-T36`, `P7-T37`, `P7-T39`, `P7-T40`, `P7-T41` | 1.0 d |  |
+| `P7-T24` | The release checklist document | `P7-T02`, `P7-T15`, `P7-T16`, `P7-T17`, `P7-T18`, `P7-T22`, `P7-T34`, `P7-T35`, `P7-T36`, `P7-T37`, `P7-T39`, `P7-T40`, `P7-T41`, `P7-T42` | 1.0 d |  |
 | `P7-T25` | Windows manual QA run on the release candidate | `P7-T26` | 1.0 d | 🔒 |
 | `P7-T26` | Publish the release candidate v0.9.0 | `P7-T05`, `P7-T16`, `P7-T19`, `P7-T20`, `P7-T21`, `P7-T24`, `P7-T38` | 0.25 d | 🔒 |
 | `P7-T27` | Fresh-profile README walkthrough and screenshots | `P7-T26` | 0.5 d | 🔒 |
@@ -681,6 +691,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | `P7-T39` | Closed plugin windows are freed | `P7-T15` | 1.0 d |  |
 | `P7-T40` | The 500-item full-text job within 400 MB | `P7-T15` | 1.0 d |  |
 | `P7-T41` | The duplicate screen yields and compares only likely pairs | `P7-T15` | 1.0 d |  |
+| `P7-T42` | The summarize window redraws only the rows that change | `P7-T15` | 1.0 d |  |
 
 ---
 
@@ -3746,6 +3757,17 @@ the caller of what the card builds; if it does not, the caller is added with a d
       **DECIDED 2026-11-25 (owner, plan/00 §6 item 413(b)): "Judge it with screen-reader support off".** `P7-T41`'s first `Done when` line is read on recorded runs whose log says the accessibility service is off; the line with the service on moves to `P7-T42`'s `Done when`. `P7-T41` still waits for the owner's `DONE`.
     - (c) **Test design: the test profile and the accessibility service.** The recorded runs take the service as the machine has it, and each run's log now says which. *Draft answer:* keep it so (it is the case users with a screen reader meet), and record the state beside each run's gap. The alternative is to turn it off in the test profile (`accessibility.force_disabled` 1), which makes the gap figure steady but hides the case.
       **DECIDED 2026-11-25 (coordinator, under item 313).** The draft answer is adopted: the service stays as the machine has it, and each run's log records its state.
+414. **DECIDED 2026-11-25 (coordinator, under item 313): batch K's readings and choices** (`plan/reports/P7-batchK.md`; `plan/reports/P7-T42.md`, `P7-T41.md`). Tag: Phase 7. None blocks a `Done when` line or a phase's finishing condition, so none is a card under rule 9; the owner may overturn any.
+    - (a) **`P7-T42`'s card and estimate.** Carded from batch J's draft (`plan/reports/P7-batchJ.md` §9.3) as item 413(a) says: depends on `P7-T15`, blocks `P7-T24` (the reverse edges added to both), 1.0 d. Re-derived by script from the card bodies (`k-sums.mjs` in the session scratchpad, which reproduced every published figure before the change): Phase 7 35.75 → 36.75 d over 42 cards, band 36.75–51 d; the project 232.00–325 → 233.00–326 d over 280 cards; the critical path P0 → P1 → P2 → P4 → P6 → P7 163.75–229 → 164.75–230 d, with the Phase 3 route at 161.75–226 and Phase 5's at 155.00–217, so the margins are unchanged. Phase 7 lies on the critical path, so the card's 1.0 d is on it; inside Phase 7 the longest path stays 16.50 d, and `P7-T42` ends at 13.25 d, tied with `P7-T39`–`P7-T41`. Propagated to `plan/README` §7's five sites.
+    - (b) **The row key is the item's key, carried on the model's rows** (`SummarizeWindowRow` in `src/ui/dialogs/summarizeDialog.ts`, set by `buildSummarizeWindowModel` from the run view's `itemKey`). `docs/07` declares no type of the summarize window's model, so the type lives beside its builder. `createSummarizeSession` in `src/bootstrap/registerUI.ts` passes the model on unchanged and is not modified (named on the card under rule 10).
+    - (c) **What counts as a changed row:** its Fluent id and arguments, compared as one JSON signature; a row with no key (an older model) is keyed by its place. Nothing else of a row is set, so no attribute, text or accessible name differs from before.
+    - (d) **`place`, which sets the window's eight single lines on each update, is left as it is.** It is outside the card's Files and Do, it touches eight elements, not a list, and the 500-item job met the 1 s line without changing it (`plan/reports/P7-T42.md`).
+    - (e) **The integration check is asserted** in `workloadMemory.spec.ts` (test-only): each summarize job adds every row element once and removes none (`watchRows`, `assertRowsKept`), in the five reference jobs and the 500-item job; a new log line gives the 500-item job's row counts and longest gap beside the accessibility service's state.
+    - (f) **Mutants:** K1–K4 (a rebuild of all rows, a missed text update, a missed removal, a wrong order) were run against the unit tests and all killed; K1 was also run inside Zotero (no debugger, a development run) and killed by the new assertion. K2–K4 were not run inside Zotero; K3's and K4's paths are not reached there, because the pipeline never removes or reorders a row.
+    - (g) **The accessibility service was on in every run of the batch** (each log says so), so no development run with it forced on was needed, and the machine's setting was not touched (item 413(c)).
+    - (h) **The run scripts are batch J's, copied as `k-` files** (the launch gate by path, the scaffold's npm check cache written before every launch and the build, one sha256 manifest of 1,234 files for the recorded runs).
+415. **Raised 2026-11-25: batch K's owner question** (`plan/reports/P7-batchK.md`; `plan/reports/P7-T41.md`, `P7-T42.md`). Tag: Phase 7. The draft answer is **not adopted**.
+    - (a) **How `P7-T41`'s first `Done when` line is read when no recorded run had the accessibility service off.** Item 413(b) reads the line on recorded runs whose log says the service is off. All six of batch K's recorded runs (and all six of batch J's) say it is on, as the machine has it, so the line has no run of that kind. With the service on, which is the harder case and includes `P7-T41`'s own work (the duplicate screen in `prepare`), the 500-item job's longest gap was 188–638 ms in all six, with no gap of 1 s or more. *Draft answer:* read `P7-T41`'s line as met by these six runs, since a run with the service on meets everything a run with it off would. The alternatives are one recorded run with the service off (for that run only, `accessibility.force_disabled` 1 in the test profile, which item 413(c) otherwise keeps as the machine has it), or waiting for a run on a day the service is off. Either way `P7-T41` and `P7-T42` stay `TODO` until the owner says.
 
 
 ## 7. Regenerating this file

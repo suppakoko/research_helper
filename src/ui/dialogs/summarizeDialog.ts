@@ -147,7 +147,8 @@ export interface SummarizeWindowModel {
   readonly remaining: FluentLine | undefined;
   /** The cost line when the dialog was skipped (FR-24: no run without a number). */
   readonly notice: FluentLine | undefined;
-  readonly rows: readonly FluentLine[];
+  /** One line per item, in the pipeline's order, each with its item's key. */
+  readonly rows: readonly SummarizeWindowRow[];
   readonly counts: FluentLine | undefined;
   readonly outcome: FluentLine | undefined;
   /**
@@ -161,6 +162,20 @@ export interface SummarizeWindowModel {
   readonly notesWritable: boolean;
   /** The read-only export is offered (a finished run left summaries). */
   readonly exportAvailable: boolean;
+}
+
+/**
+ * One row of the window: its Fluent line and the key of the item it is for.
+ *
+ * `P7-T42` (owner, `plan/00` §6 item 413(a)): `renderRows` in
+ * `addon/content/summarize.js` keeps one element per key between updates and
+ * touches only a row whose line changed, because recreating every row on each
+ * update made Gecko's accessibility service pass about a thousand show and
+ * hide events to the operating system per update (`plan/reports/P7-batchJ.md`
+ * §2). The key is the item's key, unique within a run's rows.
+ */
+export interface SummarizeWindowRow extends FluentLine {
+  readonly key: string;
 }
 
 /** An outcome the window states that is not the pipeline's own. */
@@ -253,6 +268,7 @@ export function buildSummarizeWindowModel(
         : undefined,
     notice: extras.notice,
     rows: view.rows.map((row) => ({
+      key: row.itemKey,
       id: SUMMARIZE_DIALOG_L10N.row,
       args: { status: row.status, title: row.title },
     })),

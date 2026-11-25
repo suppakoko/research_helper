@@ -55,6 +55,10 @@
  *    growth beside it.
  * 6. **`P7-T41`** (owner, item 405(a)): the 500-item job's longest sampler
  *    gap, against the card's 1 s, logged.
+ * 7. **`P7-T42`** (owner, item 413(a)): each summarize job adds every row
+ *    element once and removes none (`watchRows`), asserted; the 500-item
+ *    job's gap is logged beside the accessibility service's state, which
+ *    item 413(b) reads it by.
  *
  * *Added 2026-11-18 (item 405(b)):* the log's first line says whether the run
  * has the debugger; `RH_DEVTOOLS=off npm run test:integration` runs without it.
@@ -763,17 +767,60 @@ interface SummarizeOutcome {
   readonly failed: number;
   readonly counts: Record<string, unknown>;
   readonly text: string;
+  /** `P7-T42`: the row elements the job added and removed. */
+  readonly rowChanges: RowChanges;
+}
+
+/** `P7-T42`: what the job did to the rows' container, child by child. */
+interface RowChanges {
+  readonly added: number;
+  readonly removed: number;
+  /** The rows the window shows at the end. */
+  readonly rows: number;
+}
+
+/**
+ * `P7-T42` (owner, `plan/00` §6 item 413(a)): counts the elements added to and
+ * removed from the summarize window's rows while a job runs, with a
+ * `MutationObserver` of the window's own on the rows' container (children
+ * only). With the rows kept between updates, a job adds each row once and
+ * removes none; before `P7-T42`, every update removed and added all of them.
+ * The returned function stops the observer and gives the counts; nothing of
+ * the window is kept after it.
+ */
+function watchRows(win: Window): () => RowChanges {
+  const container = win.document.getElementById("rh-summarize-rows");
+  if (container === null) assert.fail("the summarize window has no rows");
+  let added = 0;
+  let removed = 0;
+  const count = (records: readonly MutationRecord[]): void => {
+    for (const record of records) {
+      added += record.addedNodes.length;
+      removed += record.removedNodes.length;
+    }
+  };
+  const observer = new (win as unknown as typeof globalThis).MutationObserver(
+    count,
+  );
+  observer.observe(container, { childList: true });
+  return () => {
+    count(observer.takeRecords());
+    observer.disconnect();
+    return { added, removed, rows: container.children.length };
+  };
 }
 
 async function runSummarize(win: SummarizeWindow): Promise<SummarizeOutcome> {
   const controller = win.RHSummarizeWindow;
   if (!controller) assert.fail("the window loaded without RHSummarizeWindow");
+  const stopWatching = watchRows(win);
   controller.start();
   await acceptCostDialogsUntil(() => !controller.state.running);
   await waitUntil(
     () => textOf(win, "rh-summarize-outcome").length > 0,
     "the summarize outcome to be drawn",
   );
+  const rowChanges = stopWatching();
   const args = argsOf(win.document.getElementById("rh-summarize-outcome"));
   return {
     done: Number(args.done),
@@ -781,7 +828,28 @@ async function runSummarize(win: SummarizeWindow): Promise<SummarizeOutcome> {
     failed: Number(args.failed),
     counts: argsOf(win.document.getElementById("rh-summarize-counts")),
     text: textOf(win, "rh-summarize-outcome"),
+    rowChanges,
   };
+}
+
+/**
+ * `P7-T42`: each row was added once and none removed, so the job's updates
+ * touched rows in place. *Measured 2026-11-24 (batch J,
+ * `plan/reports/P7-batchJ.md` §2):* recreating every row on each update made
+ * Gecko's accessibility service spend about 0.7 s a refresh with 500 rows.
+ */
+function assertRowsKept(
+  what: string,
+  changes: RowChanges,
+  papers: number,
+): void {
+  assert.strictEqual(changes.rows, papers, `${what}: one row per paper`);
+  assert.strictEqual(
+    changes.added,
+    papers,
+    `${what}: each row element is added once`,
+  );
+  assert.strictEqual(changes.removed, 0, `${what}: no row element is removed`);
 }
 
 /**
@@ -1344,10 +1412,21 @@ describe("P7-T15 (item 401(a)): NFR-7's workload memory in the test profile", fu
           `${String(sampled.readCostMs)} ms; gaps of ${String(LONG_GAP_MS)} ms or more: ` +
           sampled.longGaps,
       );
+      log(
+        `P7-T42: reference job ${String(job)}: row elements added ` +
+          `${String(summarized.rowChanges.added)}, removed ` +
+          `${String(summarized.rowChanges.removed)}, shown at the end ` +
+          String(summarized.rowChanges.rows),
+      );
       assert.strictEqual(
         summarized.done,
         REFERENCE_PAPERS,
         `job ${String(job)}: every paper is summarized`,
+      );
+      assertRowsKept(
+        `job ${String(job)}`,
+        summarized.rowChanges,
+        REFERENCE_PAPERS,
       );
       assert.strictEqual(
         summarized.failed,
@@ -1495,6 +1574,19 @@ describe("P7-T15 (item 401(a)): NFR-7's workload memory in the test profile", fu
         (sampled.longestGapMs <= LONG_GAP_MS ? "met" : "NOT MET") +
         `; the accessibility service is ${accessibilityState()} (batch J)`,
     );
+    // `P7-T42` (owner, `plan/00` §6 item 413(a)): the rows are kept between
+    // updates; its Done when reads the line above on a run whose log says the
+    // accessibility service is on, and `P7-T41`'s on one that says off (item
+    // 413(b)).
+    log(
+      `P7-T42: the 500-item job's row elements added ` +
+        `${String(summarized.rowChanges.added)}, removed ` +
+        `${String(summarized.rowChanges.removed)}, shown at the end ` +
+        `${String(summarized.rowChanges.rows)}; longest sampler gap ` +
+        `${String(sampled.longestGapMs)} ms with the accessibility service ` +
+        `${accessibilityState()}: ` +
+        (sampled.longestGapMs <= LONG_GAP_MS ? "met" : "NOT MET"),
+    );
     const afterJob = await idleReading("after the full-text job");
     log(
       `full-text job, idle after − idle before: heap ` +
@@ -1521,6 +1613,11 @@ describe("P7-T15 (item 401(a)): NFR-7's workload memory in the test profile", fu
       "every paper is summarized",
     );
     assert.strictEqual(summarized.failed, 0, "none fails");
+    assertRowsKept(
+      "the full-text job",
+      summarized.rowChanges,
+      FULL_TEXT_PAPERS,
+    );
     assert.strictEqual(
       Number(summarized.counts.fulltext),
       FULL_TEXT_PAPERS,

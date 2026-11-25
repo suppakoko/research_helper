@@ -6,7 +6,7 @@
 > §8 item 7). Every card is `TODO`. Like `plan/09`, this file has had **no independent review** yet;
 > the author's report is `plan/reports/P7-decomposition.md`, and §0.4 lists the lines the owner still
 > has to answer. *Updated 2026-11-16, later (`plan/00` §6 item 381): the owner answered §0.4's lines 18–23; no
-> line is open now, and line 20 added `P7-T32` (0.75 d), so the file holds 32 cards summing to 29.25 d.* *Updated 2026-11-17 (`plan/00` §6 item 393(d)): the owner answered item 393, and `P7-T33` (0.5 d) was added, so the file holds 33 cards summing to 29.75 d.* *Updated 2026-11-17, later (`plan/00` §6 items 395, 398): the owner answered item 395; `P7-T34`–`P7-T38` (2.0 d) were added and `P7-T03` went from 1.5 to 1.75 d for item 395(b)'s step, so the file holds 38 cards summing to 32.00 d.* *Updated 2026-11-18 (`plan/00` §6 items 401(a), 402(a)): the owner answered item 401(a) ("만듦"), and `P7-T15` went from 1.5 to 2.0 d for the test-profile memory measurement, so the file holds 38 cards summing to 32.50 d.* *Updated 2026-11-18, later (`plan/00` §6 items 403, 404(a), 404(b)): the owner answered item 403; `P7-T39` and `P7-T40` (1.0 d each) were added and `P7-T15` went from 2.0 to 2.25 d for item 403(b)'s profile, so the file holds 40 cards summing to 34.75 d.* *Updated 2026-11-18, later still (`plan/00` §6 items 405(a), 406(a)): the owner answered item 405; `P7-T41` (1.0 d) was added, so the file holds 41 cards summing to 35.75 d.* The card sum replaced `docs/11`'s scaled 21–29 d on 2026-11-16 at the five places
+> line is open now, and line 20 added `P7-T32` (0.75 d), so the file holds 32 cards summing to 29.25 d.* *Updated 2026-11-17 (`plan/00` §6 item 393(d)): the owner answered item 393, and `P7-T33` (0.5 d) was added, so the file holds 33 cards summing to 29.75 d.* *Updated 2026-11-17, later (`plan/00` §6 items 395, 398): the owner answered item 395; `P7-T34`–`P7-T38` (2.0 d) were added and `P7-T03` went from 1.5 to 1.75 d for item 395(b)'s step, so the file holds 38 cards summing to 32.00 d.* *Updated 2026-11-18 (`plan/00` §6 items 401(a), 402(a)): the owner answered item 401(a) ("만듦"), and `P7-T15` went from 1.5 to 2.0 d for the test-profile memory measurement, so the file holds 38 cards summing to 32.50 d.* *Updated 2026-11-18, later (`plan/00` §6 items 403, 404(a), 404(b)): the owner answered item 403; `P7-T39` and `P7-T40` (1.0 d each) were added and `P7-T15` went from 2.0 to 2.25 d for item 403(b)'s profile, so the file holds 40 cards summing to 34.75 d.* *Updated 2026-11-18, later still (`plan/00` §6 items 405(a), 406(a)): the owner answered item 405; `P7-T41` (1.0 d) was added, so the file holds 41 cards summing to 35.75 d.* *Updated 2026-11-25 (`plan/00` §6 items 413(a), 414): the owner answered item 413(a); `P7-T42` (1.0 d) was added, so the file holds 42 cards summing to 36.75 d.* The card sum replaced `docs/11`'s scaled 21–29 d on 2026-11-16 at the five places
 > `plan/README.md` §7 names (`docs/11` §1–§2, `plan/00` §1, `plan/05` §4, now a pointer here).
 >
 > **What this file is.** The task-card decomposition of `docs/11-implementation-roadmap.md` §1
@@ -78,14 +78,14 @@ documents, `plan/reports/` and the tree:
 mitigation by `P7-T31`; R-15 was already retired on 2026-09-16 (`P0-T27`) and `P7-T30` re-confirms it
 on a real release; R-1 moves to ongoing handling with `P7-T22`'s job.
 
-**Effort.** **35.75 developer-days over 41 cards** (§1), so the band these cards imply is
-**35.75–50 d** (35.75 × 1.4 = 50.05 → 50). Against the scaled 21–29 d `docs/11` published before this
-file, the low end is **+70 %** (35.75 ÷ 21 = 1.702) and 23 % above the scaled top (35.75 ÷ 29 = 1.233)
+**Effort.** **36.75 developer-days over 42 cards** (§1), so the band these cards imply is
+**36.75–51 d** (36.75 × 1.4 = 51.45 → 51). Against the scaled 21–29 d `docs/11` published before this
+file, the low end is **+75 %** (36.75 ÷ 21 = 1.750) and 27 % above the scaled top (36.75 ÷ 29 = 1.267)
 — above the ~30 % `plan/README.md` §7 calls a signal to re-estimate the phase in `docs/11`, which was
-done. Against the old 10–14 d band the low end is **+155 %** (35.75 ÷ 14 = 2.554). **Propagated
+done. Against the old 10–14 d band the low end is **+163 %** (36.75 ÷ 14 = 2.625). **Propagated
 2026-11-16** to `docs/11` §1–§2, `plan/00` §1 and `plan/05` §4. *Updated 2026-11-16, later (`plan/00` §6
 item 381): this read 28.50 d over 31 cards, 28.50–40 d, +36 %, 2 % below the scaled top and +104 %, before
-`P7-T32` (0.75 d) was added for §0.4 line 20; propagated the same day to the same five sites.* *Updated 2026-11-17 (`plan/00` §6 item 393(d)): this read 29.25 d over 32 cards, 29.25–41 d, +39 %, 1 % above the scaled top and +109 %, before `P7-T33` (0.5 d) was added for the owner's answer to item 393; propagated the same day to the same five sites.* *Updated 2026-11-17, later (`plan/00` §6 item 398): this read 29.75 d over 33 cards, 29.75–42 d, +42 %, 3 % above the scaled top and +113 %, before `P7-T34`–`P7-T38` (2.0 d) were added for the owner's answers to item 395 and `P7-T03` rose by 0.25 d for item 395(b); propagated the same day to the same five sites.* *Updated 2026-11-18 (`plan/00` §6 items 401(a), 402(a)): this read 32.00 d over 38 cards, 32.00–45 d, +52 %, 10 % above the scaled top and +129 %, before `P7-T15` rose by 0.5 d for the owner's answer to item 401(a); propagated the same day to the same five sites.* *Updated 2026-11-18, later (`plan/00` §6 item 404(a)): this read 32.50 d over 38 cards, 32.50–46 d, +55 %, 12 % above the scaled top and +132 %, before `P7-T39` and `P7-T40` (1.0 d each) were added for the owner's answers to items 403(a) and 403(e) and `P7-T15` rose by 0.25 d for item 403(b); propagated the same day to the same five sites.* *Updated 2026-11-18, later still (`plan/00` §6 item 406(a)): this read 34.75 d over 40 cards, 34.75–49 d, +65 %, 20 % above the scaled top and +148 %, before `P7-T41` (1.0 d) was added for the owner's answer to item 405(a); propagated the same day to the same five sites.* §3 says where the days went and where
+`P7-T32` (0.75 d) was added for §0.4 line 20; propagated the same day to the same five sites.* *Updated 2026-11-17 (`plan/00` §6 item 393(d)): this read 29.25 d over 32 cards, 29.25–41 d, +39 %, 1 % above the scaled top and +109 %, before `P7-T33` (0.5 d) was added for the owner's answer to item 393; propagated the same day to the same five sites.* *Updated 2026-11-17, later (`plan/00` §6 item 398): this read 29.75 d over 33 cards, 29.75–42 d, +42 %, 3 % above the scaled top and +113 %, before `P7-T34`–`P7-T38` (2.0 d) were added for the owner's answers to item 395 and `P7-T03` rose by 0.25 d for item 395(b); propagated the same day to the same five sites.* *Updated 2026-11-18 (`plan/00` §6 items 401(a), 402(a)): this read 32.00 d over 38 cards, 32.00–45 d, +52 %, 10 % above the scaled top and +129 %, before `P7-T15` rose by 0.5 d for the owner's answer to item 401(a); propagated the same day to the same five sites.* *Updated 2026-11-18, later (`plan/00` §6 item 404(a)): this read 32.50 d over 38 cards, 32.50–46 d, +55 %, 12 % above the scaled top and +132 %, before `P7-T39` and `P7-T40` (1.0 d each) were added for the owner's answers to items 403(a) and 403(e) and `P7-T15` rose by 0.25 d for item 403(b); propagated the same day to the same five sites.* *Updated 2026-11-18, later still (`plan/00` §6 item 406(a)): this read 34.75 d over 40 cards, 34.75–49 d, +65 %, 20 % above the scaled top and +148 %, before `P7-T41` (1.0 d) was added for the owner's answer to item 405(a); propagated the same day to the same five sites.* *Updated 2026-11-25 (`plan/00` §6 item 414(a)): this read 35.75 d over 41 cards, 35.75–50 d, +70 %, 23 % above the scaled top and +155 %, before `P7-T42` (1.0 d) was added for the owner's answer to item 413(a); propagated the same day to the same five sites, re-derived by script from the card bodies.* §3 says where the days went and where
 the sum is still likely low.
 
 ### Phase definition of done
@@ -264,7 +264,8 @@ them (`plan/04` §0.2 item 10) may now be executed as the answer says. Every ans
 | `P7-T39` | Closed plugin windows are freed | 1.0 | none |
 | `P7-T40` | The 500-item full-text job within 400 MB | 1.0 | none |
 | `P7-T41` | The duplicate screen yields and compares only likely pairs | 1.0 | none |
-| | **Total** | **35.75** | 10 gates |
+| `P7-T42` | The summarize window redraws only the rows that change | 1.0 | none |
+| | **Total** | **36.75** | 10 gates |
 
 *Updated 2026-11-16, later (`plan/00` §6 item 381): `P7-T32` added for §0.4 line 20; the total read 28.50. It is
 a new entry point that blocks `P7-T16`, and it does not lie on the critical path below (it ends at 0.75 d, before
@@ -280,6 +281,8 @@ a new entry point that blocks `P7-T16`, and it does not lie on the critical path
 
 *Updated 2026-11-18, later still (`plan/00` §6 items 405(a), 406(a)): `P7-T41` (1.0 d) added for the owner's answer to item 405(a); the total read 34.75. It depends on `P7-T15` and blocks `P7-T24`, like `P7-T39` and `P7-T40`, and ends at the same 13.25 d, so the path stays 16.50 d (recomputed by script the same day).*
 
+*Updated 2026-11-25 (`plan/00` §6 items 413(a), 414(a)): `P7-T42` (1.0 d) added for the owner's answer to item 413(a); the total read 35.75. It depends on `P7-T15` and blocks `P7-T24`, like `P7-T39`–`P7-T41`, and ends at the same 13.25 d, so the path stays 16.50 d (recomputed by script the same day).*
+
 **Entry points** (no `Depends on`): `P7-T01`, `P7-T04`, `P7-T12`, `P7-T21`, `P7-T22`, `P7-T28`, and `P7-T32`
 (added 2026-11-16, `plan/00` §6 item 381). They
 are documents, the spike's removal, the error audit, two workflow files and the owner's NCBI check;
@@ -287,8 +290,8 @@ none touches a file another entry point holds, except that `P7-T04` and `P7-T12`
 `src/i18n/keys.ts` and both bundles (different ids — exact-string edits).
 
 **Critical path inside the phase:** `P7-T01` → `P7-T08` → `P7-T09` → `P7-T10` → `P7-T11` → `P7-T03`
-→ `P7-T06` → `P7-T15` → `P7-T39` (or `P7-T40` or `P7-T41`, which end at the same 13.25 d) → `P7-T24` → `P7-T26` → `P7-T25` → `P7-T29` → `P7-T30` → `P7-T31`,
-**16.50 d** *(unchanged by `P7-T41`, item 406(a); 15.25 d before 2026-11-18's batch G changes, item 404(a); 14.75 d before 2026-11-18's `P7-T15` change, item 402(a); 14.5 d before 2026-11-17's `P7-T03` change, item 398)*, computed by script over the **Depends on** rows. The documents chain (`P7-T19` →
+→ `P7-T06` → `P7-T15` → `P7-T39` (or `P7-T40`, `P7-T41` or `P7-T42`, which end at the same 13.25 d) → `P7-T24` → `P7-T26` → `P7-T25` → `P7-T29` → `P7-T30` → `P7-T31`,
+**16.50 d** *(unchanged by `P7-T42`, item 414(a), and by `P7-T41`, item 406(a); 15.25 d before 2026-11-18's batch G changes, item 404(a); 14.75 d before 2026-11-18's `P7-T15` change, item 402(a); 14.5 d before 2026-11-17's `P7-T03` change, item 398)*, computed by script over the **Depends on** rows. The documents chain (`P7-T19` →
 `P7-T20` → `P7-T05`, ending at 9.0 d) and the security chain (`P7-T13` → `P7-T14` → `P7-T16`, ending
 at 7.0 d) finish before `P7-T24` (14.25 d; 13.0 d before batch G, item 404(a); 12.5 d before 2026-11-18, item 402(a); 12.25 d before 2026-11-17, item 398) and `P7-T26` need them. Ten of the 31 cards are
 human-gated, and six of those sit on the path: the calendar time of `P7-T15`, `P7-T26`, `P7-T25`,
@@ -1185,7 +1188,7 @@ npm run test:integration -- redactionAudit
 | **ID** | `P7-T15` |
 | **State** | `TODO` — the agent's part built 2026-11-18, awaiting the owner's review and the owner's run on a library copy (`G-34`; only the owner sets `DONE`). Report at `plan/reports/P7-T15.md`. *2026-11-18, batch F:* the test-profile workload memory measurement (item 401(a)) built and run three times; its figures are test-profile figures only; owner questions in `plan/00` §6 item 403. *2026-11-18, batch G:* item 403(b)'s Gecko profile recorded and its cause written in the report; item 405(a) holds the fix as an owner question with a draft card. *2026-11-18, batch H:* the owner answered item 405; the fix is `P7-T41`; the runner can start Zotero without the debugger (`RH_DEVTOOLS=off`, item 405(b)); the spec reads `docs/13` §8.8 as item 405(c) says; the test profile turns Zotero's own update off (item 405(d)). |
 | **Depends on** | `P7-T06`, `P7-T13` |
-| **Blocks** | `P7-T24`, `P7-T39`, `P7-T40`, `P7-T41` |
+| **Blocks** | `P7-T24`, `P7-T39`, `P7-T40`, `P7-T41`, `P7-T42` |
 | **Retires** | `R-10` |
 | **Implements** | `NFR-3`, `NFR-7`, `NFR-10`, `NFR-18` |
 | **Estimate** | 2.25 d |
@@ -1684,7 +1687,7 @@ every point `docs/13` §7.2 item 2 lists, and an entry for each community list i
 |---|---|
 | **ID** | `P7-T24` |
 | **State** | `TODO` — built 2026-11-18, awaiting the owner's review (only the owner sets `DONE`; `P7-T25` fills it, `G-37` signs it). Report at `plan/reports/P7-T24.md`. |
-| **Depends on** | `P7-T02`, `P7-T15`, `P7-T16`, `P7-T17`, `P7-T18`, `P7-T22`, `P7-T34`, `P7-T35`, `P7-T36`, `P7-T37`, `P7-T39`, `P7-T40`, `P7-T41` |
+| **Depends on** | `P7-T02`, `P7-T15`, `P7-T16`, `P7-T17`, `P7-T18`, `P7-T22`, `P7-T34`, `P7-T35`, `P7-T36`, `P7-T37`, `P7-T39`, `P7-T40`, `P7-T41`, `P7-T42` |
 | **Blocks** | `P7-T26` |
 | **Retires** | none |
 | **Implements** | `docs/11` §1 Phase 7 DoD line 1 |
@@ -2577,7 +2580,7 @@ owner's answer. Edges as `P7-T39`'s, a coordinator decision (item 404(a)).
 | Field | Value |
 |---|---|
 | **ID** | `P7-T41` |
-| **State** | `TODO` — built 2026-11-18 (batch H), awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T41.md`. *Not finished in the batch:* the 500-item job's sampler gap (the first Done-when line) waits on Zotero 10.0.8 being installed (`plan/00` §6 item 405(d)). *2026-11-24, batch I: integration runs recorded* (`plan/reports/P7-batchI.md`): six runs on Zotero 10.0.8, each 388 passed, the duplicate tests unchanged. The first Done-when line is **not met** in four of six runs (longest gaps 4,298 to 5,117 ms, through the summarize phase, not the screen); met in two (265 and 672 ms). Cause not measured (items 410(i), 411(a)). State unchanged. *2026-11-24, batch J* (`plan/reports/P7-batchJ.md` §2, §6): the index hypothesis is not confirmed (0 ms of the gaps overlapped index work); the cause is measured: Gecko's accessibility work on the summarize window's rows, which are all recreated on every update (with the service off, one development run: 9.5 s, longest gap 238 ms). Six recorded runs, each 388 passed, all with the service on: the first Done-when line **not met** in all six (longest gaps 3,030 to 4,344 ms); the old gap in `prepare` did not come back. Owner questions items 413(a), 413(b). State unchanged. |
+| **State** | `TODO` — built 2026-11-18 (batch H), awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T41.md`. *Not finished in the batch:* the 500-item job's sampler gap (the first Done-when line) waits on Zotero 10.0.8 being installed (`plan/00` §6 item 405(d)). *2026-11-24, batch I: integration runs recorded* (`plan/reports/P7-batchI.md`): six runs on Zotero 10.0.8, each 388 passed, the duplicate tests unchanged. The first Done-when line is **not met** in four of six runs (longest gaps 4,298 to 5,117 ms, through the summarize phase, not the screen); met in two (265 and 672 ms). Cause not measured (items 410(i), 411(a)). State unchanged. *2026-11-24, batch J* (`plan/reports/P7-batchJ.md` §2, §6): the index hypothesis is not confirmed (0 ms of the gaps overlapped index work); the cause is measured: Gecko's accessibility work on the summarize window's rows, which are all recreated on every update (with the service off, one development run: 9.5 s, longest gap 238 ms). Six recorded runs, each 388 passed, all with the service on: the first Done-when line **not met** in all six (longest gaps 3,030 to 4,344 ms); the old gap in `prepare` did not come back. Owner questions items 413(a), 413(b). State unchanged. *2026-11-25, batch K* (`plan/reports/P7-batchK.md` §4–§5): the owner answered item 413 (the first Done-when line is read on runs whose log says the accessibility service is off; `P7-T42` built for the rest). Six recorded runs, each 388 passed, the duplicate tests unchanged, all with the service on: longest gaps 188–638 ms, none of 1 s or more; no run had the service off, so the line has no qualifying run under item 413(b) (owner question item 415(a)). State unchanged. |
 | **Depends on** | `P7-T15` |
 | **Blocks** | `P7-T24` |
 | **Retires** | none |
@@ -2624,7 +2627,8 @@ yield); `src/pipeline/summarize/screen.ts` (`screenItems`, `findCollectionDuplic
 
 **Done when.**
 - [ ] `workloadMemory.spec.ts`'s 500-item job shows no sampler gap over 1 s, and the spec reports the longest
-  gap.
+  gap. *Amended 2026-11-25 (owner, `plan/00` §6 item 413(b)): this line is read on recorded runs whose log says
+  the accessibility service is off; the line with the service on moved to `P7-T42`'s `Done when`.*
 - [ ] The duplicate tests pass unchanged.
 
 **Verify with.**
@@ -2640,9 +2644,81 @@ which now compares only likely pairs too; it is recorded, not carded (item 406(c
 
 ---
 
+### P7-T42 — The summarize window redraws only the rows that change
+
+| Field | Value |
+|---|---|
+| **ID** | `P7-T42` |
+| **State** | `TODO` — carded 2026-11-25 from the draft in `plan/reports/P7-batchJ.md` §9.3 (owner, `plan/00` §6 item 413(a)). *2026-11-25, batch K: built*, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-T42.md`. Six recorded runs on Zotero 10.0.8, each 388 passed, all with the accessibility service on: the 500-item job took 12.3–16.5 s with a longest sampler gap of 188–638 ms (batch J: 3,030–4,344 ms), so the first Done-when line is met in all six; each job added every row once and removed none (asserted). Unit mutants 4 of 4 killed; K1 killed inside Zotero too. |
+| **Depends on** | `P7-T15` |
+| **Blocks** | `P7-T24` |
+| **Retires** | none |
+| **Implements** | `NFR-3` (no main-thread task over 100 ms) with Gecko's accessibility service on; `NFR-13` (the window is usable with a screen reader) |
+| **Estimate** | 1.0 d |
+| **Human gate** | none |
+
+**Goal.** An update of the summarize window changes only the rows whose line changed, so that with Gecko's
+accessibility service on, the 500-item job shows no sampler gap over 1 s.
+
+> **DECIDED 2026-11-25 (owner, plan/00 §6 item 413(a)): "Add a new card to fix it".** Carded from the draft in
+> `plan/reports/P7-batchJ.md` §9.3 and built: keep each row's element between updates and touch only the rows
+> that changed.
+>
+> **DECIDED 2026-11-25 (owner, plan/00 §6 item 413(b)): "Judge it with screen-reader support off".** The line
+> "no sampler gap over 1 s with the accessibility service on" moves here from `P7-T41`'s first `Done when` line.
+
+**Read first.** `plan/reports/P7-batchJ.md` §2 (the profile: 96 % of the main thread in
+`NotificationController::WillRefresh`; with the service off the job took 9.5 s); `addon/content/summarize.js`
+(`render`, `renderRows`, `setL10n`); `src/ui/dialogs/summarizeDialog.ts` (`buildSummarizeWindowModel`, the
+`rows` it builds); `src/pipeline/summarize/summarizePipeline.ts` (`execute` and its `show` calls, `setStatus`).
+
+**Files.**
+- modify `addon/content/summarize.js` (`renderRows`: one element per row, kept between updates and keyed by the
+  row's item; only a row whose Fluent id or arguments changed is touched; its caller is `render` in the same file)
+- modify `src/ui/dialogs/summarizeDialog.ts` (each row line carries its item key; `buildSummarizeWindowModel` is
+  the constructing function, and its caller, `createSummarizeSession` in `src/bootstrap/registerUI.ts`, passes
+  the model on unchanged, so that file is not modified)
+- modify `test/unit/ui/summarizeDialog.test.ts` (the rows' keys; the shipped script against a fake document)
+- modify `test/integration/workloadMemory.spec.ts` (the row elements a job adds and removes; the gap, logged with
+  the accessibility service's state, as now)
+
+**Do.**
+1. Keep the row elements between updates, keyed by item, and change a row only when its line changed; add, remove
+   or move only the rows whose set or order changed.
+2. Check in a unit test that an update that changes one row touches one element and leaves the others' identity;
+   check in the integration spec that a job removes no row element.
+3. Run the 500-item job with the accessibility service on and record the longest gap; mutation-test the change.
+
+**Do NOT.**
+- Do **not** turn the accessibility service off in the test profile to pass: users with a screen reader run with
+  it on (item 413(c)).
+- Do **not** change the rows' Fluent ids or their text, or any accessible name or key binding of the window.
+
+**Done when.**
+- [ ] In a recorded run whose log says the accessibility service is on, `workloadMemory.spec.ts`'s 500-item job
+  shows no sampler gap over 1 s.
+- [ ] A unit test shows that an update that changes one row leaves every other row's element in place, untouched.
+- [ ] The summarize window's tests (`accessibility.spec.ts`, `offline.spec.ts`, `redactionAudit.spec.ts`) pass
+  unchanged.
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test && \
+  NODE_USE_SYSTEM_CA=1 npm run test:integration -- --exit-on-finish
+```
+
+**Notes.** Added 2026-11-25 (`plan/00` §6 item 413(a)). Priced 1.0 d by the draft the owner adopted. Edges as
+`P7-T41`'s: the card needs `P7-T15`'s spec, which measures the gap, and feeds the checklist's `NFR-3` row; it ends
+at the same 13.25 d inside the phase (by script). Callers (rule 10): `renderRows` is called by `render`, which
+the session calls through the window's sink from `createSummarizeSession` in `src/bootstrap/registerUI.ts`; the
+rows are constructed by `buildSummarizeWindowModel` in `src/ui/dialogs/summarizeDialog.ts`. `docs/07` declares
+no type of the summarize window's model (grep, 2026-11-25), so the row type lives in `summarizeDialog.ts`.
+
+---
+
 ## 3. Estimate reconciliation
 
-Where the 35.75 d sit *(28.50 d when first written; 32.00 since 2026-11-17, item 398; 32.50 since 2026-11-18, item 402(a); 34.75 since 2026-11-18, later, item 404(a); 35.75 since 2026-11-18, later still, item 406(a))* against `plan/05` §4.1's work areas (now §5.1):
+Where the 36.75 d sit *(28.50 d when first written; 35.75 d before 2026-11-25, item 414(a); 32.00 since 2026-11-17, item 398; 32.50 since 2026-11-18, item 402(a); 34.75 since 2026-11-18, later, item 404(a); 35.75 since 2026-11-18, later still, item 406(a))* against `plan/05` §4.1's work areas (now §5.1):
 
 | Work area | Cards | Days |
 |---|---|---|
@@ -2651,7 +2727,7 @@ Where the 35.75 d sit *(28.50 d when first written; 32.00 since 2026-11-17, item
 | W7-3 Accessibility pass | `P7-T06`, `P7-T07` | 2.25 |
 | W7-4 Preferences consolidation | `P7-T08`, `P7-T09`, `P7-T10`, `P7-T11` | 5.5 |
 | W7-5 Error-message and redaction audit | `P7-T12`, `P7-T13`, `P7-T14` | 3.5 |
-| W7-6 Performance and resource profiling | `P7-T15`, `P7-T39`, `P7-T40` (added 2026-11-18, item 404(a)), `P7-T41` (added 2026-11-18, later, item 406(a)) | 5.25 |
+| W7-6 Performance and resource profiling | `P7-T15`, `P7-T39`, `P7-T40` (added 2026-11-18, item 404(a)), `P7-T41` (added 2026-11-18, later, item 406(a)), `P7-T42` (added 2026-11-25, item 414(a)) | 6.25 |
 | W7-7 Security review | `P7-T16`, `P7-T17` | 2.25 |
 | W7-8 Documentation | `P7-T19` (and `SECURITY.md` in `P7-T16`, `README.ko.md` in W7-2) | 1.5 |
 | W7-9 Release engineering | `P7-T21`, `P7-T22`, `P7-T26`, `P7-T30` | 2.25 |
@@ -2661,7 +2737,7 @@ Where the 35.75 d sit *(28.50 d when first written; 32.00 since 2026-11-17, item
 | Not a work area: the owner's answer to §0.4 line 20 (added 2026-11-16, item 381) | `P7-T32` | 0.75 |
 | Not a work area: the owner's answer to item 393 (added 2026-11-17, item 393(d)) | `P7-T33` | 0.5 |
 | Not a work area: the owner's answers to item 395 (added 2026-11-17, item 398) | `P7-T34`, `P7-T35`, `P7-T36`, `P7-T37`, `P7-T38` | 2.0 |
-| | **Total** | **35.75** |
+| | **Total** | **36.75** |
 
 **Where the sum is likely low.** (1) `P7-T03` and `P7-T06`: a sweep is priced on the windows that
 exist today; Phases 5 and 6 add windows not yet built, and their findings are counted only as
