@@ -3980,8 +3980,26 @@ export interface SerializedError {
   readonly retryable: boolean;
   readonly httpStatus?: number;
   readonly stack?: string;
+  /** Added 2026-11-25 (`P1-T37`). The failing request's host name only, redacted; `NetworkError` and its subclasses. */
+  readonly host?: string;
+  /** Added 2026-11-25 (`P1-T37`). The time limit in whole seconds (at least 1); `TimeoutError` only. */
+  readonly timeoutSeconds?: number;
 }
 ```
+
+> **`host` and `timeoutSeconds`. Added 2026-11-25 (`plan/02` `P1-T37`).** `08-ui-ux-spec.md` §8.3's
+> TIMEOUT row, "{host} did not respond within {n}s.", and NETWORK row, "Could not reach {host}.",
+> each name a value the four members above did not carry, so neither row could render: §10.1's
+> `toSerialized()` dropped the thrower's `context`, where the URL and `TimeoutError.timeoutMs`
+> lived. The two members are a **named subset**, never the context itself: `host` is
+> `NetworkError.host`, which the constructor reads off `context.url` through `hostNameOf` (the
+> host name of a URL, or a bare host name; `undefined` for a path, a `file://` URL or anything
+> else) and passes through `redact`, the one redactor; `timeoutSeconds` is
+> `TimeoutError.timeoutMs` rounded to whole seconds. Neither can hold a path, a query, a user path,
+> an export path or a linked audio folder. A view whose row needs a member that is absent draws the
+> generic row. **The provenance gate does not carry them** (`src/core/provenance.ts`'s
+> `redactSerializedError` copies only the members it names, and `schema/provenance.schema.json`'s
+> `SerializedError` is unchanged); `JobRecord.error` keeps them through `redactRecord`.
 
 > **Redaction before storage. Decided 2026-10-20 (owner; `plan/00` §6 item 242).** Every record in
 > this section that the plugin persists — `StoredSummary` **with its `content` included**, and
@@ -4593,7 +4611,7 @@ Cancellation is cooperative and checked at four places:
 
 1. Before each unit of work in every `for` loop (`ctx.token.throwIfCancelled()`).
 2. Inside `RateLimiter.acquire` — a job waiting on a token bucket must not block cancellation.
-3. Passed into the HTTP layer as `Zotero.HTTP.request`'s **`cancellerReceiver`** — *not* an `AbortSignal`, which does not exist in the plugin sandbox (`docs/01` §2.3) — so in-flight requests are actually aborted rather than merely ignored. Measured 2026-09-30 (`P0-T17`): the request rejects with `Zotero.HTTP.CancelledException`, which `src/core/http/client.ts` maps to `HttpError` code `CANCELLED`.
+3. Passed into the HTTP layer as `Zotero.HTTP.request`'s **`cancellerReceiver`** — *not* an `AbortSignal`, which does not exist in the plugin sandbox (`docs/01` §2.3) — so in-flight requests are actually aborted rather than merely ignored. Measured 2026-09-30 (`P0-T17`): the request rejects with `Zotero.HTTP.CancelledException`, which `src/core/http/client.ts` maps to `HttpError` code `CANCELLED`. *Checked 2026-11-25 (`P0-T35`), with the cancel fired after 12,288 characters had arrived:* the same exception, 0–1 ms after the call, no further progress events in 2,500 ms, and the client still classifies it as code `CANCELLED`; since `P1-T02`'s `toHierarchy` what the client **throws** for that code is §10.1's `OperationCancelledError` (the `HttpError` stays inside the client), which is what the probe recorded. **The XHR's body is empty after the cancel** (0 characters), so a job that keeps partial output keeps the text it received through `HttpOptions.onBodyText`, not the response read afterwards (`docs/01` §8.4's note of the same date).
 4. Between pipeline stages.
 
 > **Retries, 2026-10-20 (`plan/00` §6 item 228).** Now that §7.3's retry cells are in effect, a request may sit in a
@@ -6010,6 +6028,10 @@ export abstract class ResearchHelperError extends Error {
       // being followed exactly. `src/core/logger.ts` already redacted a stack when it walked an
       // `Error` in a context object, so the two paths disagreed about the same string.
       stack: redact(this.stack),
+      // Added 2026-11-25 (`P1-T37`): two named members, each read off a public member of one
+      // class, never off `context` (§5.2's note). `wholeSeconds` rounds, with a floor of 1.
+      host: this instanceof NetworkError ? this.host : undefined,
+      timeoutSeconds: this instanceof TimeoutError ? wholeSeconds(this.timeoutMs) : undefined,
     };
   }
 }
@@ -6043,6 +6065,15 @@ export class NetworkError extends ResearchHelperError {
   readonly code: string = "NETWORK";
   readonly messageKey = "rh-error-network";
   readonly retryable = true;
+  // Added 2026-11-25 (`P1-T37`): the request's host name, from `context.url` through
+  // `hostNameOf` (redacted), or `undefined`. The constructor's signature is the base's, so no
+  // thrower changes. Every thrower passes a redacted URL: the HTTP client's OFFLINE and NETWORK
+  // call sites passed the raw one until this card, and `redactUrl` now wraps both.
+  readonly host: string | undefined;
+  constructor(message: string, context: Record<string, unknown> = {}, options?: { cause?: unknown }) {
+    super(message, context, options);
+    this.host = hostNameOf(context.url);
+  }
 }
 export class OfflineError extends NetworkError {
   override readonly code: string = "OFFLINE";

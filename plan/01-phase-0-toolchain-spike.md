@@ -4740,7 +4740,7 @@ documentation and belongs in the repository. `npm run build`, `npm run typecheck
 | Field | Value |
 |---|---|
 | **ID** | `P0-T35` |
-| **State** | `TODO` |
+| **State** | `TODO` — *2026-11-25, batch L: measured*, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P0-T35.md`. Legs [14] and [15] now read from a loopback server the probe starts (they were written against Europe PMC and never run); two runs on Zotero 10.0.8 with the cancel on the third progress event, 12,288 characters received: (a) the cancel stops it (`Zotero.HTTP.CancelledException`, 0–1 ms; the server's next write refused), (b) the partial body is **not** readable from the request afterwards (0 characters; the client had delivered all 12,288 through `onBodyText`), (c) 0 further events in 2,500 ms; the client throws `OperationCancelledError` (code `CANCELLED`). `docs/01` §8.4, `docs/07` §7.4 and `docs/spikes/phase-0.md` (Addendum C) carry dated notes. State unchanged. |
 | **Depends on** | `P0-T17` |
 | **Blocks** | none |
 | **Retires** | none |

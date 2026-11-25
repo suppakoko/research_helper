@@ -206,15 +206,21 @@ const ABORT_QUIET_PERIOD_MS = 2500;
 //
 // Keyless by design (the card's `Do NOT`): the three open questions — does the
 // cancel take effect, is the partial body readable, do further events fire —
-// are transport questions, not SSE or provider ones. Europe PMC's
-// `resultType=core` carries full abstracts, so 200 records is hundreds of
-// kilobytes and arrives in several events.
-const MIDSTREAM_URL =
-  "https://www.ebi.ac.uk/europepmc/webservices/rest/search" +
-  "?query=crispr%20base%20editing&format=json&resultType=core&pageSize=200";
+// are transport questions, not SSE or provider ones.
+//
+// *Corrected 2026-11-25 (`P0-T35`, batch L):* these legs were written on
+// 2026-09-30 against Europe PMC, a public host, and never run. The run that
+// answers the card may not call a public host, so the probe now **starts its
+// own loopback server** (`startLoopbackStream`, an `nsIServerSocket` bound to
+// 127.0.0.1 only) and both legs read from it. The server sends a fixed body in
+// `MIDSTREAM_CHUNKS` writes of `MIDSTREAM_CHUNK_CHARS` characters,
+// `MIDSTREAM_CHUNK_INTERVAL_MS` apart — 48 × 80 ms is about 3.8 s, the length
+// of `P0-T16`'s measured stream (3,897 ms) — so an abort after the third
+// progress event lands well inside it, every run, with no network between.
+const MIDSTREAM_CHUNKS = 48;
+const MIDSTREAM_CHUNK_CHARS = 4096;
+const MIDSTREAM_CHUNK_INTERVAL_MS = 80;
 const MIDSTREAM_ABORT_AFTER_TICKS = 3;
-/** Margin past the measured first-tick time for the facade leg. */
-const MIDSTREAM_FACADE_MARGIN_MS = 150;
 
 /** docs/02 §3.3 example (a), verbatim parameters. */
 const PUBMED_ESEARCH =
@@ -250,9 +256,16 @@ export interface ProbeEnv {
     readonly HTTP: _ZoteroTypes.HTTP;
     debug(message: string): void;
   };
-  readonly services: Pick<JSServices, "prompt" | "wm">;
+  /** `tm` since 2026-11-25 (`P0-T35`): the loopback server reads on the main thread. */
+  readonly services: Pick<JSServices, "prompt" | "wm" | "tm">;
   /** `Ci` / `Components.interfaces`, for reading back the sent headers. */
   readonly interfaces: unknown;
+  /**
+   * `Cc` / `Components.classes`, for `P0-T35`'s loopback server (added
+   * 2026-11-25). Absent in a block emitted before then; the legs then report
+   * BLOCKED rather than reach a public host.
+   */
+  readonly classes?: unknown;
   /** package.json `version` at emit time; goes into the D10 User-Agent. */
   readonly version: string;
   /**
@@ -438,18 +451,7 @@ export async function main(env: ProbeEnv): Promise<string> {
     );
 
     // ---- P0-T35 -----------------------------------------------------------
-    say();
-    say("=== P0-T35: cancellation after the first byte (keyless) ===");
-
-    say();
-    const midStream = await midStreamAbortLeg(env, say);
-    record("P0-T35 mid-stream cancellerReceiver abort", midStream.verdict);
-
-    say();
-    record(
-      "P0-T35 HttpClient.onCanceller mapping mid-stream",
-      await midStreamClientAbortLeg(client, midStream.firstTickAt, say),
-    );
+    await midStreamSection(env, userAgent, say, record);
 
     say();
     say("=== VERDICTS ===");
@@ -458,6 +460,94 @@ export async function main(env: ProbeEnv): Promise<string> {
     say(`PROBE ABORTED: ${describeError(e)}`);
   }
   return lines.join("\n");
+}
+
+/**
+ * `P0-T35` alone (added 2026-11-25): legs [14] and [15] against the probe's own
+ * loopback server, with no key dialog and no other leg, so the card's
+ * measurement can be run without reaching any host but 127.0.0.1. Emitted by
+ * `npx tsx scripts/spike-network.ts --p0-t35`.
+ */
+export async function mainMidStream(env: ProbeEnv): Promise<string> {
+  const lines: string[] = [];
+  const say = (line = ""): void => {
+    const safe = redact(line, []);
+    lines.push(safe);
+    try {
+      env.zotero.debug(`[research_helper P0-T35] ${safe}`);
+    } catch {
+      /* the summary still comes back as the result */
+    }
+  };
+  const verdicts: string[] = [];
+  const record = (label: string, verdict: string): void => {
+    verdicts.push(`${label.padEnd(46)} ${verdict}`);
+  };
+  try {
+    const userAgent = buildUserAgent(env.version);
+    say("research_helper network probe - P0-T35 only (loopback, keyless)");
+    say(`run at      ${new Date().toISOString()}`);
+    say(`zotero      ${env.zotero.version}`);
+    say(`user-agent  ${userAgent}`);
+    await midStreamSection(env, userAgent, say, record);
+    say();
+    say("=== VERDICTS ===");
+    for (const v of verdicts) say(v);
+  } catch (e) {
+    say(`PROBE ABORTED: ${describeError(e)}`);
+  }
+  return lines.join("\n");
+}
+
+/** `P0-T35`'s section, shared by both entry points: one loopback server, two legs. */
+async function midStreamSection(
+  env: ProbeEnv,
+  userAgent: string,
+  say: (line?: string) => void,
+  record: (label: string, verdict: string) => void,
+): Promise<void> {
+  say();
+  say("=== P0-T35: cancellation after the first byte (keyless, loopback) ===");
+  const server = startLoopbackStream(env);
+  if (typeof server === "string") {
+    say(`    no loopback server: ${server}`);
+    record("P0-T35 mid-stream cancellerReceiver abort", `BLOCKED - ${server}`);
+    record(
+      "P0-T35 HttpClient.onCanceller mapping mid-stream",
+      `BLOCKED - ${server}`,
+    );
+    return;
+  }
+  try {
+    say(
+      `    loopback server ${server.origin}: ${MIDSTREAM_CHUNKS} writes of ` +
+        `${MIDSTREAM_CHUNK_CHARS} chars, ${MIDSTREAM_CHUNK_INTERVAL_MS} ms apart ` +
+        `(${MIDSTREAM_CHUNKS * MIDSTREAM_CHUNK_CHARS} chars, Content-Length set)`,
+    );
+    say();
+    const leg14 = await midStreamAbortLeg(
+      env,
+      `${server.origin}/p0-t35/leg14`,
+      say,
+    );
+    reportConnection(server, 0, say);
+    record("P0-T35 mid-stream cancellerReceiver abort", leg14);
+
+    say();
+    const leg15 = await midStreamClientAbortLeg(
+      env,
+      userAgent,
+      `${server.origin}/p0-t35/leg15`,
+      say,
+    );
+    reportConnection(server, 1, say);
+    record("P0-T35 HttpClient.onCanceller mapping mid-stream", leg15);
+    say(
+      `    connections accepted by the loopback server: ${server.connections.length}`,
+    );
+  } finally {
+    server.stop();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -2391,12 +2481,6 @@ async function fetchAbortLeg(
 // P0-T35: cancellation AFTER the first byte (what P0-T17 could not reach)
 // ---------------------------------------------------------------------------
 
-interface MidStreamResult {
-  readonly verdict: string;
-  /** When the first progress event fired, so leg [15] can abort after it. */
-  readonly firstTickAt: number | null;
-}
-
 /**
  * `P0-T17` verified the cancellation primitive and said plainly what it did not
  * establish. This leg fixes the one thing that was wrong with it: the abort is
@@ -2411,13 +2495,14 @@ interface MidStreamResult {
  */
 async function midStreamAbortLeg(
   env: ProbeEnv,
+  url: string,
   say: (line?: string) => void,
-): Promise<MidStreamResult> {
+): Promise<string> {
   say(
     `[14] P0-T35: abort on progress event #${MIDSTREAM_ABORT_AFTER_TICKS} - ` +
       `cancellation AFTER data has arrived (keyless)`,
   );
-  say(`    GET ${MIDSTREAM_URL}`);
+  say(`    GET ${url}`);
 
   const t0 = Date.now(); // docs/01 §2.3: no `performance` in the sandbox
   const ticks: { at: number; total: number; afterAbort: boolean }[] = [];
@@ -2455,10 +2540,10 @@ async function midStreamAbortLeg(
     }
   };
 
-  const promise = env.zotero.HTTP.request("GET", MIDSTREAM_URL, {
+  const promise = env.zotero.HTTP.request("GET", url, {
     headers: {
       "User-Agent": buildUserAgent(env.version),
-      Accept: "application/json",
+      Accept: "text/plain",
     },
     // mechanic 1 from P0-T16: `responseType: "text"` is MANDATORY. With
     // "json" a partial response cannot be observed at all, which is the
@@ -2528,8 +2613,25 @@ async function midStreamAbortLeg(
     `    (b) partial body readable afterwards: ` +
       (readableAfter === null
         ? "NO (xhr.response unreadable)"
-        : `YES, ${readableAfter} chars`),
+        : readableAfter === 0
+          ? `NO - xhr.response reads as an empty string (0 chars) after the rejection`
+          : `YES, ${readableAfter} chars`),
   );
+  // As P0-T17's leg [11]: the class by instanceof, against all five. Zotero.HTTP's
+  // exceptions are not `Error`s, so `name` cannot tell them apart.
+  if (error !== undefined) {
+    for (const cls of [
+      "CancelledException",
+      "TimeoutException",
+      "BrowserOfflineException",
+      "SecurityException",
+      "UnexpectedStatusException",
+    ] as const) {
+      say(
+        `      instanceof Zotero.HTTP.${cls.padEnd(26)} ${error instanceof env.zotero.HTTP[cls] ? "yes" : "no"}`,
+      );
+    }
+  }
   say(
     `    (c) further progress events in ${ABORT_QUIET_PERIOD_MS} ms quiet period: ${duringQuiet}`,
   );
@@ -2539,94 +2641,442 @@ async function midStreamAbortLeg(
   // in fewer events than the trigger needs, nothing mid-stream was exercised
   // and saying so is the result.
   if (cancelledAt === undefined) {
-    return {
-      firstTickAt,
-      verdict:
-        `INCONCLUSIVE - the canceller never fired: only ${ticks.length} progress ` +
-        `event(s) with content, fewer than the ${MIDSTREAM_ABORT_AFTER_TICKS} the trigger ` +
-        `needs. The body arrived too fast or in one piece; a larger response is required.`,
-    };
+    return (
+      `INCONCLUSIVE - the canceller never fired: only ${ticks.length} progress ` +
+      `event(s) with content, fewer than the ${MIDSTREAM_ABORT_AFTER_TICKS} the trigger ` +
+      `needs. The body arrived too fast or in one piece; a larger response is required.`
+    );
   }
   if (error === undefined) {
-    return {
-      firstTickAt,
-      verdict:
-        `INCONCLUSIVE - the request RESOLVED with HTTP ${status ?? "?"} despite a cancel at ` +
-        `t+${cancelledAt} ms with ${bodyAtCancel ?? 0} chars buffered: the abort did not take effect`,
-    };
+    return (
+      `INCONCLUSIVE - the request RESOLVED with HTTP ${status ?? "?"} despite a cancel at ` +
+      `t+${cancelledAt} ms with ${bodyAtCancel ?? 0} chars buffered: the abort did not take effect`
+    );
   }
   const cancelledException =
-    error instanceof Error && error.name === "CancelledException";
+    error instanceof env.zotero.HTTP.CancelledException;
   const answers =
     `(a) stopped ${settledMs - cancelledAt} ms after the abort with ${bodyAtCancel ?? 0} chars in hand; ` +
-    `(b) partial body ${readableAfter === null ? "NOT readable" : `readable, ${readableAfter} chars`}; ` +
+    `(b) partial body ${readableAfter === null || readableAfter === 0 ? `NOT readable (${readableAfter ?? "no"} chars from xhr.response)` : `readable, ${readableAfter} chars`}; ` +
     `(c) ${duringQuiet} further event(s) in ${ABORT_QUIET_PERIOD_MS} ms`;
-  return {
-    firstTickAt,
-    verdict:
-      (duringQuiet === 0 ? "PASS" : "PARTIAL") +
-      ` - ${cancelledException ? "CancelledException" : describeError(error)}; ` +
-      answers,
-  };
+  return (
+    (duringQuiet === 0 ? "PASS" : "PARTIAL") +
+    ` - ${cancelledException ? "Zotero.HTTP.CancelledException" : describeError(error)}; ` +
+    answers
+  );
 }
 
 /**
  * The same mid-stream abort through `src/core/http/client.ts`, to confirm that
- * the status-0 resolve still maps to `CANCELLED` rather than `NETWORK` **when
+ * the cancel is still classified as a cancellation rather than `NETWORK` **when
  * bytes have already arrived** — the case the `cancelRequested` flag was written
  * for and which `P0-T17` could only test before the first byte.
  *
- * The facade exposes no progress hook, so the abort is scheduled from leg [14]'s
- * **measured** first-tick time rather than from a guess. That is weaker evidence
- * than an event trigger and is reported as such.
+ * *Changed 2026-11-25 (`P0-T35`, batch L):* this leg was written to abort on a
+ * timer set from leg [14]'s first-tick time, because the client then had no
+ * progress hook. Since `P3-T11` it has one, `onBodyText`, so the abort now
+ * fires on the Nth delivery, the same event trigger leg [14] uses. The leg
+ * builds its own client over a transport that records what `Zotero.HTTP`
+ * itself did (rejected, and with which exception, or resolved, and with which
+ * status), so the client's classification can be read against it.
  */
 async function midStreamClientAbortLeg(
-  client: HttpClient,
-  firstTickAt: number | null,
+  env: ProbeEnv,
+  userAgent: string,
+  url: string,
   say: (line?: string) => void,
 ): Promise<string> {
   say(
-    "[15] P0-T35: the same mid-stream abort through HttpClient (onCanceller)",
+    "[15] P0-T35: the same mid-stream abort through HttpClient (onCanceller, " +
+      `abort on onBodyText delivery #${MIDSTREAM_ABORT_AFTER_TICKS})`,
   );
-  if (firstTickAt === null) {
-    return "SKIPPED - leg [14] saw no progress event, so there is no measured abort point";
-  }
-  const abortAt = firstTickAt + MIDSTREAM_FACADE_MARGIN_MS;
-  say(
-    `    aborting at t+${abortAt} ms - leg [14] measured the first byte at ` +
-      `t+${firstTickAt} ms, plus a ${MIDSTREAM_FACADE_MARGIN_MS} ms margin`,
-  );
-  let cancel: (() => void) | null = null;
+  say(`    GET ${url}`);
+  const raw: { outcome: string } = { outcome: "not settled" };
+  const http = env.zotero.HTTP as unknown as HttpTransport;
+  const transport: HttpTransport = {
+    async request(method, target, options) {
+      try {
+        const xhr = await http.request(method, target, options);
+        raw.outcome = `resolved, status ${xhr.status}`;
+        return xhr;
+      } catch (e) {
+        raw.outcome = `rejected, ${e instanceof http.CancelledException ? "Zotero.HTTP.CancelledException" : e instanceof Error ? e.name : `not a CancelledException (${typeof e})`}`;
+        throw e;
+      }
+    },
+    UnexpectedStatusException: http.UnexpectedStatusException,
+    TimeoutException: http.TimeoutException,
+    BrowserOfflineException: http.BrowserOfflineException,
+    SecurityException: http.SecurityException,
+    CancelledException: http.CancelledException,
+  };
+  const client = createHttpClient({ transport, userAgent });
+
   const t0 = Date.now();
-  const timer = setTimeout(() => {
-    say(`    -> calling the canceller at t+${Date.now() - t0} ms`);
-    cancel?.();
-  }, abortAt);
+  let cancel: (() => void) | null = null;
+  let cancelledAt: number | undefined;
+  let deliveries = 0;
+  let delivered = 0;
+  let deliveredAtCancel = 0;
+  let deliveriesAfterCancel = 0;
   const x = await timed(() =>
-    client.request("GET", MIDSTREAM_URL, {
-      headers: { Accept: "application/json" },
+    client.request("GET", url, {
+      headers: { Accept: "text/plain" },
       timeoutMs: 180_000,
       onCanceller: (c) => {
         cancel = c;
       },
+      onBodyText: (text) => {
+        deliveries++;
+        delivered += text.length;
+        if (cancelledAt !== undefined) {
+          deliveriesAfterCancel++;
+          return;
+        }
+        if (deliveries >= MIDSTREAM_ABORT_AFTER_TICKS) {
+          cancelledAt = Date.now() - t0;
+          deliveredAtCancel = delivered;
+          say(
+            `    -> ${deliveries} onBodyText deliveries, ${delivered} chars delivered; ` +
+              `calling the canceller at t+${cancelledAt} ms`,
+          );
+          // After the delivery returns: `onBodyText` must not throw, and the
+          // client calls it from the XHR's progress listener.
+          setTimeout(() => {
+            try {
+              cancel?.();
+            } catch (e) {
+              say(`    canceller threw: ${describeError(e)}`);
+            }
+          }, 0);
+        }
+      },
     }),
   );
-  clearTimeout(timer);
+  const beforeQuiet = deliveries;
+  await sleep(ABORT_QUIET_PERIOD_MS);
+  const duringQuiet = deliveries - beforeQuiet;
+
+  say(`    Zotero.HTTP itself: ${raw.outcome}`);
+  say(
+    `    settled after ${x.ms} ms` +
+      (cancelledAt === undefined
+        ? ""
+        : ` (${x.ms - cancelledAt} ms after the abort)`),
+  );
+  say(
+    `    (a) delivered at the moment of cancellation: ${deliveredAtCancel} chars`,
+  );
+  say(
+    `    deliveries after the cancel, before settling: ${deliveriesAfterCancel}`,
+  );
+  say(
+    `    (c) further deliveries in ${ABORT_QUIET_PERIOD_MS} ms quiet period: ${duringQuiet}`,
+  );
+  if (cancelledAt === undefined) {
+    return (
+      `INCONCLUSIVE - only ${deliveries} onBodyText deliveries, fewer than the ` +
+      `${MIDSTREAM_ABORT_AFTER_TICKS} the trigger needs; nothing was aborted mid-stream`
+    );
+  }
   if (x.response) {
     say(`    the promise RESOLVED: HTTP ${x.response.status} after ${x.ms} ms`);
     return (
-      `INCONCLUSIVE - resolved with HTTP ${x.response.status} after ${x.ms} ms; ` +
-      `the whole body arrived before t+${abortAt} ms, so nothing was aborted mid-stream`
+      `INCONCLUSIVE - resolved with HTTP ${x.response.status} after ${x.ms} ms ` +
+      `despite a cancel with ${deliveredAtCancel} chars delivered; the abort did not take effect`
     );
   }
-  say(`    ${describeError(x.error)}`);
   const e = x.error;
+  const name = e instanceof Error ? e.name : typeof e;
+  const cause =
+    e instanceof Error ? (e as { cause?: unknown }).cause : undefined;
+  say(`    client threw: ${describeError(e)}`);
+  say(`    its cause: ${cause === undefined ? "none" : describeError(cause)}`);
+  const answers =
+    `Zotero.HTTP ${raw.outcome}; ${deliveredAtCancel} chars delivered at the cancel, ` +
+    `${deliveriesAfterCancel + duringQuiet} delivery(ies) after it`;
   if (e instanceof HttpError) {
     return e.code === "CANCELLED"
-      ? `PASS - HttpError code CANCELLED (source ${e.source}), retryable ${String(e.retryable)}, after ${x.ms} ms; the mapping holds with bytes already delivered`
-      : `FAIL - HttpError code ${e.code} (source ${e.source}): docs/07 §10.1 wants CANCELLED, and a mid-stream cancel is exactly what cancelRequested exists to disambiguate from NETWORK`;
+      ? `PASS - HttpError code CANCELLED (source ${e.source}); ${answers}`
+      : `FAIL - HttpError code ${e.code} (source ${e.source}); ${answers}`;
   }
-  return `PARTIAL - the facade rethrew an unmapped error: ${describeError(e)}`;
+  // Since `P1-T02`'s `toHierarchy` the client throws §10.1's classes, not the
+  // HttpError: `OperationCancelledError` is what it builds from code CANCELLED,
+  // and `NetworkError` (with the HttpError as its cause) from code NETWORK.
+  if (name === "OperationCancelledError") {
+    return `PASS - OperationCancelledError (toHierarchy's class for HttpError code CANCELLED); ${answers}`;
+  }
+  if (cause instanceof HttpError) {
+    return `FAIL - ${name} from HttpError code ${cause.code} (source ${cause.source}); ${answers}`;
+  }
+  return `PARTIAL - the client threw an unmapped error: ${describeError(e)}; ${answers}`;
+}
+
+// --- P0-T35's loopback server -------------------------------------------------
+
+/** What the loopback server saw of one connection. */
+interface LoopbackConnection {
+  readonly acceptedAt: number;
+  /** The request line, method and path (a loopback path: nothing to redact). */
+  requestLine: string | null;
+  /** Body writes that the output stream accepted. */
+  chunksWritten: number;
+  /** The first write the stream refused, and why; `null` while none was. */
+  writeFailure: string | null;
+  /** ms after the connection was accepted when that write was refused. */
+  writeFailedAfterMs: number | null;
+  /** True once every chunk was written and the server closed the connection. */
+  completed: boolean;
+}
+
+interface LoopbackStream {
+  /** `http://127.0.0.1:<port>`, the port the system chose. */
+  readonly origin: string;
+  readonly connections: readonly LoopbackConnection[];
+  stop(): void;
+}
+
+/** The slices of the XPCOM interfaces the server touches. */
+interface XpcomStreamLike {
+  close(): void;
+  QueryInterface(iid: unknown): unknown;
+}
+interface AsyncInputLike {
+  asyncWait(
+    callback: { onInputStreamReady(stream: unknown): void },
+    flags: number,
+    requestedCount: number,
+    target: unknown,
+  ): void;
+}
+interface ScriptableInputLike {
+  init(stream: unknown): void;
+  available(): number;
+  read(count: number): string;
+}
+interface OutputLike {
+  write(data: string, count: number): number;
+  close(): void;
+}
+interface SocketTransportLike {
+  openInputStream(flags: number, size: number, count: number): XpcomStreamLike;
+  openOutputStream(flags: number, size: number, count: number): OutputLike;
+}
+interface ServerSocketLike {
+  readonly port: number;
+  init(port: number, loopbackOnly: boolean, backlog: number): void;
+  asyncListen(listener: {
+    onSocketAccepted(server: unknown, transport: SocketTransportLike): void;
+    onStopListening(server: unknown, status: number): void;
+  }): void;
+  close(): void;
+}
+interface XpcomClassLike {
+  createInstance(iid: unknown): unknown;
+}
+
+/**
+ * Start `P0-T35`'s loopback server: an `nsIServerSocket` bound to 127.0.0.1
+ * **only** (`loopbackOnly: true`), on a port the system picks. Each connection
+ * reads the request up to its blank line, answers `200` with a
+ * `Content-Length` body, and writes it in {@link MIDSTREAM_CHUNKS} pieces
+ * {@link MIDSTREAM_CHUNK_INTERVAL_MS} apart. A write the stream refuses (the
+ * client closed the connection) ends that connection and is recorded: it is
+ * the server's own view of whether the cancel stopped the transfer.
+ *
+ * @returns the server, or why none could be started
+ */
+function startLoopbackStream(env: ProbeEnv): LoopbackStream | string {
+  const classes = env.classes;
+  const serverClass = at(classes, "@mozilla.org/network/server-socket;1");
+  const sisClass = at(classes, "@mozilla.org/scriptableinputstream;1");
+  const iServer = at(env.interfaces, "nsIServerSocket");
+  const iAsyncInput = at(env.interfaces, "nsIAsyncInputStream");
+  const iScriptable = at(env.interfaces, "nsIScriptableInputStream");
+  if (
+    serverClass === undefined ||
+    sisClass === undefined ||
+    iServer === undefined ||
+    iAsyncInput === undefined ||
+    iScriptable === undefined
+  ) {
+    return "nsIServerSocket or a stream interface is not reachable (no Cc/Ci handed in)";
+  }
+  const mainThread = env.services.tm.mainThread;
+  let socket: ServerSocketLike;
+  try {
+    socket = (serverClass as XpcomClassLike).createInstance(
+      iServer,
+    ) as ServerSocketLike;
+    socket.init(-1, true, -1);
+  } catch (e) {
+    return `nsIServerSocket.init failed: ${describeError(e)}`;
+  }
+  const connections: LoopbackConnection[] = [];
+  const timers = new Set<ReturnType<typeof setTimeout>>();
+  const later = (run: () => void, ms: number): void => {
+    const t = setTimeout(() => {
+      timers.delete(t);
+      run();
+    }, ms);
+    timers.add(t);
+  };
+  const piece = (i: number): string => {
+    const head = `p0-t35 loopback chunk ${String(i + 1).padStart(3, "0")} `;
+    return head + ".".repeat(MIDSTREAM_CHUNK_CHARS - head.length - 1) + "\n";
+  };
+  const writeAll = (out: OutputLike, text: string): void => {
+    let offset = 0;
+    while (offset < text.length) {
+      offset += out.write(text.slice(offset), text.length - offset);
+    }
+  };
+
+  const serve = (transport: SocketTransportLike): void => {
+    const conn: LoopbackConnection = {
+      acceptedAt: Date.now(),
+      requestLine: null,
+      chunksWritten: 0,
+      writeFailure: null,
+      writeFailedAfterMs: null,
+      completed: false,
+    };
+    connections.push(conn);
+    const input = transport.openInputStream(0, 0, 0);
+    const output = transport.openOutputStream(0, 0, 0);
+    const close = (): void => {
+      try {
+        input.close();
+      } catch {
+        /* already closed */
+      }
+      try {
+        output.close();
+      } catch {
+        /* already closed */
+      }
+    };
+    const fail = (e: unknown): void => {
+      conn.writeFailure = describeError(e);
+      conn.writeFailedAfterMs = Date.now() - conn.acceptedAt;
+      close();
+    };
+    const step = (i: number): void => {
+      if (i === MIDSTREAM_CHUNKS) {
+        conn.completed = true;
+        close();
+        return;
+      }
+      try {
+        writeAll(output, piece(i));
+      } catch (e) {
+        fail(e);
+        return;
+      }
+      conn.chunksWritten = i + 1;
+      later(() => {
+        step(i + 1);
+      }, MIDSTREAM_CHUNK_INTERVAL_MS);
+    };
+    const scriptable = (sisClass as XpcomClassLike).createInstance(
+      iScriptable,
+    ) as ScriptableInputLike;
+    scriptable.init(input);
+    let request = "";
+    const ready = {
+      onInputStreamReady(): void {
+        try {
+          const n = scriptable.available();
+          if (n > 0) request += scriptable.read(n);
+        } catch (e) {
+          fail(e);
+          return;
+        }
+        const end = request.indexOf("\r\n\r\n");
+        if (end < 0) {
+          (input.QueryInterface(iAsyncInput) as AsyncInputLike).asyncWait(
+            ready,
+            0,
+            0,
+            mainThread,
+          );
+          return;
+        }
+        conn.requestLine = request.slice(0, request.indexOf("\r\n"));
+        try {
+          writeAll(
+            output,
+            "HTTP/1.1 200 OK\r\n" +
+              "Content-Type: text/plain; charset=us-ascii\r\n" +
+              `Content-Length: ${MIDSTREAM_CHUNKS * MIDSTREAM_CHUNK_CHARS}\r\n` +
+              "Cache-Control: no-store\r\n" +
+              "Connection: close\r\n\r\n",
+          );
+        } catch (e) {
+          fail(e);
+          return;
+        }
+        step(0);
+      },
+    };
+    (input.QueryInterface(iAsyncInput) as AsyncInputLike).asyncWait(
+      ready,
+      0,
+      0,
+      mainThread,
+    );
+  };
+
+  try {
+    socket.asyncListen({
+      onSocketAccepted(_server, transport) {
+        serve(transport);
+      },
+      onStopListening() {
+        /* stop() below */
+      },
+    });
+  } catch (e) {
+    return `nsIServerSocket.asyncListen failed: ${describeError(e)}`;
+  }
+  return {
+    origin: `http://127.0.0.1:${socket.port}`,
+    connections,
+    stop() {
+      for (const t of timers) clearTimeout(t);
+      timers.clear();
+      try {
+        socket.close();
+      } catch {
+        /* already closed */
+      }
+    },
+  };
+}
+
+/** One connection's server-side record, as lines of the summary. */
+function reportConnection(
+  server: LoopbackStream,
+  index: number,
+  say: (line?: string) => void,
+): void {
+  const conn = server.connections[index];
+  if (conn === undefined) {
+    say(`    server: no connection #${index + 1} was accepted`);
+    return;
+  }
+  say(
+    `    server: request "${conn.requestLine ?? "(none read)"}"; ` +
+      `${conn.chunksWritten} of ${MIDSTREAM_CHUNKS} writes accepted ` +
+      `(${conn.chunksWritten * MIDSTREAM_CHUNK_CHARS} chars)`,
+  );
+  say(
+    conn.completed
+      ? "    server: wrote the whole body and closed (the transfer was NOT stopped)"
+      : conn.writeFailure === null
+        ? "    server: still writing when the leg ended"
+        : `    server: write refused ${conn.writeFailedAfterMs ?? "?"} ms after accept: ${conn.writeFailure}`,
+  );
 }
 
 // --- Instrumentation ----------------------------------------------------------
@@ -2871,7 +3321,15 @@ const REPORTED_GLOBALS: readonly string[] = [
   "queueMicrotask",
 ];
 
-async function emitPasteBlock(scriptPath: string): Promise<void> {
+/**
+ * Emit the paste block. `midStreamOnly` (`--p0-t35`, added 2026-11-25) emits
+ * the same bundle with `mainMidStream` as its entry: no key dialog, and no host
+ * but the probe's own loopback server.
+ */
+async function emitPasteBlock(
+  scriptPath: string,
+  midStreamOnly: boolean,
+): Promise<void> {
   const { build } = await import("esbuild");
   const { readFileSync } = await import("node:fs");
   const { basename, dirname, join } = await import("node:path");
@@ -2921,21 +3379,33 @@ async function emitPasteBlock(scriptPath: string): Promise<void> {
     (name) => `    ${JSON.stringify(name)}: typeof ${name},`,
   ).join("\n");
 
+  const header = midStreamOnly
+    ? [
+        "// research_helper network probe: P0-T35 only (V-9 mid-stream). Keyless; the",
+        "// only host is the probe's own loopback server on 127.0.0.1.",
+        `// Generated ${new Date().toISOString()} from scripts/spike-network.ts --p0-t35, version ${version}.`,
+        "// Tools > Developer > Run JavaScript: paste, make sure 'Run as async function'",
+        "// is checked, press Run. Nothing here needs editing.",
+      ]
+    : [
+        "// research_helper network probe: P0-T15 (V-7), P0-T16 (V-8), P0-T17 (V-9),",
+        "// P0-T35 (V-9 mid-stream). Legs [14] and [15] are KEYLESS and read from the",
+        "// probe's own loopback server: cancel every password dialog and they still run.",
+        `// Generated ${new Date().toISOString()} from scripts/spike-network.ts, version ${version}.`,
+        "// Tools > Developer > Run JavaScript: paste, make sure 'Run as async function'",
+        "// is checked, press Run. Four password dialogs ask for the four provider keys,",
+        "// in the order OpenRouter, OpenAI, Gemini, Anthropic. Cancel skips one provider.",
+        "// Never type a key into this editor. Nothing here needs editing.",
+      ];
   process.stdout.write(
     [
-      "// research_helper network probe: P0-T15 (V-7), P0-T16 (V-8), P0-T17 (V-9),",
-      "// P0-T35 (V-9 mid-stream). Legs [14] and [15] are KEYLESS: cancel every",
-      "// password dialog and they still run.",
-      `// Generated ${new Date().toISOString()} from scripts/spike-network.ts, version ${version}.`,
-      "// Tools > Developer > Run JavaScript: paste, make sure 'Run as async function'",
-      "// is checked, press Run. Four password dialogs ask for the four provider keys,",
-      "// in the order OpenRouter, OpenAI, Gemini, Anthropic. Cancel skips one provider.",
-      "// Never type a key into this editor. Nothing here needs editing.",
+      ...header,
       ascii.trimEnd(),
-      "return await RHSpikeNetwork.main({",
+      `return await RHSpikeNetwork.${midStreamOnly ? "mainMidStream" : "main"}({`,
       "  zotero: Zotero,",
       "  services: Services,",
       '  interfaces: typeof Ci !== "undefined" ? Ci : Components.interfaces,',
+      '  classes: typeof Cc !== "undefined" ? Cc : Components.classes,',
       `  version: ${JSON.stringify(version)},`,
       "  windowGlobals: {",
       "    typeofs: {",
@@ -2956,8 +3426,10 @@ if (nodeScriptPath === undefined) {
   process.stderr.write("spike-network: cannot determine the script path\n");
   process.exitCode = 1;
 } else {
-  emitPasteBlock(nodeScriptPath).catch((e: unknown) => {
-    process.stderr.write(`spike-network: ${String(e)}\n`);
-    process.exitCode = 1;
-  });
+  emitPasteBlock(nodeScriptPath, process.argv.includes("--p0-t35")).catch(
+    (e: unknown) => {
+      process.stderr.write(`spike-network: ${String(e)}\n`);
+      process.exitCode = 1;
+    },
+  );
 }

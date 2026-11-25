@@ -1099,10 +1099,16 @@ function toHierarchy(
       // §10.1's constructor takes the reason, not a cause. `{ kind: "user" }`
       // is the fallback for a raw `onCanceller` abort with no token behind it.
       return new OperationCancelledError(token?.reason ?? { kind: "user" });
+    // `P1-T37`: both URLs below are redacted here, as `TimeoutError` redacts
+    // its own. `ResearchHelperError.context` is documented "MUST already be
+    // redacted by the thrower", and these two call sites passed `error.url`
+    // raw — harmless while nothing read the context, a leak the moment
+    // something obeyed the contract. `NetworkError` now reads the host name
+    // off this URL for the view, and only the host name.
     case "OFFLINE":
       return new OfflineError(
         error.message,
-        { url: error.url, method: error.method },
+        { url: redactUrl(error.url), method: error.method },
         { cause: error },
       );
     case "TIMEOUT":
@@ -1112,7 +1118,11 @@ function toHierarchy(
     case "NETWORK":
       return new NetworkError(
         error.message,
-        { url: error.url, method: error.method, source: error.source },
+        {
+          url: redactUrl(error.url),
+          method: error.method,
+          source: error.source,
+        },
         { cause: error },
       );
   }

@@ -386,42 +386,11 @@ var RHSearchWindow = {
      */
     duplicatesDefault: "link",
 
-    /**
-     * The **second** Fluent bundle this window needs, added at run time.
-     *
-     * `searchDialog.xhtml`'s `<linkset>` links one resource,
-     * `research-helper-searchDialog.ftl`, which was right until this card made
-     * the window render a pipeline's outcome. Measured 2026-10-07, by grepping
-     * both bundles: **every string the error states, the per-database names and
-     * the import summary need is in `research-helper-mainWindow.ftl`** —
-     * `rh-error-offline` and the rest of `docs/08` §8.3's rows,
-     * `research-helper-source-pubmed` and every other literature-source display
-     * name, `research-helper-import-summary` and
-     * `research-helper-import-abstract-coverage`. `src/i18n/keys.ts`'s
-     * `MESSAGE_IDS_BY_SURFACE` is the authority and puts them there.
-     *
-     * The first run of `test/integration/searchDialog-flow.spec.ts` is how this
-     * was found: the per-database line rendered as an **empty string**, because
-     * a `data-l10n-id` whose message is in an unlinked resource resolves to
-     * nothing and Fluent leaves the element alone.
-     *
-     * The fix is `document.l10n.addResourceIds([...])` rather than a second
-     * `<html:link>`: `addon/content/searchDialog.xhtml` is `P1-T20`'s file and is
-     * **not** in `P1-T22`'s `Files` list (`plan/README.md` §5 rule 2). It is also
-     * not one of `eslint.config.js`'s scoped registration APIs and it is not
-     * `insertFTLIfNeeded` — that one is confined to
-     * `src/zotero/registrations.ts` and is for windows *Zotero* owns; this is
-     * our own document, which takes its resources with it when it closes.
-     *
-     * `__addonRef__` is substituted at build time by the scaffold's
-     * `replaceDefine()`, the same way `Zotero.Prefs.get("__addonRef__." + key)`
-     * below is and the same way the `<linkset>` in the markup is. **Needs a
-     * card** if the owner would rather the link be in the markup, or rather the
-     * §8.3 rows move surface.
-     */
-    ftl: {
-      mainWindow: "__addonRef__-mainWindow.ftl",
-    },
+    // The window's second Fluent bundle, `research-helper-mainWindow.ftl`
+    // (docs/08 §8.3's error rows, the database names, the import summary and the
+    // coverage line), is linked in `searchDialog.xhtml`'s `<linkset>` beside the
+    // first since `P1-T38` (2026-11-25), which says why. From `P1-T22` until then
+    // it was added here at run time with `document.l10n.addResourceIds`.
   },
 
   /** Every Fluent id this file sets from script. */
@@ -1830,9 +1799,6 @@ var RHSearchWindow = {
     // font size the user chose.
     this.registerUIRoot();
 
-    // Before every other Fluent call: see `spec.mainWindowFtl`.
-    this.addMainWindowBundle();
-
     this.applyChromeStrings();
     this.applyColumnLabels();
     this.seedControls();
@@ -1875,42 +1841,6 @@ var RHSearchWindow = {
    */
   registerUIRoot() {
     Zotero.UIProperties.registerRoot(this.el(this.spec.root));
-  },
-
-  /**
-   * Link `research-helper-mainWindow.ftl` into this document.
-   *
-   * See {@link RHSearchWindow.spec.ftl} for why the window needs a
-   * second bundle and why the link is made here rather than in the markup.
-   *
-   * Guarded rather than assumed: `addResourceIds` is `Localization`'s, which
-   * `DOMLocalization` extends, and nothing in the corpus had called it before
-   * this card. A build where it is absent renders the §8.3 rows as empty
-   * elements — visible, and loud in the integration spec, rather than a silent
-   * English fallback.
-   *
-   * @returns {boolean} whether the resource was added
-   */
-  addMainWindowBundle() {
-    const l10n = document.l10n;
-    if (!l10n || typeof l10n.addResourceIds !== "function") {
-      return false;
-    }
-    try {
-      l10n.addResourceIds([this.spec.ftl.mainWindow]);
-      return true;
-    } catch (error) {
-      try {
-        Zotero.debug(
-          "[research-helper] could not add the main-window Fluent bundle to " +
-            "the search window: " +
-            String(error && error.name ? error.name : error),
-        );
-      } catch {
-        /* a diagnostic that cannot be written is not worth a second failure */
-      }
-      return false;
-    }
   },
 
   /**
@@ -2327,8 +2257,8 @@ var RHSearchWindow = {
    * Paint each database checkbox's display name (P2-T14, review row 142).
    *
    * The names come from the sources' own `displayNameKey`s, resolved through
-   * this window's `document.l10n` — the main-window bundle
-   * {@link addMainWindowBundle} linked — and set as each checkbox's `label`.
+   * this window's `document.l10n` — the main-window bundle, which the
+   * markup's `<linkset>` links — and set as each checkbox's `label`.
    * A name that does not resolve falls back to the source's id, a registry
    * token, which is the view model's fallback for the same names
    * (`resolveSourceNames`); an empty checkbox is never left behind.

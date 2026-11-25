@@ -311,8 +311,10 @@ import { NO_CACHE } from "../../src/core/cache/cache";
 import { createSystemClock } from "../../src/core/clock";
 import { Semaphore } from "../../src/core/concurrency";
 import {
+  NetworkError,
   OfflineError,
   RateLimitError,
+  TimeoutError,
   UpstreamServerError,
 } from "../../src/core/errors";
 import { createCancellationTokenSource } from "../../src/core/jobQueue/cancellation";
@@ -366,6 +368,7 @@ import {
   type SearchWindowImportRequest,
   type SearchWindowRecord,
 } from "../../src/ui/dialogs/searchDialog";
+import { PREFS } from "../../src/prefs/schema";
 import {
   DEDUP_TIER_NAME_KEYS,
   UNRENDERABLE_ERROR_ROWS,
@@ -3652,6 +3655,86 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
   });
 
   // =========================================================================
+  // 4b. P1-T37 — the TIMEOUT and NETWORK rows, from the host and the seconds
+  // =========================================================================
+
+  /**
+   * `P1-T37` (2026-11-25): §8.3's TIMEOUT and NETWORK rows render from the
+   * two members `SerializedError` gained, `host` and `timeoutSeconds`.
+   * Asserted on the painted text, which is the bundle's own (`resolved`), and
+   * on what the panel must not show: the request's path, its query, and a
+   * key-shaped value planted in both.
+   */
+  const PLANTED_KEY = `sk-or-v1-${"k".repeat(40)}`;
+  const PLANTED_URL = `https://${NCBI_HOST}/entrez/eutils/${PLANTED_KEY}/esearch.fcgi?api_key=${"ab12".repeat(8)}&term=planted-query-words`;
+
+  async function assertTransportRow(
+    expected: MessageRef,
+    what: string,
+  ): Promise<string> {
+    assert.strictEqual(controller.state.panel, "error", what);
+    await pointedAt("rh-state-error-lines", expected);
+    const sentence = await resolved(expected);
+    const line = await rendered("rh-state-error-lines", sentence);
+    assert.include(line, NCBI_HOST, `${what}: the host is named`);
+    assert.notInclude(line, "{", `${what}: no unresolved Fluent placeable`);
+    assert.isFalse(
+      (el("rh-state-error-retry") as HTMLElement).hidden,
+      `${what}: §8.3's row offers Retry`,
+    );
+    assert.isTrue(
+      (el("rh-state-error-open-preferences") as HTMLElement).hidden,
+      `${what}: and not Open Preferences`,
+    );
+    controller.toggleDetails();
+    const panel = stringsUnder("rh-state-error").join("\n");
+    controller.toggleDetails();
+    for (const leaked of [
+      PLANTED_KEY,
+      "ab12ab12",
+      "planted-query-words",
+      "/entrez/",
+      "esearch.fcgi",
+      "?",
+    ]) {
+      assert.notInclude(panel, leaked, `${what}: the panel shows ${leaked}`);
+    }
+    return line;
+  }
+
+  it("P1-T37: renders a forced timeout as §8.3's TIMEOUT row, from the host and the seconds", async function () {
+    this.timeout(40_000);
+    setKeyword(KEYWORD);
+    selectSources([PUBMED]);
+    await search({
+      pubmed: { records: 0, error: new TimeoutError(45_000, PLANTED_URL) },
+    });
+    const line = await assertTransportRow(
+      { id: "rh-error-timeout", args: { host: NCBI_HOST, seconds: 45 } },
+      "TIMEOUT",
+    );
+    assert.include(line, "45", "the seconds are painted");
+    log(`TIMEOUT row: ${line}`);
+  });
+
+  it("P1-T37: renders a forced transport failure as §8.3's NETWORK row, from the host only", async function () {
+    this.timeout(40_000);
+    setKeyword(KEYWORD);
+    selectSources([PUBMED]);
+    await search({
+      pubmed: {
+        records: 0,
+        error: new NetworkError("stub network", { url: PLANTED_URL }),
+      },
+    });
+    const line = await assertTransportRow(
+      { id: "rh-error-network", args: { host: NCBI_HOST } },
+      "NETWORK",
+    );
+    log(`NETWORK row: ${line}`);
+  });
+
+  // =========================================================================
   // 5. A forced 429 — item 232's truthful row, never a retry countdown
   // =========================================================================
 
@@ -3724,31 +3807,116 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
   // 6. An empty keyword must not claim a network failure (NFR-14)
   // =========================================================================
 
-  it("does not blame the network for an empty keyword", async function () {
+  /**
+   * `P1-T38`: a run `Planning` rejected shows the validation sentence as its
+   * headline, and no button. **Asserted on the rendered text, and fails on an
+   * empty element**: the expected text is the bundle's own (`resolved`, which
+   * fails when a message resolves to nothing), and `rendered` waits for that
+   * text to be in the element, so a headline whose id no linked bundle declares
+   * — the empty panel `P1-T22` measured — times out instead of passing.
+   */
+  async function assertRejectedHeadline(
+    expected: MessageRef,
+    what: string,
+  ): Promise<string> {
+    assert.strictEqual(controller.state.panel, "error", what);
+    assert.strictEqual(
+      lastState?.sources.length,
+      0,
+      `${what}: Planning rejected the input before any source was asked`,
+    );
+    await pointedAt("rh-state-error-headline", expected);
+    const sentence = await resolved(expected);
+    const headline = await rendered("rh-state-error-headline", sentence);
+    assert.notStrictEqual(headline, "", `${what}: the headline is not empty`);
+    assert.notInclude(
+      headline,
+      "Could not reach any database",
+      `${what}: no source was asked, so nothing can have been unreachable (NFR-14)`,
+    );
+    assert.isTrue(
+      (el("rh-state-error-retry") as HTMLElement).hidden,
+      `${what}: Retry would send the same input to the same check`,
+    );
+    assert.isTrue(
+      (el("rh-state-error-open-preferences") as HTMLElement).hidden,
+      `${what}: nothing in the preferences is wrong`,
+    );
+    return headline;
+  }
+
+  it("P1-T38: headlines an empty keyword with its own sentence, and blames no network", async function () {
     this.timeout(40_000);
     setKeyword("");
     selectSources([PUBMED]);
     await search({ pubmed: { records: 3 } });
-
-    assert.strictEqual(controller.state.panel, "error");
-    const headline = await rendered(
-      "rh-state-error-headline",
-      "Research Helper",
+    const headline = await assertRejectedHeadline(
+      { id: "research-helper-search-query-empty", args: undefined },
+      "an empty keyword",
     );
-    assert.notInclude(
-      headline,
-      "Could not reach any database",
-      "no source was asked, so nothing can have been unreachable (NFR-14)",
-    );
-    // The right sentence is `research-helper-search-query-empty`, which no
-    // bundle declares — reported with the card, needs a message in P1-T18's
-    // bundles.
-    assert.strictEqual(
-      lastState?.sources.length,
-      0,
-      "Planning rejected the input before any source was asked",
-    );
+    assert.include(headline, "keyword", "it names the box that is wrong");
     log(`empty keyword headline: ${headline}`);
+  });
+
+  it("P1-T38: headlines an out-of-range Max per database with the range", async function () {
+    this.timeout(40_000);
+    const box = el("rh-search-max-results") as HTMLInputElement;
+    const before = box.value;
+    try {
+      setKeyword(KEYWORD);
+      selectSources([PUBMED]);
+      box.value = String(PREFS.maxResults.max * 10);
+      await search({ pubmed: { records: 3 } });
+      const { min, max } = PREFS.maxResults;
+      const headline = await assertRejectedHeadline(
+        {
+          id: "research-helper-search-max-results-range",
+          args: { min, max },
+        },
+        "an out-of-range maximum",
+      );
+      assert.include(headline, String(min), "the range's low end is named");
+      assert.include(headline, String(max), "the range's high end is named");
+      log(`out-of-range headline: ${headline}`);
+    } finally {
+      box.value = before;
+    }
+  });
+
+  it("P1-T38: says so when an import names no collection, and keeps the preview", async function () {
+    this.timeout(40_000);
+    setKeyword(KEYWORD);
+    selectSources([PUBMED]);
+    await search({ pubmed: { records: 2, withAbstract: true } });
+    assert.strictEqual(controller.state.panel, "results");
+    const rowsBefore = rows().length;
+    assert.isAbove(rowsBefore, 0, "there is a preview to keep");
+    // The document's Import button asks for a name first on bare "New
+    // collection…" and imports nothing when the prompt is dismissed (item
+    // 358(b); the test above), so it never sends an unnamed target. A host
+    // driven directly can, and the view model refuses it before the pipeline:
+    // that refusal is where this sentence is shown.
+    const host = pluginApi()[SEARCH_WINDOW_API_PROPERTY] as SearchWindowHostApi;
+    const request = controller.collectImportRequest();
+    const before = runsFinished;
+    await host.runImport({ ...request, collectionID: "new" });
+    assert.strictEqual(runsFinished, before, "no job was started");
+    const expected: MessageRef = {
+      id: "research-helper-search-target-missing",
+      args: undefined,
+    };
+    await pointedAt("rh-search-warnings", expected);
+    const sentence = await resolved(expected);
+    const text = await rendered("rh-search-warnings", sentence);
+    assert.include(text, "collection", "it names what is missing");
+    assert.strictEqual(
+      el("rh-search-warnings").getAttribute("role"),
+      "alert",
+      "docs/08 §8.1's inline banner",
+    );
+    assert.strictEqual(controller.state.panel, "results", "the preview stays");
+    assert.strictEqual(rows().length, rowsBefore, "every row is still there");
+    log(`no-target banner: ${text}`);
   });
 
   // =========================================================================

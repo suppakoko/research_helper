@@ -431,7 +431,10 @@ export const EMPTY_HEADLINE_OMITTED =
   "EMPTY_HEADLINE_OMITTED in src/ui/viewModels/searchImportViewModel.ts";
 
 /**
- * The only two members of a `SerializedError` that reach the user's screen.
+ * The only two members of a `SerializedError` that reach the details
+ * disclosure. (*Since 2026-11-25, `P1-T37`:* `host` and `timeoutSeconds` reach
+ * the screen too, as arguments of §8.3's `TIMEOUT` and `NETWORK` sentences in
+ * {@link ERROR_ROWS}; they are not added to the disclosure.)
  *
  * `docs/07` §10.2's "User (detail)" row allows "Error code, HTTP status, host,
  * timestamp, affected item count. Copyable", and NFR-14 puts "provider text" in
@@ -457,15 +460,23 @@ export const ERROR_DETAIL_FIELDS = ["code", "httpStatus"] as const;
  * `docs/07` §10.1's `code` → `docs/08` §8.3's row, with the action that row
  * offers.
  *
- * `argsFrom` builds the message's arguments from the two things a
- * `SerializedError` actually carries — `httpStatus` — plus the failing source's
- * display name. **A row whose message needs an argument neither of those can
- * supply is absent from this table on purpose**, and
- * {@link UNRENDERABLE_ERROR_ROWS} names both with the reason.
+ * `ref` builds the message's arguments from what a `SerializedError` actually
+ * carries — `httpStatus`, and since `P1-T37` (2026-11-25) `host` and
+ * `timeoutSeconds` — plus the failing source's display name. **No row reads
+ * anything else of the error**, and nothing else of the thrower's `context`
+ * exists by the time an error reaches a view (`src/core/errors.ts`'s
+ * `SerializedError` says why). A row returns `undefined` when the error lacks
+ * a value its message needs, and {@link errorView} then draws the generic row.
  */
 interface ErrorRow {
-  /** The §8.3 message, built from the database's display name and the status. */
-  readonly ref: (database: string, status: number | undefined) => MessageRef;
+  /**
+   * The §8.3 message, built from the database's display name and the error's
+   * named members, or `undefined` when one the message needs is absent.
+   */
+  readonly ref: (
+    database: string,
+    error: SerializedError,
+  ) => MessageRef | undefined;
   /** §8.3's "Action offered" column. */
   readonly retry: boolean;
   readonly openPreferences: boolean;
@@ -492,16 +503,19 @@ export const ERROR_ROWS: Readonly<Record<string, ErrorRow>> = {
     openPreferences: true,
   },
   AUTHENTICATION: {
-    ref: (database, status) =>
-      message("rh-error-auth", { provider: database, status: status ?? 0 }),
+    ref: (database, { httpStatus }) =>
+      message("rh-error-auth", {
+        provider: database,
+        status: httpStatus ?? 0,
+      }),
     retry: false,
     openPreferences: true,
   },
   AUTHORIZATION: {
-    ref: (database, status) =>
+    ref: (database, { httpStatus }) =>
       message("rh-error-forbidden", {
         provider: database,
-        status: status ?? 0,
+        status: httpStatus ?? 0,
       }),
     retry: false,
     openPreferences: true,
@@ -516,9 +530,30 @@ export const ERROR_ROWS: Readonly<Record<string, ErrorRow>> = {
     retry: true,
     openPreferences: false,
   },
+  /**
+   * §8.3's `TIMEOUT` row, "{host} did not respond within {n}s." (`P1-T37`).
+   * Retry, as the generic row this replaces offered from `retryable: true`;
+   * §8.3's "Increase timeout" is not drawn, because the message's own next
+   * action (`P7-T12`) is "Try again in a few minutes".
+   */
+  TIMEOUT: {
+    ref: (_database, { host, timeoutSeconds }) =>
+      host === undefined || timeoutSeconds === undefined
+        ? undefined
+        : message("rh-error-timeout", { host, seconds: timeoutSeconds }),
+    retry: true,
+    openPreferences: false,
+  },
+  /** "Could not reach {host}." (`P1-T37`); Retry, as the generic row offered. */
+  NETWORK: {
+    ref: (_database, { host }) =>
+      host === undefined ? undefined : message("rh-error-network", { host }),
+    retry: true,
+    openPreferences: false,
+  },
   UPSTREAM_SERVER: {
-    ref: (database, status) =>
-      message("rh-error-upstream", { database, status: status ?? 0 }),
+    ref: (database, { httpStatus }) =>
+      message("rh-error-upstream", { database, status: httpStatus ?? 0 }),
     retry: true,
     openPreferences: false,
   },
@@ -564,44 +599,32 @@ export const ERROR_ROWS: Readonly<Record<string, ErrorRow>> = {
 };
 
 /**
- * The two `docs/08` §8.3 rows this build **cannot** render, and why.
+ * The `docs/08` §8.3 rows this build **cannot** render, and why. **Empty since
+ * 2026-11-25** (`P1-T37`), kept, typed, so the tests that walk it still catch a
+ * row added to `ERROR_ROWS` without a message or one that loses its values.
  *
- * Each of these messages declares a placeable that `docs/07` §5.2's
- * `SerializedError` does not carry. `toSerialized()` projects exactly `code`,
- * `messageKey`, `detail`, `retryable`, `httpStatus` and `stack`; the thrower's
- * structured `context` — which is where `RateLimitError.retryAfterMs`,
- * `TimeoutError.timeoutMs` and `NetworkError`'s host live — is **dropped at
- * that boundary**. So the value is not hidden behind a cast or an awkward API;
- * it does not exist by the time a pipeline outcome reaches a view.
- *
- * | code | §8.3 message | missing |
- * |---|---|---|
- * | `TIMEOUT` | "{host} did not respond within {n}s." | `host`, `seconds` |
- * | `NETWORK` | "Could not reach {host}." | `host` |
- *
- * These codes fall through to {@link genericSourceError}, which names what
- * failed and which service (NFR-14's first two requirements) and offers Retry,
- * with the machine code in the disclosure. **This is reported, not smoothed
- * over** (`plan/README.md` §5 rule 6): closing either gap needs
- * `src/core/errors.ts` to carry a redacted subset of `context` into
- * `SerializedError`. **Needs a card.**
+ * Until then it held `TIMEOUT` ("{host} did not respond within {n}s.") and
+ * `NETWORK` ("Could not reach {host}."): each message declares a placeable that
+ * `SerializedError` did not carry, because `toSerialized()` dropped the
+ * thrower's `context`, where `TimeoutError.timeoutMs` and the request's URL
+ * lived. `P1-T37` added two named members to `SerializedError` — `host`, the
+ * request's host name only, and `timeoutSeconds` — and gave both codes a row in
+ * {@link ERROR_ROWS}. A timeout or transport error that arrives without its host
+ * (a thrower that gave no URL) still falls through to {@link genericSourceError},
+ * with Retry from its own `retryable`.
  *
  * **`RATE_LIMIT` left this list on 2026-10-21** (`plan/00` §6 item 232). Its
- * §8.3 message, "{provider} rate limit reached. Retrying in {n}s.", was
- * unrenderable for two reasons: the seconds are not carried, and "Retrying"
- * would be false, because `src/core/http/client.ts` retries a 429 *inside*
- * the request (since item 228, 2026-10-20) and the `RateLimitError` that
- * reaches a pipeline outcome is the one thrown after the last attempt failed —
- * nothing is retrying by then. Both reasons still hold for that message. The
- * owner chose a different, truthful one instead: {@link ERROR_ROWS}'s
- * `RATE_LIMIT` row shows "too many requests, refused · try again in a moment"
- * with the database's name, which needs neither the seconds nor a pending
- * retry.
+ * §8.3 message, "{provider} rate limit reached. Retrying in {n}s.", is still not
+ * drawn, for one reason: "Retrying" would be false, because
+ * `src/core/http/client.ts` retries a 429 *inside* the request (since item 228,
+ * 2026-10-20) and the `RateLimitError` that reaches a pipeline outcome is the
+ * one thrown after the last attempt failed — nothing is retrying by then. (The
+ * seconds are not carried either: `P1-T37` carries no `retryAfterMs`, on
+ * purpose.) The owner chose a different, truthful message instead:
+ * {@link ERROR_ROWS}' `RATE_LIMIT` row shows "too many requests, refused · try
+ * again in a moment" with the database's name, which needs neither.
  */
-export const UNRENDERABLE_ERROR_ROWS: readonly string[] = [
-  "TIMEOUT",
-  "NETWORK",
-];
+export const UNRENDERABLE_ERROR_ROWS: readonly string[] = [];
 
 /**
  * §8.3's fallback: name the database, offer Retry, put the code in the
@@ -631,7 +654,8 @@ export function errorView(
   readonly prefs: boolean;
 } {
   const row = ERROR_ROWS[error.code];
-  if (row === undefined) {
+  const ref = row?.ref(database, error);
+  if (row === undefined || ref === undefined) {
     return {
       ref: genericSourceError(database),
       // `retryable` is the thrower's own verdict (`docs/07` §10.1), so an
@@ -642,10 +666,62 @@ export function errorView(
     };
   }
   return {
-    ref: row.ref(database, error.httpStatus),
+    ref,
     retry: row.retry,
     prefs: row.openPreferences,
   };
+}
+
+/**
+ * `validateSearchImportInput`'s messages, as the sentence the error panel
+ * headlines a rejected run with (`P1-T38`, 2026-11-25).
+ *
+ * Keyed by the `messageKey` the pipeline puts on its run-level
+ * `CONFIGURATION` error when `Planning` rejects the input — the ids
+ * `SEARCH_IMPORT_VALIDATION_KEYS` in
+ * `src/pipeline/searchImport/searchImportPipeline.ts` names. Before this card
+ * three of them had no message in any bundle, so the panel fell back to
+ * `rh-error-configuration` ("not configured correctly … check the
+ * preferences"), which is not what is wrong with an empty keyword box.
+ *
+ * `worksMisaligned` is the fifth id and is **not** here: no window can produce
+ * it (its doc comment says so), and no sentence was written for it, so it
+ * keeps the `CONFIGURATION` row.
+ *
+ * The range in `research-helper-search-max-results-range` is `docs/07` §8.5's,
+ * read from {@link PREFS} the way the pipeline reads it, so the numbers are
+ * stated in one place.
+ */
+export const VALIDATION_HEADLINES: Readonly<Record<string, () => MessageRef>> =
+  {
+    "research-helper-search-query-empty": () =>
+      message("research-helper-search-query-empty"),
+    "research-helper-search-databases-none": () =>
+      message("research-helper-search-databases-none"),
+    "research-helper-search-max-results-range": () =>
+      message("research-helper-search-max-results-range", {
+        min: PREFS.maxResults.min,
+        max: PREFS.maxResults.max,
+      }),
+    "research-helper-search-target-missing": () =>
+      message("research-helper-search-target-missing"),
+  };
+
+/**
+ * The validation sentence for a run `Planning` rejected, or `undefined` for any
+ * other error. See {@link VALIDATION_HEADLINES}.
+ *
+ * Such a run offers **neither** Retry nor Open Preferences: Retry would send the
+ * same input to the same check, and nothing in the preferences is wrong — the
+ * sentence names the control to change, which is NFR-14's next action.
+ */
+export function validationHeadline(
+  error: SerializedError | undefined,
+): MessageRef | undefined {
+  if (error === undefined || error.code !== "CONFIGURATION") return undefined;
+  return Object.hasOwn(VALIDATION_HEADLINES, error.messageKey)
+    ? VALIDATION_HEADLINES[error.messageKey]?.()
+    : undefined;
 }
 
 /** The disclosure's lines: machine values only. See {@link ERROR_DETAIL_FIELDS}. */
@@ -2601,6 +2677,12 @@ export function createSearchImportViewModel(
         ...perSourceErrors.map(({ error }) => error),
         ...runLevelErrors,
       ];
+      // `P1-T38`: a run `Planning` rejected is headlined by its own
+      // validation sentence, and offers no button (see `validationHeadline`).
+      const rejected =
+        output.perSource.length === 0 && runLevel[0] !== undefined
+          ? validationHeadline(output.error)
+          : undefined;
       publish({
         sources: lines,
         records: [],
@@ -2615,26 +2697,27 @@ export function createSearchImportViewModel(
           // the second route — `validateSearchImportInput` returns
           // `{ field: "query" }` — and claiming a network failure for it would
           // be exactly the misleading primary text NFR-14 forbids. So a run that
-          // asked nobody is headlined by its own §8.3 row.
+          // asked nobody is headlined by its own sentence.
           //
-          // That row is `rh-error-configuration`, which is not the right
-          // sentence either: the right one is
-          // `research-helper-search-query-empty`, the id
-          // `SEARCH_IMPORT_VALIDATION_KEYS` names and **no bundle declares**
-          // (`P1-T16` reported all three of its validation ids as missing).
-          // Reachable from a button now rather than only from a pipeline call,
-          // so the gap is reported again with a higher priority. **Needs a card**
-          // in `P1-T18`'s bundles.
+          // *Since 2026-11-25 (`P1-T38`):* that sentence is the validation
+          // message itself — `research-helper-search-query-empty`, the
+          // out-of-range and the no-target sentences — which the bundle now
+          // declares ({@link VALIDATION_HEADLINES}). Before, it was §8.3's
+          // `rh-error-configuration` row, "not the right sentence either", and
+          // an error this table does not know still falls back to that row.
           headline:
-            output.perSource.length === 0 && runLevel[0] !== undefined
+            rejected ??
+            (output.perSource.length === 0 && runLevel[0] !== undefined
               ? runLevel[0].ref
-              : message("research-helper-search-state-error"),
+              : message("research-helper-search-state-error")),
           lines: lines.filter((line) => line.outcome === "failed"),
           details: errorDetails(errors),
-          retry: [...actions, ...runLevel].some((action) => action.retry),
-          openPreferences: [...actions, ...runLevel].some(
-            (action) => action.prefs,
-          ),
+          retry:
+            rejected === undefined &&
+            [...actions, ...runLevel].some((action) => action.retry),
+          openPreferences:
+            rejected === undefined &&
+            [...actions, ...runLevel].some((action) => action.prefs),
         },
         status: undefined,
         databaseProgress: undefined,
@@ -2755,14 +2838,17 @@ export function createSearchImportViewModel(
       }
       if (output.error !== undefined) {
         const action = errorView(output.error, "");
+        // `P1-T38`: an import `Planning` rejected — no target, most likely —
+        // says which control is wrong and offers no button.
+        const rejected = validationHeadline(output.error);
         publish({
           panel: "error",
           error: {
-            headline: message("research-helper-search-state-error"),
+            headline: rejected ?? message("research-helper-search-state-error"),
             lines: [],
             details: errorDetails([output.error]),
-            retry: action.retry,
-            openPreferences: action.prefs,
+            retry: rejected === undefined && action.retry,
+            openPreferences: rejected === undefined && action.prefs,
           },
           progressPercent: undefined,
         });
@@ -2972,6 +3058,13 @@ export function createSearchImportViewModel(
             '"New collection…" path needs a name, and the document prompts ' +
             "for one",
         );
+        // `P1-T38`: and the window says so, in §8.1's inline banner, keeping
+        // the preview the user is choosing from. The document's own Import
+        // button cannot get here (it asks for a name first, and a dismissed
+        // prompt imports nothing); a host driven directly can.
+        publish({
+          warnings: [message("research-helper-search-target-missing")],
+        });
         return;
       }
       const duplicatePolicy = toDuplicatePolicy(request.duplicates);

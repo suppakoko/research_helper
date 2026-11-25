@@ -474,3 +474,29 @@ transmission, and no Gecko plugin can pin certificates.
 
 **Phase 0's card states at close:** 35 cards, **33 `DONE`**. The two open cards are `P0-T34` and
 `P0-T35`, both created by this report's own escalations and both still `TODO`.
+
+## Addendum C — 2026-11-25: `V-9`'s mid-stream case measured (`P0-T35`)
+
+This report is not revised in place, so the `V-9` row, finding 2 and escalation row 10 above stand as
+written; this addendum records the measurement they asked for. `P0-T35` stays `TODO` until the owner
+reviews it (`plan/reports/P0-T35.md`).
+
+**How it was run.** `scripts/spike-network.ts --p0-t35` emits a paste block with only the two `P0-T35`
+legs. It reaches no public host: the probe starts its own loopback server (`nsIServerSocket`, 127.0.0.1
+only), which answers with a 196,608-character body in 48 writes, 80 ms apart. The block was evaluated
+in Zotero 10.0.8 the way Run JavaScript does, from a temporary spec inside two development runs of the
+integration suite (batch L, `plan/reports/P7-batchL.md`); each run's live-request guard listed only
+loopback hosts. Both legs abort on the **third progress event**, not on a timer.
+
+| Question | Leg [14], `cancellerReceiver` | Leg [15], `HttpClient` `onCanceller` | `P0-T17`, before the first byte |
+|---|---|---|---|
+| Received at the cancel | 12,288 characters, 3 progress events (both runs) | 12,288 characters, 3 `onBodyText` deliveries (both runs) | 0 characters |
+| (a) Does the cancel stop it? | **Yes.** Rejected 0–1 ms after the call; the server's next write failed (`NS_ERROR_NET_RESET`) after 5 of 48 | **Yes.** Settled 0–1 ms after the call; the same server failure | Yes, 0 ms |
+| (b) Is the partial body readable afterwards? | **No.** `xhr.response` reads as an empty string (0 characters) | The client had already delivered the 12,288 characters through `onBodyText`; nothing after the cancel | Not answerable (0 characters) |
+| (c) Further events in 2,500 ms | **0** | **0** deliveries | 0 |
+| Exception | `Zotero.HTTP.CancelledException`, the only one of five classes that matched (run 2; run 1's leg named it by `name`, which a non-`Error` exception does not have, and was corrected) | `Zotero.HTTP` rejected with `CancelledException`; the client threw `OperationCancelledError`, which `toHierarchy` builds from `HttpError` code `CANCELLED` | `CancelledException`; `HttpError` code `CANCELLED` |
+
+**Consequence for Phase 3.** Cancellation is real mid-stream, and the code mapping holds with bytes
+already delivered. The partial body cannot be read back from the request after a cancel, so a job that
+keeps partial output must keep the text as it arrives — which `HttpOptions.onBodyText` (`P3-T11`) already
+hands over. Escalation row 10's re-probe is done.

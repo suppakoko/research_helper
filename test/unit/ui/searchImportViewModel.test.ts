@@ -53,7 +53,11 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { createSystemClock } from "../../../src/core/clock";
-import { TimeoutError, type SerializedError } from "../../../src/core/errors";
+import {
+  NetworkError,
+  TimeoutError,
+  type SerializedError,
+} from "../../../src/core/errors";
 import type { CancellationToken } from "../../../src/core/jobQueue/cancellation";
 import type { ProgressSnapshot } from "../../../src/core/jobQueue/progress";
 import { createLogger } from "../../../src/core/logger";
@@ -69,6 +73,8 @@ import type {
   WorkType,
 } from "../../../src/model/canonicalWork";
 import { normalizeDoi, type Doi, type SourceId } from "../../../src/model/ids";
+import { SEARCH_IMPORT_VALIDATION_KEYS } from "../../../src/pipeline/searchImport/searchImportPipeline";
+import { PREFS } from "../../../src/prefs/schema";
 import type { SourceRecord } from "../../../src/model/sourceRecord";
 import type {
   SearchImportInput,
@@ -114,6 +120,8 @@ import {
   ERROR_ROWS,
   KEY_NOTICE_SOURCE_ID,
   UNRENDERABLE_ERROR_ROWS,
+  VALIDATION_HEADLINES,
+  validationHeadline,
   type CollectionDescriptor,
   type RerunCollection,
   type KeyStatus,
@@ -138,6 +146,9 @@ const NCBI_SHAPED_KEY = "0123456789abcdef".repeat(2);
 const DATABASE = "PubMed";
 
 const STATUS = 503;
+/** `P1-T37`: what a transport error carries for §8.3's TIMEOUT and NETWORK rows. */
+const HOST = "eutils.ncbi.nlm.nih.gov";
+const SECONDS = 30;
 
 const PLUGIN_VERSION = "0.0.2-test";
 const ZOTERO_VERSION = "10.0.3-test";
@@ -171,9 +182,12 @@ function failure(
     readonly httpStatus?: number;
     readonly detail?: string;
     readonly stack?: string;
+    /** `P1-T37`'s two named members. */
+    readonly host?: string;
+    readonly timeoutSeconds?: number;
   } = {},
 ): SerializedError {
-  const { httpStatus, stack } = options;
+  const { httpStatus, stack, host, timeoutSeconds } = options;
   return {
     code,
     messageKey: `rh-error-${code.toLowerCase()}`,
@@ -183,6 +197,8 @@ function failure(
     retryable: options.retryable ?? false,
     ...(httpStatus === undefined ? {} : { httpStatus }),
     ...(stack === undefined ? {} : { stack }),
+    ...(host === undefined ? {} : { host }),
+    ...(timeoutSeconds === undefined ? {} : { timeoutSeconds }),
   };
 }
 
@@ -625,6 +641,17 @@ const EXPECTED_ROWS: Readonly<
     retry: true,
     prefs: false,
   },
+  // `P1-T37`: §8.3's two rows, from the error's `host` and `timeoutSeconds`.
+  TIMEOUT: {
+    ref: { id: "rh-error-timeout", args: { host: HOST, seconds: SECONDS } },
+    retry: true,
+    prefs: false,
+  },
+  NETWORK: {
+    ref: { id: "rh-error-network", args: { host: HOST } },
+    retry: true,
+    prefs: false,
+  },
   UPSTREAM_SERVER: {
     ref: {
       id: "rh-error-upstream",
@@ -677,8 +704,9 @@ describe("P1-T39 — errorView() over docs/08 §8.3's table", () => {
     for (const [code, expected] of Object.entries(EXPECTED_ROWS)) {
       // `retryable: true` on every error, so a row whose §8.3 verdict is "no
       // retry" cannot pass by inheriting the thrower's verdict instead.
+      const named = { host: HOST, timeoutSeconds: SECONDS };
       const view = errorView(
-        failure(code, { httpStatus: STATUS, retryable: true }),
+        failure(code, { httpStatus: STATUS, retryable: true, ...named }),
         DATABASE,
       );
       expect(view.ref, code).toStrictEqual(expected.ref);
@@ -688,7 +716,7 @@ describe("P1-T39 — errorView() over docs/08 §8.3's table", () => {
       // And the other way round: a mapped row's actions are the table's, so
       // flipping the error's own verdict changes nothing.
       const flipped = errorView(
-        failure(code, { httpStatus: STATUS, retryable: false }),
+        failure(code, { httpStatus: STATUS, retryable: false, ...named }),
         DATABASE,
       );
       expect(flipped.retry, code).toBe(expected.retry);
@@ -710,35 +738,41 @@ describe("P1-T39 — errorView() over docs/08 §8.3's table", () => {
     });
   });
 
-  it("sends every row this build cannot render to the generic row", () => {
-    // The two §8.3 rows `UNRENDERABLE_ERROR_ROWS`' doc comment names. Listed
-    // here as well so that the day one of them becomes renderable — a row in
-    // `ERROR_ROWS`, or a member dropped from the constant — this test fails and
-    // says to come here too. `RATE_LIMIT` left the list with item 232.
-    expect([...UNRENDERABLE_ERROR_ROWS].toSorted()).toStrictEqual([
-      "NETWORK",
-      "TIMEOUT",
-    ]);
-    // Guards the loop below against a constant emptied by accident, which
-    // would make every assertion in it vacuous.
-    expect(UNRENDERABLE_ERROR_ROWS.length).toBeGreaterThan(0);
-
+  it("renders every §8.3 row it has a table entry for; UNRENDERABLE_ERROR_ROWS is empty (P1-T37)", () => {
+    // `TIMEOUT` and `NETWORK` left the constant with `P1-T37` (2026-11-25), when
+    // `SerializedError` gained `host` and `timeoutSeconds`; `RATE_LIMIT` left
+    // with item 232. A code added back here without a row fails the second line.
+    expect([...UNRENDERABLE_ERROR_ROWS]).toStrictEqual([]);
     for (const code of UNRENDERABLE_ERROR_ROWS) {
       expect(Object.keys(ERROR_ROWS), code).not.toContain(code);
+    }
+    expect(Object.keys(ERROR_ROWS)).toEqual(
+      expect.arrayContaining(["TIMEOUT", "NETWORK"]),
+    );
+  });
+
+  it("falls back to the generic row for a transport error that carries no host (P1-T37)", () => {
+    // A thrower that gave no URL a host can be read from: the row cannot fill
+    // its sentence, so it draws what it drew before the card, Retry from the
+    // error's own verdict.
+    for (const [code, options] of [
+      ["TIMEOUT", { timeoutSeconds: SECONDS }],
+      ["TIMEOUT", { host: HOST }],
+      ["NETWORK", {}],
+    ] as const) {
       const view = errorView(
-        failure(code, { retryable: true, httpStatus: 429 }),
+        failure(code, { retryable: true, httpStatus: 429, ...options }),
         DATABASE,
       );
-      // NFR-14's first two requirements: what failed, and which service.
       expect(view.ref, code).toStrictEqual({
         id: "rh-error-source",
         args: { database: DATABASE },
       });
-      // No invented countdown, no Preferences button, and Retry exactly when
-      // the thrower said a retry could plausibly succeed.
       expect(view.retry, code).toBe(true);
       expect(view.prefs, code).toBe(false);
-      expect(errorView(failure(code), DATABASE).retry, code).toBe(false);
+      expect(errorView(failure(code, options), DATABASE).retry, code).toBe(
+        false,
+      );
     }
   });
 
@@ -756,10 +790,54 @@ describe("P1-T39 — errorView() over docs/08 §8.3's table", () => {
     expect(serialized.retryable).toBe(true);
     const view = errorView(serialized, DATABASE);
     expect(view.retry).toBe(true);
+    // `P1-T37`: §8.3's TIMEOUT sentence, with the host name and the seconds;
+    // before the card this was the generic row.
     expect(view.ref).toStrictEqual({
-      id: "rh-error-source",
-      args: { database: DATABASE },
+      id: "rh-error-timeout",
+      args: { host: "eutils.ncbi.nlm.nih.gov", seconds: 60 },
     });
+  });
+
+  it("draws only the host and the seconds from a real error's planted context (P1-T37)", () => {
+    // Real classes with a context planted the way a careless thrower would:
+    // a key in the path and the query, a user path, an export path and a
+    // linked audio folder (the context is frozen, so the timeout gets the
+    // planted URL through its constructor). The sentence's arguments and the disclosure lines
+    // may hold the host name and the seconds, and nothing else of it.
+    const KEY = `sk-or-v1-${"k".repeat(40)}`;
+    const USER_PATH = String.raw`C:\Users\planted-user\Zotero\storage\ABCD1234\paper.pdf`;
+    const planted = {
+      url: `https://eutils.ncbi.nlm.nih.gov/v1/${KEY}/esearch.fcgi?api_key=${NCBI_SHAPED_KEY}&term=planted-query-words`,
+      file: USER_PATH,
+      exportPath: String.raw`D:\planted-exports\run.csv`,
+      audioFolder: String.raw`C:\Users\planted-user\Music\planted-audio`,
+    };
+    const timeout = new TimeoutError(30_000, planted.url);
+    const errors = [
+      timeout.toSerialized(),
+      new NetworkError("No HTTP response", planted).toSerialized(),
+    ];
+    for (const error of errors) {
+      const view = errorView(error, DATABASE);
+      const shown = JSON.stringify([view.ref, errorDetails([error])]);
+      for (const value of [
+        KEY,
+        NCBI_SHAPED_KEY,
+        "planted-query-words",
+        "planted-user",
+        "planted-exports",
+        "planted-audio",
+        "esearch.fcgi",
+        "/v1/",
+      ]) {
+        expect(shown, `${error.code} shows ${value}`).not.toContain(value);
+      }
+      expect(view.ref.args, error.code).toStrictEqual(
+        error.code === "TIMEOUT"
+          ? { host: "eutils.ncbi.nlm.nih.gov", seconds: 30 }
+          : { host: "eutils.ncbi.nlm.nih.gov" },
+      );
+    }
   });
 
   it("falls back to the generic row for a code the table never heard of", () => {
@@ -780,6 +858,55 @@ describe("P1-T39 — errorView() over docs/08 §8.3's table", () => {
 // ===========================================================================
 // 5. `errorDetails` — NFR-14's disclosure
 // ===========================================================================
+
+describe("P1-T38 — validationHeadline() over the pipeline's validation ids", () => {
+  const rejected = (
+    messageKey: string,
+    code = "CONFIGURATION",
+  ): SerializedError => ({
+    code,
+    messageKey,
+    detail: "rejected by Planning",
+    retryable: false,
+  });
+
+  it("gives every validation id a window can trigger its own sentence, and worksMisaligned none", () => {
+    // `worksMisaligned` (P2-T31) has no sentence: the view model always passes
+    // the preview's own works back, so no window can send a misaligned set.
+    const { worksMisaligned, ...triggerable } = SEARCH_IMPORT_VALIDATION_KEYS;
+    expect(Object.keys(VALIDATION_HEADLINES).sort()).toStrictEqual(
+      Object.values(triggerable).sort(),
+    );
+    for (const id of Object.values(triggerable)) {
+      expect(validationHeadline(rejected(id))?.id, id).toBe(id);
+    }
+    expect(validationHeadline(rejected(worksMisaligned))).toBeUndefined();
+  });
+
+  it("fills the range sentence from the preference schema, the one place the numbers live", () => {
+    expect(
+      validationHeadline(
+        rejected(SEARCH_IMPORT_VALIDATION_KEYS.limitOutOfRange),
+      ),
+    ).toStrictEqual({
+      id: "research-helper-search-max-results-range",
+      args: { min: PREFS.maxResults.min, max: PREFS.maxResults.max },
+    });
+  });
+
+  it("answers only a CONFIGURATION error, and never an inherited property name", () => {
+    expect(validationHeadline(undefined)).toBeUndefined();
+    expect(
+      validationHeadline(
+        rejected(SEARCH_IMPORT_VALIDATION_KEYS.emptyQuery, "NETWORK"),
+      ),
+    ).toBeUndefined();
+    expect(validationHeadline(rejected("toString"))).toBeUndefined();
+    expect(
+      validationHeadline(rejected("rh-error-configuration")),
+    ).toBeUndefined();
+  });
+});
 
 describe("P1-T39 — errorDetails()", () => {
   it("emits exactly the fields ERROR_DETAIL_FIELDS names, in order", () => {

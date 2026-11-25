@@ -53,8 +53,18 @@ href="chrome://__addonRef__/content/style/searchDialog.css" type="text/css"?>
     <script src="chrome://global/content/globalOverlay.js" />
     <script src="chrome://zotero/content/include.js" />
     <script src="chrome://__addonRef__/content/searchDialog.js" />
+    <!-- Two bundles (P1-T38, 2026-11-25). This window's own strings are in
+         searchDialog.ftl; its error rows (docs/08 §8.3's rh-error-*), the
+         database names, the import summary and the coverage line are in
+         mainWindow.ftl, which src/i18n/keys.ts's MESSAGE_IDS_BY_SURFACE puts
+         there. The second link was added at run time by
+         RHSearchWindow.addMainWindowBundle (document.l10n.addResourceIds) from
+         P1-T22 until P1-T38 moved it here, so that every resource this window
+         reads is listed in one place. Without it each of those surfaces
+         renders as an empty element. -->
     <linkset>
       <html:link rel="localization" href="__addonRef__-searchDialog.ftl" />
+      <html:link rel="localization" href="__addonRef__-mainWindow.ftl" />
     </linkset>
 
     <!-- 1. Query row — docs/08 §4.2, §4.5. Keyword is focused on open and

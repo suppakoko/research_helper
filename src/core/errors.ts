@@ -11,7 +11,11 @@
  * **Authority.** Class names, `code` strings, `messageKey` strings, `retryable`
  * and `userFacing` values and constructor signatures are
  * `docs/07-architecture-and-data-model.md` §10.1's, verbatim.
- * {@link SerializedError} is §5.2's, verbatim. {@link KEYISH_FIELD},
+ * {@link SerializedError} is §5.2's, verbatim. *Checked 2026-11-25
+ * (`P1-T37`):* both claims still hold after `SerializedError` gained `host`
+ * and `timeoutSeconds` and `NetworkError` gained `host` and a constructor of
+ * the base's signature, because `docs/07` §5.2 and §10.1 were amended in the
+ * same change, with dated notes that say why. {@link KEYISH_FIELD},
  * {@link KEY_PATTERNS}, {@link redact} and {@link loggableHeaders} (`P3-T01`)
  * are `docs/09-security-privacy-and-api-keys.md` §2.1's, verbatim.
  *
@@ -297,6 +301,23 @@ export function loggableHeaders(
  * Stored in `JobRecord.error` (§5.2) and in `SourceProvenance.error` (§5.3,
  * which `P1-T17` writes and `schema/provenance.schema.json` validates), so its
  * field names are part of an exported artefact and not an internal detail.
+ *
+ * **`host` and `timeoutSeconds` were added on 2026-11-25 (`P1-T37`), and §5.2
+ * says so in a dated note.** They are the two values `docs/08` §8.3's
+ * `TIMEOUT` and `NETWORK` rows name ("{host} did not respond within {n}s.",
+ * "Could not reach {host}."), and before them a view could draw neither row:
+ * the values were in the thrower's `context`, which this projection drops.
+ * **`context` itself is never carried**, because it is redacted only by the
+ * thrower's own discipline and may hold anything — a request's path and query,
+ * a file path. Each member is one narrowly typed value, lifted from a public
+ * class member the way `httpStatus` is ({@link ResearchHelperError.toSerialized}):
+ * `host` is the failing request's host name and nothing else of its URL
+ * ({@link hostNameOf}), `timeoutSeconds` is `TimeoutError.timeoutMs` in whole
+ * seconds.
+ *
+ * `src/core/provenance.ts`'s gate copies only the members it names, so neither
+ * new member reaches a provenance record or its schema; a `JobRecord.error`
+ * keeps them, after `redactRecord`.
  */
 export interface SerializedError {
   readonly code: string;
@@ -306,6 +327,54 @@ export interface SerializedError {
   readonly retryable: boolean;
   readonly httpStatus?: number;
   readonly stack?: string;
+  /** `NetworkError` and its subclasses: the request's host name only (`P1-T37`). */
+  readonly host?: string;
+  /** `TimeoutError`: the deadline that passed, in whole seconds (`P1-T37`). */
+  readonly timeoutSeconds?: number;
+}
+
+/**
+ * The host name of `target`, and nothing else of it — no scheme, port, user,
+ * path, query or fragment (`P1-T37`).
+ *
+ * `target` is what a thrower put in a transport error's `context.url`: an
+ * absolute URL from the HTTP client, or a bare host name — the pipeline's
+ * per-source deadline throws `TimeoutError(ms, source.rateLimitKey)`, and a
+ * `rateLimitKey` is a host such as `eutils.ncbi.nlm.nih.gov`. Anything else (a
+ * relative URL, a file path, a URL with no host such as `file:///…`, a value
+ * that is not a string) gives `undefined`, and a view then draws its generic
+ * row rather than a guess.
+ *
+ * The name still passes through {@link redact}, the one redactor, so a
+ * key-shaped label cannot reach a view even inside a host name. This function
+ * adds no pattern of its own: the bare-host test below decides only whether
+ * the text is *shaped like* a host, never what is secret.
+ *
+ * @param target - a URL or a bare host name, as the thrower supplied it
+ * @returns the lower-cased host name, redacted, or `undefined`
+ */
+export function hostNameOf(target: unknown): string | undefined {
+  if (typeof target !== "string" || target === "") return undefined;
+  let host = "";
+  try {
+    host = new URL(target).hostname;
+  } catch {
+    // Not an absolute URL. A bare host name — labels of letters, digits and
+    // hyphens, joined by dots — is the one other shape a thrower sends.
+    if (/^(?:[A-Za-z0-9-]+\.)+[A-Za-z0-9-]+$|^localhost$/u.test(target)) {
+      host = target;
+    }
+  }
+  return host === "" ? undefined : redact(host.toLowerCase());
+}
+
+/**
+ * Whole seconds for a deadline in milliseconds, at least 1, or `undefined` for
+ * a value that is not a positive finite number (`P1-T37`).
+ */
+function wholeSeconds(ms: number): number | undefined {
+  if (!Number.isFinite(ms) || ms <= 0) return undefined;
+  return Math.max(1, Math.round(ms / 1000));
 }
 
 // ---------------------------------------------------------------------------
@@ -387,6 +456,11 @@ export abstract class ResearchHelperError extends Error {
   toSerialized(): SerializedError {
     const { httpStatus } = this as unknown as { httpStatus?: number };
     const { stack } = this;
+    // `P1-T37`: two named members, each read off a public member of one class
+    // — never off `context`, whose contents only the thrower vouches for.
+    const host = this instanceof NetworkError ? this.host : undefined;
+    const timeoutSeconds =
+      this instanceof TimeoutError ? wholeSeconds(this.timeoutMs) : undefined;
     return {
       code: this.code,
       messageKey: this.messageKey,
@@ -394,6 +468,8 @@ export abstract class ResearchHelperError extends Error {
       retryable: this.retryable,
       ...(httpStatus !== undefined && { httpStatus }),
       ...(stack !== undefined && { stack: redact(stack) }),
+      ...(host !== undefined && { host }),
+      ...(timeoutSeconds !== undefined && { timeoutSeconds }),
     };
   }
 }
@@ -417,6 +493,26 @@ export class NetworkError extends ResearchHelperError {
   readonly code: string = "NETWORK";
   readonly messageKey: string = "rh-error-network";
   readonly retryable: boolean = true;
+  /**
+   * The failing request's host name, from `context.url` ({@link hostNameOf}),
+   * or `undefined` when the thrower gave no URL a host can be read from
+   * (`P1-T37`, 2026-11-25). The one value of the context that
+   * {@link ResearchHelperError.toSerialized} carries, for `docs/08` §8.3's
+   * "Could not reach {host}." and "{host} did not respond within {n}s.".
+   *
+   * The constructor's signature is §10.1's — `ResearchHelperError`'s — so no
+   * thrower changes; §10.1 carries the same member in a dated note.
+   */
+  readonly host: string | undefined;
+
+  constructor(
+    message: string,
+    context: Record<string, unknown> = {},
+    options?: { cause?: unknown },
+  ) {
+    super(message, context, options);
+    this.host = hostNameOf(context.url);
+  }
 }
 export class OfflineError extends NetworkError {
   override readonly code: string = "OFFLINE";

@@ -621,6 +621,45 @@ describe("transport-exception classification", () => {
     );
   });
 
+  // `P1-T37` (2026-11-25): `ResearchHelperError.context` "MUST already be
+  // redacted by the thrower". The OFFLINE and NETWORK call sites in
+  // `toHierarchy` passed the HttpError's URL raw; a key in the *path* survives
+  // `urlForDisplay` (which drops only the query), so the context carried it.
+  it("redacts a key-shaped path segment out of an offline and a network error's context (P1-T37)", async () => {
+    const KEY = `sk-or-v1-${"k".repeat(40)}`;
+    const keyed = `https://example.test/v1/${KEY}/thing?api_key=${"ab12".repeat(8)}`;
+    const offline = (await createHttpClient({
+      transport: createStubTransport(() =>
+        Promise.reject(new StubBrowserOfflineException()),
+      ),
+      userAgent: UA,
+    })
+      .request("GET", keyed)
+      .catch((e: unknown) => e)) as OfflineError;
+    const { client } = clientFor(stubXhr({ status: 0 }));
+    const network = (await client
+      .request("GET", keyed)
+      .catch((e: unknown) => e)) as NetworkError;
+
+    for (const [name, error] of [
+      ["offline", offline],
+      ["network", network],
+    ] as const) {
+      expect(error, name).toBeInstanceOf(NetworkError);
+      expect(String(error.context.url), name).not.toContain(KEY);
+      expect(String(error.context.url), name).not.toContain("ab12ab12");
+      expect(String(error.context.url), name).toContain("[redacted:");
+      expect(error.host, name).toBe("example.test");
+      const serialized = JSON.stringify(error.toSerialized());
+      // The `detail` and `stack` carry the message, which names origin and
+      // path through `urlForDisplay` and `redact` (unchanged by this card);
+      // the key must be gone from there too.
+      expect(serialized, name).not.toContain(KEY);
+      expect(serialized, name).not.toContain("ab12ab12");
+      expect(error.toSerialized().host, name).toBe("example.test");
+    }
+  });
+
   it("re-throws a non-transport error unchanged", async () => {
     const bug = new TypeError("x is not a function");
     const transport = createStubTransport(() => Promise.reject(bug));

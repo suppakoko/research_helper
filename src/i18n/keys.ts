@@ -897,6 +897,9 @@ export const SEARCH_DIALOG_MESSAGE_IDS = [
   // Query row.
   "research-helper-search-keyword-label",
   "research-helper-search-keyword-input",
+  // P1-T38: `SEARCH_IMPORT_VALIDATION_KEYS.emptyQuery`, the error panel's
+  // headline when Planning rejects an empty keyword box.
+  "research-helper-search-query-empty",
   "research-helper-search-run",
   "research-helper-search-mode-keyword",
   // FR-12's mode chip, `Re-run: <collection name>` (P2-T17).
@@ -1043,6 +1046,8 @@ export const SEARCH_DIALOG_MESSAGE_IDS = [
   // Per-database limit (the number is docs/07 §8.5's `maxResults`).
   "research-helper-search-max-results-label",
   "research-helper-search-max-results-input",
+  // P1-T38: `SEARCH_IMPORT_VALIDATION_KEYS.limitOutOfRange`; takes the range.
+  "research-helper-search-max-results-range",
 
   // Database selection (FR-2).
   "research-helper-search-databases-label",
@@ -1091,6 +1096,8 @@ export const SEARCH_DIALOG_MESSAGE_IDS = [
   "research-helper-search-target-label",
   "research-helper-search-target-picker",
   "research-helper-search-target-new",
+  // P1-T38: `SEARCH_IMPORT_VALIDATION_KEYS.noTarget`, an import naming no collection.
+  "research-helper-search-target-missing",
   "research-helper-search-duplicates-label",
   "research-helper-search-duplicates-skip",
   "research-helper-search-duplicates-link",
@@ -1536,6 +1543,14 @@ export const KO_PENDING_REVIEW = [
   // All 20 were added 2026-11-17 as commented drafts and left this list the same day: the
   // owner approved the coordinator's Korean in chat (`G-41`, plan/00 §6 item 397), so all
   // are on KO_PRESENT.
+  // --- P1-T38's three validation sentences (searchDialog) ---
+  // Added 2026-11-25 (batch L) with no Korean in the bundle: the `ko-KR` file carries a
+  // comment naming each id and its English source, and the coordinator's drafts are in
+  // `plan/reports/ko-review-batchL.md` for the owner (`G-41`). Until one is adopted the
+  // window shows the English, and CI's l10n step passes each id with `--allow`.
+  "research-helper-search-query-empty",
+  "research-helper-search-max-results-range",
+  "research-helper-search-target-missing",
 ] as const satisfies readonly FluentMessageId[];
 
 /**
@@ -2492,6 +2507,8 @@ export interface FluentMessageArgsMap {
     years: number;
   };
   "research-helper-search-result-count": { total: number; new: number };
+  // P1-T38: `docs/07` §8.5's `maxResults` range, read from `PREFS.maxResults`.
+  "research-helper-search-max-results-range": { min: number; max: number };
   "research-helper-search-authors-overflow": { names: string; count: number };
   "research-helper-search-row-existing": { title: string };
   "research-helper-search-selected-count": { count: number };
@@ -2812,6 +2829,7 @@ export const ARGUMENT_MESSAGE_IDS = [
   // searchDialog (20)
   "research-helper-search-years-span",
   "research-helper-search-result-count",
+  "research-helper-search-max-results-range",
   "research-helper-search-authors-overflow",
   "research-helper-search-row-existing",
   "research-helper-search-selected-count",

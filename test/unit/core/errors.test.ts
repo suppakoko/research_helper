@@ -45,6 +45,10 @@ import {
   ERROR_MESSAGE_IDS,
   L10N_PROGRESS_HEADLINE,
 } from "../../../src/i18n/keys";
+import {
+  redactRecord,
+  redactSourceProvenance,
+} from "../../../src/core/provenance";
 
 /**
  * `P1-T02`. Layer 1 (`docs/13` §2.1): plain Node, no Zotero, no network.
@@ -1027,5 +1031,202 @@ describe("teardownErrorLine (P7-T36, item 395(d))", () => {
     );
     // Nothing else in the reporter writes to the debug output.
     expect(body.match(/Zotero\.debug\(/g)).toHaveLength(1);
+  });
+});
+
+/**
+ * `P1-T37` (2026-11-25): `SerializedError` carries two named members of a
+ * transport error — the request's host name and the timeout in seconds — and
+ * **nothing else of the thrower's `context`**.
+ *
+ * Every planted value below is built here from repeated characters or a
+ * made-up account name: none is anybody's key or path. The test that matters
+ * is the negative one: a key, a query string, a request path, a user's file
+ * path, an export path and a linked audio folder are each put into an error's
+ * context, and none may come out of the projection, out of `redactRecord` (the
+ * gate a `JobRecord.error` passes before it is stored), or out of the
+ * provenance gate. It fails if the whole context is carried instead of the two
+ * members.
+ */
+describe("P1-T37: the host and the seconds, and nothing else of the context", () => {
+  const KEY = `${"ab12".repeat(8)}`; // 32 hexadecimal characters, NCBI's shape
+  const OPAQUE_KEY = `sk-or-v1-${"k".repeat(40)}`;
+  const QUERY = "term=planted-query-words";
+  const REQUEST_PATH = "/entrez/eutils/esearch.fcgi";
+  const USER_PATH =
+    "C:\\Users\\planted-user\\Zotero\\storage\\ABCD1234\\paper.pdf";
+  const EXPORT_PATH =
+    "C:\\Users\\planted-user\\Desktop\\provenance-export.json";
+  const AUDIO_FOLDER = "D:\\planted-audio-folder\\briefings";
+  const URL_PLANTED = `https://eutils.ncbi.nlm.nih.gov${REQUEST_PATH}?${QUERY}&api_key=${KEY}`;
+  const PLANTED = [
+    KEY,
+    OPAQUE_KEY,
+    QUERY,
+    "planted-query-words",
+    REQUEST_PATH,
+    // Not "esearch" alone: the serialized `stack` names this repository's
+    // folder, `research_helper`, which contains it.
+    "esearch.fcgi",
+    "api_key",
+    USER_PATH,
+    "planted-user",
+    EXPORT_PATH,
+    "provenance-export",
+    AUDIO_FOLDER,
+    "planted-audio-folder",
+  ];
+
+  /** A context of the kind the brief forbids carrying: the URL plus three paths. */
+  const context = (): Record<string, unknown> => ({
+    url: URL_PLANTED,
+    method: "GET",
+    file: USER_PATH,
+    exportPath: EXPORT_PATH,
+    audioFolder: AUDIO_FOLDER,
+    token: OPAQUE_KEY,
+  });
+
+  const errors = (): readonly ResearchHelperError[] => [
+    new NetworkError("transport failed", context()),
+    new OfflineError("offline", context()),
+    new TimeoutError(45_000, URL_PLANTED),
+  ];
+
+  const expectNonePlanted = (text: string, where: string): void => {
+    for (const planted of PLANTED) {
+      expect(text, `${where} carries ${planted}`).not.toContain(planted);
+    }
+  };
+
+  it("carries the host name, and none of the planted values, in the projection", () => {
+    for (const error of errors()) {
+      const serialized = error.toSerialized();
+      expect(serialized.host, error.code).toBe("eutils.ncbi.nlm.nih.gov");
+      expectNonePlanted(
+        JSON.stringify(serialized),
+        `${error.code}'s projection`,
+      );
+      // Exactly §5.2's members plus the two this card adds; no context.
+      for (const member of Object.keys(serialized)) {
+        expect(
+          [
+            "code",
+            "messageKey",
+            "detail",
+            "retryable",
+            "httpStatus",
+            "stack",
+            "host",
+            "timeoutSeconds",
+          ],
+          `${error.code} carries ${member}`,
+        ).toContain(member);
+      }
+    }
+  });
+
+  it("carries a timeout's seconds, whole, and only on a TimeoutError", () => {
+    expect(
+      new TimeoutError(45_000, URL_PLANTED).toSerialized().timeoutSeconds,
+    ).toBe(45);
+    expect(
+      new TimeoutError(400, URL_PLANTED).toSerialized().timeoutSeconds,
+    ).toBe(1);
+    expect(
+      "timeoutSeconds" in new NetworkError("x", context()).toSerialized(),
+    ).toBe(false);
+    expect(
+      "timeoutSeconds" in
+        new TimeoutError(Number.NaN, URL_PLANTED).toSerialized(),
+    ).toBe(false);
+  });
+
+  it("reads the host of the pipeline's per-source deadline, which throws with a bare rateLimitKey", () => {
+    // `src/pipeline/searchImport/stages.ts`: `new TimeoutError(timeoutMs,
+    // source.rateLimitKey)`, and a `rateLimitKey` is a host, not a URL.
+    const serialized = new TimeoutError(
+      30_000,
+      "eutils.ncbi.nlm.nih.gov",
+    ).toSerialized();
+    expect(serialized.host).toBe("eutils.ncbi.nlm.nih.gov");
+    expect(serialized.timeoutSeconds).toBe(30);
+  });
+
+  it("carries no host for a context whose URL names none, and none on any other class", () => {
+    for (const url of [
+      USER_PATH,
+      `file:///${USER_PATH.replace(/\\/g, "/")}`,
+      "/a/relative/path?x=1",
+      AUDIO_FOLDER,
+      "",
+    ]) {
+      const serialized = new NetworkError("x", { url }).toSerialized();
+      expect("host" in serialized, url).toBe(false);
+      expectNonePlanted(JSON.stringify(serialized), url);
+    }
+    expect("host" in new NetworkError("x", { url: 42 }).toSerialized()).toBe(
+      false,
+    );
+    expect("host" in new NetworkError("x").toSerialized()).toBe(false);
+    // `RateLimitError` takes a host too, but as a constructor argument that
+    // reaches `context` only: this card carries none for it, on purpose
+    // (`UNRENDERABLE_ERROR_ROWS`' record in the view model).
+    expect(
+      "host" in
+        new RateLimitError(
+          429,
+          30_000,
+          "eutils.ncbi.nlm.nih.gov",
+        ).toSerialized(),
+    ).toBe(false);
+    expect(
+      "host" in new ConfigurationError("x", context()).toSerialized(),
+    ).toBe(false);
+  });
+
+  it("redacts a key-shaped label even inside a host name", () => {
+    const serialized = new NetworkError("x", {
+      url: `https://${OPAQUE_KEY}.example.test/v1`,
+    }).toSerialized();
+    expect(serialized.host).toBeDefined();
+    expect(serialized.host).not.toContain(OPAQUE_KEY);
+    expect(serialized.host).toContain("[redacted:");
+  });
+
+  it("persists none of the planted values: a job record's error through redactRecord, a source's through the provenance gate", () => {
+    for (const error of errors()) {
+      const serialized = error.toSerialized();
+      const { record } = redactRecord({ error: serialized });
+      expectNonePlanted(
+        JSON.stringify(record),
+        `${error.code} after redactRecord`,
+      );
+      expect(record.error.host, error.code).toBe("eutils.ncbi.nlm.nih.gov");
+
+      const provenance = redactSourceProvenance({
+        sourceId: "pubmed",
+        endpointBaseUrl: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/",
+        transmittedQuery: "",
+        transmittedUrl: "",
+        dateFilterApplied: "none",
+        requestedLimit: 10,
+        rawHitCount: undefined,
+        recordsRetrieved: 0,
+        recordsDeduplicatedAway: 0,
+        recordsImported: 0,
+        error: serialized,
+        sourceExtras: undefined,
+      });
+      expectNonePlanted(
+        JSON.stringify(provenance),
+        `${error.code} in provenance`,
+      );
+      // The provenance gate copies only the members it names, so the two new
+      // ones stay out of `schema/provenance.schema.json`'s closed object.
+      expect(provenance.error && "host" in provenance.error, error.code).toBe(
+        false,
+      );
+    }
   });
 });

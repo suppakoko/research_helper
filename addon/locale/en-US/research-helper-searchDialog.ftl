@@ -78,6 +78,13 @@ research-helper-search-keyword-label =
 research-helper-search-keyword-input =
     .aria-label = Search keyword
 
+# P1-T38 (2026-11-25): `SEARCH_IMPORT_VALIDATION_KEYS.emptyQuery`. Search was
+# pressed with an empty keyword box, and Planning rejected the run before any
+# database was asked; the error panel's headline. Worded from the initial
+# panel's "Enter a keyword and press Search …" (docs/08 §4.6), in the tone of
+# `research-helper-search-databases-none`.
+research-helper-search-query-empty = Enter a keyword to search.
+
 # Verbatim from `docs/01` §9.2's own example of this entry.
 research-helper-search-run =
     .label = Search
@@ -260,6 +267,13 @@ research-helper-search-max-results-label =
 research-helper-search-max-results-input =
     .aria-label = Maximum results per database
 
+# P1-T38 (2026-11-25): `SEARCH_IMPORT_VALIDATION_KEYS.limitOutOfRange`. Search
+# was pressed with a per-database maximum that is not a whole number inside
+# `docs/07` §8.5's `maxResults` range; the error panel's headline. `$min` and
+# `$max` are that range, read from the preference schema by the view model, so
+# the numbers are stated in one place only (docs/08 §4.2's row says so).
+research-helper-search-max-results-range = Set Max per database to a whole number from { $min } to { $max }.
+
 
 ## Database selection (docs/08 §4.2, FR-2)
 ##
@@ -391,6 +405,12 @@ research-helper-search-target-picker =
 
 research-helper-search-target-new =
     .label = New collection…
+
+# P1-T38 (2026-11-25): `SEARCH_IMPORT_VALIDATION_KEYS.noTarget`. An import that
+# names no collection was refused. Worded from the "Import into" row above
+# (docs/08 §4.2, §4.4's "resolve target collection"), in the tone of
+# `research-helper-search-databases-none`.
+research-helper-search-target-missing = Choose a collection to import into.
 
 research-helper-search-duplicates-label =
     .value = Duplicates

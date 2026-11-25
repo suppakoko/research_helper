@@ -7471,7 +7471,7 @@ has neither — the duplication is written into the spec with its reason rather 
 | Field | Value |
 |---|---|
 | **ID** | `P1-T37` |
-| **State** | `TODO` |
+| **State** | `TODO` — *2026-11-25, batch L: built*, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P1-T37.md`. `SerializedError` gains `host` and `timeoutSeconds` (`docs/07` §5.2 and §10.1 amended); `NetworkError.host` through `hostNameOf` and `redact`; the client's OFFLINE and NETWORK call sites now pass `redactUrl(error.url)`; `TIMEOUT` and `NETWORK` render §8.3's sentences. Card text stale: `RATE_LIMIT` left `UNRENDERABLE_ERROR_ROWS` on 2026-10-21 (item 232), so the constant is now empty, not `["RATE_LIMIT"]`. Unit mutants L1–L5 killed; three recorded runs on Zotero 10.0.8, each 392 passed, both sentences painted with the host and no path, query or planted key. State unchanged. |
 | **Depends on** | `P1-T22` |
 | **Blocks** | none |
 | **Retires** | part of `UNRENDERABLE_ERROR_ROWS` |
@@ -7592,7 +7592,7 @@ chosen because a view needs it, and nothing else. `P1-T22` wrote the table of wh
 | Field | Value |
 |---|---|
 | **ID** | `P1-T38` |
-| **State** | `TODO` |
+| **State** | `TODO` — *2026-11-25, batch L: built*, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P1-T38.md`. Three en-US sentences, each on `SEARCH_DIALOG_MESSAGE_IDS` and `KO_PENDING_REVIEW` (the range one also on `FluentMessageArgsMap` and `ARGUMENT_MESSAGE_IDS`), no Korean (brief for the drafts: `plan/reports/ko-review-batchL.md`); a rejected run headlines its sentence and offers no button; the second bundle is linked in the markup and `addMainWindowBundle` is removed. Card text stale: five validation ids now (`worksMisaligned`, no window can trigger it, no sentence), and "no target" cannot be reached from a button since item 358(b), so it is shown at the view model's refusal. Three recorded runs on Zotero 10.0.8, each 392 passed, the sentences painted in each. State unchanged. |
 | **Depends on** | `P1-T22` |
 | **Blocks** | none |
 | **Retires** | none |
