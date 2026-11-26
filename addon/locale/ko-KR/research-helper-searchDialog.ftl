@@ -536,11 +536,8 @@ research-helper-search-recommend-dismiss-failed = 이 논문을 관심 없음으
 research-helper-search-recommend-target-default = { $collection } — recommended { $date }
 research-helper-search-recommend-similarity-no-vectors = 이 컬렉션의 어떤 논문에도 Semantic Scholar 벡터가 없어 이번 실행에서는 기본 유사도를 사용합니다.
 
-## P1-T38 (2026-11-25): the three validation sentences, with no live Korean yet.
-## Each id is on KO_PENDING_REVIEW in src/i18n/keys.ts and falls back to English
-## until the owner adopts a Korean draft (G-41); the drafts are in
-## plan/reports/ko-review-batchL.md, not here. CI's l10n step passes each with
-## `--allow` until then. The en-US sources:
-## research-helper-search-query-empty: "Enter a keyword to search."
-## research-helper-search-max-results-range: "Set Max per database to a whole number from { $min } to { $max }."
-## research-helper-search-target-missing: "Choose a collection to import into."
+## P1-T38 (2026-11-25): the three validation sentences. The owner approved the
+## coordinator's Korean in chat on 2026-11-26 (G-41, plan/00 §6 item 417(c)).
+research-helper-search-query-empty = 검색할 키워드를 입력하세요.
+research-helper-search-max-results-range = 데이터베이스별 최대에 { $min }부터 { $max }까지의 정수를 입력하세요.
+research-helper-search-target-missing = 가져올 컬렉션을 선택하세요.

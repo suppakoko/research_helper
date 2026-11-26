@@ -175,13 +175,10 @@ jobs:
       # when the owner approved their Korean (G-41, plan/00 §6 item 397). A new id
       # whose Korean is only drafted is passed here with `--allow <id>` until its
       # adoption, or the step fails.
-      # The three `--allow`s below are P1-T38's validation sentences (2026-11-25,
-      # batch L): they ship in en-US with no Korean yet, are on KO_PENDING_REVIEW,
-      # and their Korean drafts wait for the owner (G-41,
-      # plan/reports/ko-review-batchL.md). Remove each when its Korean is adopted;
-      # until then a stale-allow failure says so.
+      # The three `--allow`s P1-T38 passed here (2026-11-25, batch L) were removed on
+      # 2026-11-26, when the owner approved their Korean (G-41, plan/00 §6 item 417(c)).
       - name: Verify Korean localization completeness (P7-T02)
-        run: npm run l10n:check -- --allow research-helper-search-query-empty --allow research-helper-search-max-results-range --allow research-helper-search-target-missing
+        run: npm run l10n:check
 
   unit:
     name: Unit and contract tests

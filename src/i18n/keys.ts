@@ -1544,13 +1544,9 @@ export const KO_PENDING_REVIEW = [
   // owner approved the coordinator's Korean in chat (`G-41`, plan/00 §6 item 397), so all
   // are on KO_PRESENT.
   // --- P1-T38's three validation sentences (searchDialog) ---
-  // Added 2026-11-25 (batch L) with no Korean in the bundle: the `ko-KR` file carries a
-  // comment naming each id and its English source, and the coordinator's drafts are in
-  // `plan/reports/ko-review-batchL.md` for the owner (`G-41`). Until one is adopted the
-  // window shows the English, and CI's l10n step passes each id with `--allow`.
-  "research-helper-search-query-empty",
-  "research-helper-search-max-results-range",
-  "research-helper-search-target-missing",
+  // Added 2026-11-25 (batch L) with no Korean, and left this list on 2026-11-26: the
+  // owner approved the coordinator's Korean in chat (`G-41`, plan/00 §6 item 417(c)),
+  // so all three are on KO_PRESENT.
 ] as const satisfies readonly FluentMessageId[];
 
 /**
@@ -2239,6 +2235,10 @@ export const KO_PRESENT = [
   "research-helper-prefs-remove-content-note",
   "research-helper-prefs-confirm-remove-content",
   "research-helper-prefs-remove-content-status",
+  // P1-T38 (2026-11-25), Korean approved 2026-11-26 (plan/00 §6 item 417(c)).
+  "research-helper-search-query-empty",
+  "research-helper-search-max-results-range",
+  "research-helper-search-target-missing",
 ] as const satisfies readonly FluentMessageId[];
 
 /* ---------------------------------------------------------------- arguments */
