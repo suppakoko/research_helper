@@ -3,7 +3,7 @@
 > **Generated from the task cards in `01`–`04` and `07`–`10`** (Phase 4's file, read since 2026-10-26,
 > Phase 5's, read since 2026-11-01, and Phase 6's and Phase 7's, read since 2026-11-16). If a row here disagrees with a card, the card wins — then regenerate
 > this file.
-> **Last updated:** 2026-11-26 · **282 tasks: 235 `DONE`, 47 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 47 `DONE`**, Phase 2 **38 of 40**, Phase 3 **34 of 41**, Phase 4 **22 of 25**, Phase 5 **22 of 32**, Phase 6 **16 of 19**, Phase 7 **25 of 43**. **The plan has grown from the 203 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25, plus the 30 Phase 5 was drafted and reviewed with on 2026-11-01; its 31st card, `P5-T31`, added when the owner's decisions were applied, counts as growth; plus the 19 Phase 6 was decomposed into on 2026-11-16; plus the 31 Phase 7 was decomposed into on 2026-11-16) to 282, so 79 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-11-26 · **282 tasks: 246 `DONE`, 36 `TODO`.** Phase 0 is **35 of 35**, complete since 2026-11-26. Phase 1 is **47 of 47 `DONE`**, Phase 2 **38 of 40**, Phase 3 **34 of 41**, Phase 4 **22 of 25**, Phase 5 **22 of 32**, Phase 6 **16 of 19**, Phase 7 **32 of 43**. **The plan has grown from the 203 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25, plus the 30 Phase 5 was drafted and reviewed with on 2026-11-01; its 31st card, `P5-T31`, added when the owner's decisions were applied, counts as growth; plus the 19 Phase 6 was decomposed into on 2026-11-16; plus the 31 Phase 7 was decomposed into on 2026-11-16) to 282, so 79 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -416,7 +416,7 @@ column means the card cannot complete without a human — read
 | ✅ `P0-T32` | Make the plugin's Fluent messages actually resolve | `P0-T10` | 0.5 d |  |
 | ✅ `P0-T33` | Stop constructing `ZoteroToolkit`, which leaks on every cycle | `P0-T32` | 0.5 d |  |
 | ✅ `P0-T34` | Narrow `build.assets` so the XPI ships only what a user needs | `P0-T30` | 0.25 d |  |
-| `P0-T35` | Re-probe cancellation with the abort fired after the first… | `P0-T17` | 0.25 d |  |
+| ✅ `P0-T35` | Re-probe cancellation with the abort fired after the first… | `P0-T17` | 0.25 d |  |
 
 **Nine of Phase 0's 35 cards carry a gate**, not fourteen: `P0-T08`, `P0-T09`,
 `P0-T11`, `P0-T15`, `P0-T18`, `P0-T22`, `P0-T25`, `P0-T27`, `P0-T28`. An earlier
@@ -472,8 +472,8 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P1-T34` | Three corpus statements measured false, corrected at the… | `P1-T19`, `P1-T32` | 0.25 d |  |
 | ✅ `P1-T35` | Publish the search window's host, so the window stops… | `P1-T16`, `P1-T17`, `P1-T22` | 0.5 d |  |
 | ✅ `P1-T36` | FR-8's "Export provenance as JSON" control, and the record it… | `P1-T22`, `P1-T35` | 0.5 d |  |
-| `P1-T37` | Carry a named, redacted subset of an error's context, so the… | `P1-T22` | 0.5 d |  |
-| `P1-T38` | The three validation sentences nobody declared, and the… | `P1-T22` | 0.25 d |  |
+| ✅ `P1-T37` | Carry a named, redacted subset of an error's context, so the… | `P1-T22` | 0.5 d |  |
+| ✅ `P1-T38` | The three validation sentences nobody declared, and the… | `P1-T22` | 0.25 d |  |
 | ✅ `P1-T39` | A unit-test path for the search window's view model, whose… | `P1-T22` | 0.5 d |  |
 | ✅ `P1-T40` | A partition assertion over `src/i18n/keys.ts` at unit speed… | `P1-T30`, `P1-T33` | 0.25 d |  |
 | ✅ `P1-T41` | `P3-T02` tells its implementer to call a method that does not… | — | 0.5 d |  |
@@ -482,7 +482,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P1-T44` | A place to put a key, because the storage landed in Phase 1… | — | 1.0 d |  |
 | ✅ `P1-T45` | The export control, its three strings and the file chooser… | `P1-T36` | 0.5 d | 🔒 |
 | ✅ `P1-T46` | Stop three tests waiting on text the run has already… | `P1-T45` | 0.5 d |  |
-| `P1-T47` | Store, export and log a stack without the folder the add-on… | `P1-T02`, `P1-T17` | 0.5 d |  |
+| ✅ `P1-T47` | Store, export and log a stack without the folder the add-on… | `P1-T02`, `P1-T17` | 0.5 d |  |
 
 ### Phase 2
 
@@ -674,7 +674,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P7-T02` | Key-parity check script as a blocking CI step | `P7-T04` | 0.75 d |  |
 | ✅ `P7-T03` | Hard-coded string and `Intl` sweep | `P7-T08`, `P7-T09`, `P7-T10`, `P7-T11`, `P7-T12`, `P7-T13`, `P7-T33` | 1.75 d |  |
 | ✅ `P7-T04` | Retire the spike command; keep its fixture in the tests | — | 0.75 d |  |
-| `P7-T05` | Korean review of the UI, the prompts and `README.ko.md` | `P7-T02`, `P7-T03`, `P7-T20`, `P7-T35` | 0.75 d | 🔒 |
+| ✅ `P7-T05` | Korean review of the UI, the prompts and `README.ko.md` | `P7-T02`, `P7-T03`, `P7-T20`, `P7-T35` | 0.75 d | 🔒 |
 | ✅ `P7-T06` | Keyboard, focus, accessible names and contrast pass | `P7-T03` | 2.0 d |  |
 | `P7-T07` | NVDA smoke test on the release candidate | `P7-T06`, `P7-T26` | 0.25 d | 🔒 |
 | ✅ `P7-T08` | Pane: Search, Report & audio, Privacy; defaults review | `P7-T01` | 1.5 d |  |
@@ -693,7 +693,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P7-T21` | Release workflow hardening | — | 1.0 d |  |
 | `P7-T22` | `compat.yml`: the scheduled Zotero-beta job | — | 0.5 d |  |
 | `P7-T23` | Forum announcement and community-list drafts | `P7-T19` | 0.5 d |  |
-| `P7-T24` | The release checklist document | `P7-T02`, `P7-T15`, `P7-T16`, `P7-T17`, `P7-T18`, `P7-T22`, `P7-T34`, `P7-T35`, `P7-T36`, `P7-T37`, `P7-T39`, `P7-T40`, `P7-T41`, `P7-T42`, `P7-T43` | 1.0 d |  |
+| ✅ `P7-T24` | The release checklist document | `P7-T02`, `P7-T15`, `P7-T16`, `P7-T17`, `P7-T18`, `P7-T22`, `P7-T34`, `P7-T35`, `P7-T36`, `P7-T37`, `P7-T39`, `P7-T40`, `P7-T41`, `P7-T42`, `P7-T43` | 1.0 d |  |
 | `P7-T25` | Windows manual QA run on the release candidate | `P7-T26` | 1.0 d | 🔒 |
 | `P7-T26` | Publish the release candidate v0.9.0 | `P7-T05`, `P7-T16`, `P7-T19`, `P7-T20`, `P7-T21`, `P7-T24`, `P7-T38` | 0.25 d | 🔒 |
 | `P7-T27` | Fresh-profile README walkthrough and screenshots | `P7-T26` | 0.5 d | 🔒 |
@@ -708,11 +708,11 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P7-T36` | Teardown error line through `redact` | `P7-T16` | 0.25 d |  |
 | ✅ `P7-T37` | Redaction audit reads the plugin database | `P7-T16` | 0.25 d |  |
 | ✅ `P7-T38` | `npm audit fix` as its own reviewed change | `P7-T16` | 0.5 d |  |
-| `P7-T39` | Closed plugin windows are freed | `P7-T15` | 1.0 d |  |
-| `P7-T40` | The 500-item full-text job within 400 MB | `P7-T15` | 1.0 d |  |
-| `P7-T41` | The duplicate screen yields and compares only likely pairs | `P7-T15` | 1.0 d |  |
-| `P7-T42` | The summarize window redraws only the rows that change | `P7-T15` | 1.0 d |  |
-| `P7-T43` | Test windows stay visible when another window covers them | — | 0.25 d |  |
+| ✅ `P7-T39` | Closed plugin windows are freed | `P7-T15` | 1.0 d |  |
+| ✅ `P7-T40` | The 500-item full-text job within 400 MB | `P7-T15` | 1.0 d |  |
+| ✅ `P7-T41` | The duplicate screen yields and compares only likely pairs | `P7-T15` | 1.0 d |  |
+| ✅ `P7-T42` | The summarize window redraws only the rows that change | `P7-T15` | 1.0 d |  |
+| ✅ `P7-T43` | Test windows stay visible when another window covers them | — | 0.25 d |  |
 
 ---
 
@@ -3837,6 +3837,9 @@ the caller of what the card builds; if it does not, the caller is added with a d
 421. **Raised 2026-11-26: batch O's owner questions** (`plan/reports/P7-batchO.md`). Tag: Phase 1. None blocks a `Done when` line or a phase's finishing condition. Answered 2026-11-26 by the coordinator under item 313.
     - (a) **Four `DONE` cards give the old reading of this slowness as machine load**, and only the owner edits a `State`: `P1-T35`'s State ("the load sensitivity behind the earlier failures is `plan/00` §6 item 20"), `P1-T22`'s block, whose tests timed out, and `P1-T46` and `P1-T23`, whose evidence and gate rest on items 20 and 23. Their work stands: `P1-T46`'s state taps remain right for transient text, and nothing they built changes. *Draft answer (not adopted):* leave the States as they are; items 23 and 420 carry the correction, and a dated note on `P1-T35`'s Notes (not its State) can point to item 420 if the owner wants one.
       **DECIDED 2026-11-26 (coordinator, under item 313).** The draft answer is adopted without the optional note: the four States and Notes are left as they are, and items 23 and 420 carry the correction. The owner may still ask for the note.
+422. **Answered 2026-11-26: the owner's review of built cards for `DONE`, in chat.** Tag: Phases 0, 1 and 7. The coordinator showed each card's work and evidence in plain Korean, four at a time, with a recommended answer.
+    - (a) **DECIDED 2026-11-26 (owner, plan/00 §6 item 422(a)): "완료로 표시" for each of eleven cards:** `P0-T35`, `P1-T37`, `P1-T38`, `P1-T47`, `P7-T05`, `P7-T24`, `P7-T39`, `P7-T40`, `P7-T41`, `P7-T42` and `P7-T43` are `DONE`. Each State row keeps what it said before after "Was:". Only the State rows changed; the `Done when` boxes were left as written.
+    - (b) **DECIDED 2026-11-26 (owner, plan/00 §6 item 422(b)): `P7-T22` "보류".** Its `Done when` line needs the first push of `compat.yml` and its first scheduled run, and nothing has been pushed. It stays `TODO` until both are recorded; the push is the owner's, or needs the owner's explicit permission.
 
 ## 7. Regenerating this file
 
