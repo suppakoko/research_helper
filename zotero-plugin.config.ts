@@ -70,6 +70,22 @@ const NO_APP_UPDATE_PREFS = {
   ),
 } as const;
 
+// P7-T43 (batch O, 2026-11-26): a test window counts as visible even when
+//   another application's window covers it. Measured on Zotero 10.0.8 (Gecko
+//   140.17.0): with Gecko's default `true`, the search window opened behind the
+//   owner's foreground application reported `document.visibilityState`
+//   "hidden" and `isFullyOccluded` true, its refresh driver fell to the
+//   inactive timer (2 animation frames in 3 s), and Fluent painted a changed
+//   `data-l10n-args` after 3.1, 8.0, 16.0 and over 20 s — the doubling that
+//   failed `searchDialog-flow.spec.ts`'s 25 s waits. `formatMessages` is not
+//   tied to the refresh driver, which is why it stayed fast. With `false`, the
+//   same window under an always-on-top window stayed "visible" and painted in
+//   tens of milliseconds (`docs/13` §2.3, `plan/reports/P7-batchO.md`). A
+//   minimized window is still hidden; no spec minimizes one.
+const VISIBLE_WINDOW_PREFS = {
+  "widget.windows.window_occlusion_tracking.enabled": false,
+} as const;
+
 export default defineConfig({
   source: ["src", "addon"],
   dist: ".scaffold/build",
@@ -271,6 +287,7 @@ export default defineConfig({
     prefs: {
       "extensions.zotero.retractions.enabled": false,
       ...NO_APP_UPDATE_PREFS,
+      ...VISIBLE_WINDOW_PREFS,
       "researchHelper.test.devtools": devtools,
     },
     mocha: {

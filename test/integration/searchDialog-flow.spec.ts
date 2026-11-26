@@ -774,6 +774,12 @@ function pluginApi(): Record<string, unknown> {
  * took seconds and three mutants produced *extra* failures from a 10 s cap
  * rather than from the mutation. A cap that can expire on a loaded machine turns
  * a green suite into a coin toss, which is worse than a slow one.
+ *
+ * *Corrected 2026-11-26 (`P7-T43`):* the same seconds-long, doubling renders
+ * were reproduced without load: the search window had opened behind another
+ * application, Gecko's occlusion tracking marked it hidden, and Fluent then
+ * painted only on refresh ticks 1, 2, 4, 8 … s apart (`docs/13` §2.3). The cap is kept; {@link assertWindowVisible}
+ * now names that state.
  */
 async function waitUntil(
   predicate: () => boolean,
@@ -789,6 +795,33 @@ async function waitUntil(
     }
     await Zotero.Promise.delay(25);
   }
+}
+
+/**
+ * Wait until `opened` is visible, and fail at once with the reason if it is not
+ * (`P7-T43`).
+ *
+ * Fluent writes the text for a changed `data-l10n-id` only on a refresh tick,
+ * and a hidden window's refresh driver ticks after 1 s and then at doubling
+ * intervals (`docs/13` §2.3, measured 2026-11-26). That was the "doubling"
+ * slowness `plan/00` §6 items 20, 23 and 45 recorded: a window opened behind
+ * another application was hidden by Gecko's occlusion tracking, and the 25 s
+ * waits below expired one test after another. `test.prefs` in
+ * `zotero-plugin.config.ts` turns that tracking off for the test profile; a
+ * minimized window is still hidden, and this check names that state here
+ * rather than as a timeout several tests later.
+ */
+async function assertWindowVisible(
+  opened: FlowWindow,
+  what: string,
+): Promise<void> {
+  await waitUntil(
+    () => opened.document.visibilityState === "visible",
+    `${what} to be visible (document.visibilityState reads ` +
+      `"${opened.document.visibilityState}"; a hidden window paints Fluent ` +
+      `text only on ticks 1, 2, 4, 8 … s apart, docs/13 §2.3)`,
+    5_000,
+  );
 }
 
 function el(id: string): Element {
@@ -2419,6 +2452,7 @@ describe("P1-T35: the host the composition root published", () => {
       assert.fail("the window loaded without RHSearchWindow");
     }
     controller = found;
+    await assertWindowVisible(opened, "the search window");
     log35("window open on the published host");
   });
 
@@ -3458,6 +3492,7 @@ describe("P1-T22: the Search & Import window driving the pipeline", () => {
       assert.fail("the window loaded without RHSearchWindow");
     }
     controller = found;
+    await assertWindowVisible(opened, "the search window");
     await waitUntil(
       () => lastState !== undefined,
       "the host to publish its first state",

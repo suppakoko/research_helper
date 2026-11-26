@@ -3,7 +3,7 @@
 > **Generated from the task cards in `01`–`04` and `07`–`10`** (Phase 4's file, read since 2026-10-26,
 > Phase 5's, read since 2026-11-01, and Phase 6's and Phase 7's, read since 2026-11-16). If a row here disagrees with a card, the card wins — then regenerate
 > this file.
-> **Last updated:** 2026-11-26 · **281 tasks: 235 `DONE`, 46 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 47 `DONE`**, Phase 2 **38 of 40**, Phase 3 **34 of 41**, Phase 4 **22 of 25**, Phase 5 **22 of 32**, Phase 6 **16 of 19**, Phase 7 **25 of 42**. **The plan has grown from the 203 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25, plus the 30 Phase 5 was drafted and reviewed with on 2026-11-01; its 31st card, `P5-T31`, added when the owner's decisions were applied, counts as growth; plus the 19 Phase 6 was decomposed into on 2026-11-16; plus the 31 Phase 7 was decomposed into on 2026-11-16) to 281, so 78 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
+> **Last updated:** 2026-11-26 · **282 tasks: 235 `DONE`, 47 `TODO`.** Phase 0 is **34 of 35** — one open card, `P0-T35`, a re-probe of cancellation with the abort fired after the first byte. Phase 1 is **44 of 47 `DONE`**, Phase 2 **38 of 40**, Phase 3 **34 of 41**, Phase 4 **22 of 25**, Phase 5 **22 of 32**, Phase 6 **16 of 19**, Phase 7 **25 of 43**. **The plan has grown from the 203 cards its decompositions produced (the 98 of Phases 0–3's four independent decompositions, `docs/11` §1's own account, plus the 25 Phase 4 was decomposed into on 2026-10-25, plus the 30 Phase 5 was drafted and reviewed with on 2026-11-01; its 31st card, `P5-T31`, added when the owner's decisions were applied, counts as growth; plus the 19 Phase 6 was decomposed into on 2026-11-16; plus the 31 Phase 7 was decomposed into on 2026-11-16) to 282, so 79 of them exist because running the code found work no reading of the corpus had** — and the count keeps rising for the same reason each time, which is the measurement `docs/11`'s risk R-23 is about. Counts here are re-derived from the cards' `State` rows, never incremented by hand.
 
 ---
 
@@ -29,8 +29,17 @@ Implementation has started. Thirty-one tasks are `DONE` as of 2026-09-30 — `P0
 | 4 — Trend report | 25 | 25.75 d | 25.75–36 d | 8–11 d (+134%) |
 | 5 — Related + recommendations | 32 | 36.25 d | 36.25–51 d | 10–14 d (+159%) |
 | 6 — TTS audio report | 19 | 20.25 d | 20.25–28 d | 7–10 d (+103%) |
-| 7 — Polish, i18n, release | 42 | 36.75 d | 36.75–51 d | 10–14 d (+163%) |
-| **All phases** | **281** | **233.50 d** | **233.50–327 d** | 74–101 d |
+| 7 — Polish, i18n, release | 43 | 37.00 d | 37.00–52 d | 10–14 d (+164%) |
+| **All phases** | **282** | **233.75 d** | **233.75–328 d** | 74–101 d |
+
+**2026-11-26, later: `P7-T43` added, Phase 7 43 cards, 37.00 d** (§6 item 420(a)). Batch O found the cause of
+`searchDialog-flow.spec.ts`'s Fluent timeouts in the test profile and carded the fix as `P7-T43` (0.25 d);
+37.00 × 1.4 = 51.80 → 52, so the band is 37.00–52 d (was 36.75–51). The last column is 37.00 ÷ 14 = 2.643 → +164% (was +163%).
+The project total is 114.50 + 25.75 + 36.25 + 20.25 + 37.00 = **233.75 d** low and 161 + 36 + 51 + 28 + 52 = **328 d** high
+(was 233.50–327), still ≈ 11–15 months at 21 working days (233.75 ÷ 21 ≈ 11.1; 328 ÷ 21 ≈ 15.6). Phase 7 lies on every route, so
+the critical path P0 → P1 → P2 → P4 → P6 → P7 becomes **165.50–232** (was 165.25–231), the Phase 3 route 162.50–228 with the
+3 d / 4 d margin unchanged, and Phase 5's route 155.75–219 with its float unchanged at 9.75–13 d. Inside Phase 7 the card ends at
+0.25 d and the phase's path stays 16.50 d (recomputed by script from the card bodies the same day).
 
 **2026-11-26: `P1-T47` added, Phase 1 47 cards, 29.75 d** (§6 items 417(b), 418). The owner's answer
 to item 417(b) ("Check first") found a stored frame naming the user's home folder, so it is carded as `P1-T47` (0.5 d);
@@ -684,7 +693,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | ✅ `P7-T21` | Release workflow hardening | — | 1.0 d |  |
 | `P7-T22` | `compat.yml`: the scheduled Zotero-beta job | — | 0.5 d |  |
 | `P7-T23` | Forum announcement and community-list drafts | `P7-T19` | 0.5 d |  |
-| `P7-T24` | The release checklist document | `P7-T02`, `P7-T15`, `P7-T16`, `P7-T17`, `P7-T18`, `P7-T22`, `P7-T34`, `P7-T35`, `P7-T36`, `P7-T37`, `P7-T39`, `P7-T40`, `P7-T41`, `P7-T42` | 1.0 d |  |
+| `P7-T24` | The release checklist document | `P7-T02`, `P7-T15`, `P7-T16`, `P7-T17`, `P7-T18`, `P7-T22`, `P7-T34`, `P7-T35`, `P7-T36`, `P7-T37`, `P7-T39`, `P7-T40`, `P7-T41`, `P7-T42`, `P7-T43` | 1.0 d |  |
 | `P7-T25` | Windows manual QA run on the release candidate | `P7-T26` | 1.0 d | 🔒 |
 | `P7-T26` | Publish the release candidate v0.9.0 | `P7-T05`, `P7-T16`, `P7-T19`, `P7-T20`, `P7-T21`, `P7-T24`, `P7-T38` | 0.25 d | 🔒 |
 | `P7-T27` | Fresh-profile README walkthrough and screenshots | `P7-T26` | 0.5 d | 🔒 |
@@ -703,6 +712,7 @@ uses a synthetic API-key-shaped string, never a real key.
 | `P7-T40` | The 500-item full-text job within 400 MB | `P7-T15` | 1.0 d |  |
 | `P7-T41` | The duplicate screen yields and compares only likely pairs | `P7-T15` | 1.0 d |  |
 | `P7-T42` | The summarize window redraws only the rows that change | `P7-T15` | 1.0 d |  |
+| `P7-T43` | Test windows stay visible when another window covers them | — | 0.25 d |  |
 
 ---
 
@@ -951,6 +961,7 @@ nothing at all, because ranking them without an owner's input would be a decisio
     configuration. The other two untested: the rebuild described in item 24, and a cold first run.
     **Nothing is broken today** — `P1-T46` made the tests immune to it — but the product renders text
     for users through the same path.
+    **Answered 2026-11-26 (batch O, `plan/reports/P7-batchO.md`; items 420, 421): the window was hidden, not slow.** The search window had opened behind another application, Gecko's occlusion tracking marked it hidden, and a hidden window's refresh driver ticks after 1 s and then at doubling intervals; Fluent writes rendered text only on a tick. Carded and built as `P7-T43`; `docs/13` §2.3 holds the measurement.
 
 24. **`renderMessageList` and `renderSourceStatus` destroy and rebuild their children on every published
     state**, even when the message references have not changed. This is **both** the reason a notice's
@@ -3817,6 +3828,15 @@ the caller of what the card builds; if it does not, the caller is added with a d
       **DECIDED 2026-11-26 (coordinator, under item 313).** The draft answer is adopted.
     - (d) **`P4-T23`'s step-4 test can fail by chance.** Batch M's recorded run 1 failed "no note and no export shows its figures or names, beyond what Appendix B already said of each summary" in `test/integration/reportMeasurement-flow.spec.ts`: it found the measured figure `9195` in the first note, whose report marker carries the report's random id `ac8ee7dd-9195-4a13-…`. `figuresIn` counts any figure not next to a digit or a point, so an all-digit hex group of the id that equals a measured figure reads as a leak. The next three recorded runs on the same tree passed. `P4-T23` is `TODO`; no `DONE` card is affected. *Draft answer (not adopted):* in that test, remove the `rh:report` marker comment from the text before seeking figures, as `withoutItemRows` removes the item rows; test-only, inside `P4-T23`'s own Files.
       **DECIDED 2026-11-26 (coordinator, under item 313).** The draft answer is adopted: `withoutReportMarker` in that spec removes the `rh:report` comment before the note and export figures are sought. The window and preview checks are unchanged.
+420. **DECIDED 2026-11-26 (coordinator, under item 313): batch O's readings and choices** (`plan/reports/P7-batchO.md`). Tag: Phase 7, Phase 1. (a) blocks a finishing condition (three clean recorded runs, and the phase's "every Phase 7 test passes" line), so it is a card under rule 9; the rest are not. The owner may overturn any. Each is marked DECIDED 2026-11-26 (coordinator, under item 313).
+    - (a) **DECIDED 2026-11-26 (coordinator, under item 313): the cause is a hidden window, and the fix is carded as `P7-T43` (0.25 d).** Measured on Zotero 10.0.8 (Gecko 140.17.0): when the search window opened behind the owner's foreground browser window, it read `document.visibilityState` "hidden" and `isFullyOccluded` true, its refresh driver gave 2 animation frames in 3 s, and Fluent painted a changed `data-l10n-args` after 3.1, 8.0, 16.0, over 20 and 12.0 s. The fix sets `widget.windows.window_occlusion_tracking.enabled` to false in `test.prefs` (`VISIBLE_WINDOW_PREFS` in `zotero-plugin.config.ts`), after which the search window read "visible", gave 182 frames in 3 s and painted in 12–33 ms, also under a second Zotero window laid over it; run alone under an always-on-top window, the spec failed 2–3 tests in 6 of 6 runs with tracking on and passed in 3 of 3 with it off. `searchDialog-flow.spec.ts`'s two window blocks now check that the window is visible before their first wait (`assertWindowVisible`). `docs/13` §2.3 was amended first. Three consecutive recorded full runs on one tree then passed 395 of 395 each (16:23–17:17), with no request away from loopback. Phase 7 36.75–51 → 37.00–52 d over 43 cards; the project 233.50–327 → 233.75–328 over 282, still ≈ 11–15 months; the critical path 165.25–231 → 165.50–232, the Phase 3 route 162.50–228 and Phase 5's 155.75–219, so the margins are unchanged; inside Phase 7 the card ends at 0.25 d and the path stays 16.50 d (by script). Propagated to `plan/README` §7's five sites.
+    - (b) **DECIDED 2026-11-26 (coordinator, under item 313): 1674121 is not the cause.** The failure follows the window's visibility, not the commit: see the report's run table for the counts with 1674121's two files reverted and restored (sha256 checked). The `P1-T22` block also pins the window to `en-US`, so the Korean that commit added is not rendered there.
+    - (c) **DECIDED 2026-11-26 (coordinator, under item 313): the measurement used the spec alone and a stand-in for the covering window.** `zotero-plugin.config.ts` read a temporary `RH_O_ENTRIES` variable so the scaffold bundled only a temporary folder (a sampler spec, then a one-line import of `searchDialog-flow.spec.ts`), and a temporary always-on-top blank Zotero window, kept over the search window, stood in for another application's window. Both, and the probe spec, were removed before the recorded runs, and the config's temporary lines with them.
+    - (d) **DECIDED 2026-11-26 (coordinator, under item 313): a minimized window is left as it is.** It is still hidden with the preference off (measured: paints after 2.7–20 s), and no spec minimizes a window it reads; `assertWindowVisible` fails at once, with the reason, if one ever is. A locked session was not measured.
+    - (e) **DECIDED 2026-11-26 (coordinator, under item 313): the run scripts are batch N's, copied as `o-` files**, with two additions: an input-idle sampler (`o-idle.ps1`, which reads the time since the last keyboard or mouse input) and a note of the foreground window's process and rectangle before each run (`o-fg.ps1`, no window title).
+421. **Raised 2026-11-26: batch O's owner questions** (`plan/reports/P7-batchO.md`). Tag: Phase 1. None blocks a `Done when` line or a phase's finishing condition. Answered 2026-11-26 by the coordinator under item 313.
+    - (a) **Four `DONE` cards give the old reading of this slowness as machine load**, and only the owner edits a `State`: `P1-T35`'s State ("the load sensitivity behind the earlier failures is `plan/00` §6 item 20"), `P1-T22`'s block, whose tests timed out, and `P1-T46` and `P1-T23`, whose evidence and gate rest on items 20 and 23. Their work stands: `P1-T46`'s state taps remain right for transient text, and nothing they built changes. *Draft answer (not adopted):* leave the States as they are; items 23 and 420 carry the correction, and a dated note on `P1-T35`'s Notes (not its State) can point to item 420 if the owner wants one.
+      **DECIDED 2026-11-26 (coordinator, under item 313).** The draft answer is adopted without the optional note: the four States and Notes are left as they are, and items 23 and 420 carry the correction. The owner may still ask for the note.
 
 ## 7. Regenerating this file
 

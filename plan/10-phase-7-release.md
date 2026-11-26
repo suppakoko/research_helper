@@ -6,7 +6,7 @@
 > §8 item 7). Every card is `TODO`. Like `plan/09`, this file has had **no independent review** yet;
 > the author's report is `plan/reports/P7-decomposition.md`, and §0.4 lists the lines the owner still
 > has to answer. *Updated 2026-11-16, later (`plan/00` §6 item 381): the owner answered §0.4's lines 18–23; no
-> line is open now, and line 20 added `P7-T32` (0.75 d), so the file holds 32 cards summing to 29.25 d.* *Updated 2026-11-17 (`plan/00` §6 item 393(d)): the owner answered item 393, and `P7-T33` (0.5 d) was added, so the file holds 33 cards summing to 29.75 d.* *Updated 2026-11-17, later (`plan/00` §6 items 395, 398): the owner answered item 395; `P7-T34`–`P7-T38` (2.0 d) were added and `P7-T03` went from 1.5 to 1.75 d for item 395(b)'s step, so the file holds 38 cards summing to 32.00 d.* *Updated 2026-11-18 (`plan/00` §6 items 401(a), 402(a)): the owner answered item 401(a) ("만듦"), and `P7-T15` went from 1.5 to 2.0 d for the test-profile memory measurement, so the file holds 38 cards summing to 32.50 d.* *Updated 2026-11-18, later (`plan/00` §6 items 403, 404(a), 404(b)): the owner answered item 403; `P7-T39` and `P7-T40` (1.0 d each) were added and `P7-T15` went from 2.0 to 2.25 d for item 403(b)'s profile, so the file holds 40 cards summing to 34.75 d.* *Updated 2026-11-18, later still (`plan/00` §6 items 405(a), 406(a)): the owner answered item 405; `P7-T41` (1.0 d) was added, so the file holds 41 cards summing to 35.75 d.* *Updated 2026-11-25 (`plan/00` §6 items 413(a), 414): the owner answered item 413(a); `P7-T42` (1.0 d) was added, so the file holds 42 cards summing to 36.75 d.* The card sum replaced `docs/11`'s scaled 21–29 d on 2026-11-16 at the five places
+> line is open now, and line 20 added `P7-T32` (0.75 d), so the file holds 32 cards summing to 29.25 d.* *Updated 2026-11-17 (`plan/00` §6 item 393(d)): the owner answered item 393, and `P7-T33` (0.5 d) was added, so the file holds 33 cards summing to 29.75 d.* *Updated 2026-11-17, later (`plan/00` §6 items 395, 398): the owner answered item 395; `P7-T34`–`P7-T38` (2.0 d) were added and `P7-T03` went from 1.5 to 1.75 d for item 395(b)'s step, so the file holds 38 cards summing to 32.00 d.* *Updated 2026-11-18 (`plan/00` §6 items 401(a), 402(a)): the owner answered item 401(a) ("만듦"), and `P7-T15` went from 1.5 to 2.0 d for the test-profile memory measurement, so the file holds 38 cards summing to 32.50 d.* *Updated 2026-11-18, later (`plan/00` §6 items 403, 404(a), 404(b)): the owner answered item 403; `P7-T39` and `P7-T40` (1.0 d each) were added and `P7-T15` went from 2.0 to 2.25 d for item 403(b)'s profile, so the file holds 40 cards summing to 34.75 d.* *Updated 2026-11-18, later still (`plan/00` §6 items 405(a), 406(a)): the owner answered item 405; `P7-T41` (1.0 d) was added, so the file holds 41 cards summing to 35.75 d.* *Updated 2026-11-25 (`plan/00` §6 items 413(a), 414): the owner answered item 413(a); `P7-T42` (1.0 d) was added, so the file holds 42 cards summing to 36.75 d.* *Updated 2026-11-26 (`plan/00` §6 item 420(a)): `P7-T43` (0.25 d), batch O's fix for the suite's Fluent timeouts was added, so the file holds 43 cards summing to 37.00 d.* The card sum replaced `docs/11`'s scaled 21–29 d on 2026-11-16 at the five places
 > `plan/README.md` §7 names (`docs/11` §1–§2, `plan/00` §1, `plan/05` §4, now a pointer here).
 >
 > **What this file is.** The task-card decomposition of `docs/11-implementation-roadmap.md` §1
@@ -78,12 +78,12 @@ documents, `plan/reports/` and the tree:
 mitigation by `P7-T31`; R-15 was already retired on 2026-09-16 (`P0-T27`) and `P7-T30` re-confirms it
 on a real release; R-1 moves to ongoing handling with `P7-T22`'s job.
 
-**Effort.** **36.75 developer-days over 42 cards** (§1), so the band these cards imply is
-**36.75–51 d** (36.75 × 1.4 = 51.45 → 51). Against the scaled 21–29 d `docs/11` published before this
-file, the low end is **+75 %** (36.75 ÷ 21 = 1.750) and 27 % above the scaled top (36.75 ÷ 29 = 1.267)
+**Effort.** **37.00 developer-days over 43 cards** (§1), so the band these cards imply is
+**37.00–52 d** (37.00 × 1.4 = 51.80 → 52). Against the scaled 21–29 d `docs/11` published before this
+file, the low end is **+76 %** (37.00 ÷ 21 = 1.762) and 28 % above the scaled top (37.00 ÷ 29 = 1.276)
 — above the ~30 % `plan/README.md` §7 calls a signal to re-estimate the phase in `docs/11`, which was
-done. Against the old 10–14 d band the low end is **+163 %** (36.75 ÷ 14 = 2.625). **Propagated
-2026-11-16** to `docs/11` §1–§2, `plan/00` §1 and `plan/05` §4. *Updated 2026-11-16, later (`plan/00` §6
+done. Against the old 10–14 d band the low end is **+164 %** (37.00 ÷ 14 = 2.643). **Propagated
+2026-11-16** to `docs/11` §1–§2, `plan/00` §1 and `plan/05` §4. *Updated 2026-11-26 (`plan/00` §6 item 420(a)): this read 36.75 d over 42 cards, 36.75–51 d, +75 %, 27 % above the scaled top and +163 %, before `P7-T43` (0.25 d), batch O's fix for the suite's Fluent timeouts was added; propagated the same day to the same five sites.* *Updated 2026-11-16, later (`plan/00` §6
 item 381): this read 28.50 d over 31 cards, 28.50–40 d, +36 %, 2 % below the scaled top and +104 %, before
 `P7-T32` (0.75 d) was added for §0.4 line 20; propagated the same day to the same five sites.* *Updated 2026-11-17 (`plan/00` §6 item 393(d)): this read 29.25 d over 32 cards, 29.25–41 d, +39 %, 1 % above the scaled top and +109 %, before `P7-T33` (0.5 d) was added for the owner's answer to item 393; propagated the same day to the same five sites.* *Updated 2026-11-17, later (`plan/00` §6 item 398): this read 29.75 d over 33 cards, 29.75–42 d, +42 %, 3 % above the scaled top and +113 %, before `P7-T34`–`P7-T38` (2.0 d) were added for the owner's answers to item 395 and `P7-T03` rose by 0.25 d for item 395(b); propagated the same day to the same five sites.* *Updated 2026-11-18 (`plan/00` §6 items 401(a), 402(a)): this read 32.00 d over 38 cards, 32.00–45 d, +52 %, 10 % above the scaled top and +129 %, before `P7-T15` rose by 0.5 d for the owner's answer to item 401(a); propagated the same day to the same five sites.* *Updated 2026-11-18, later (`plan/00` §6 item 404(a)): this read 32.50 d over 38 cards, 32.50–46 d, +55 %, 12 % above the scaled top and +132 %, before `P7-T39` and `P7-T40` (1.0 d each) were added for the owner's answers to items 403(a) and 403(e) and `P7-T15` rose by 0.25 d for item 403(b); propagated the same day to the same five sites.* *Updated 2026-11-18, later still (`plan/00` §6 item 406(a)): this read 34.75 d over 40 cards, 34.75–49 d, +65 %, 20 % above the scaled top and +148 %, before `P7-T41` (1.0 d) was added for the owner's answer to item 405(a); propagated the same day to the same five sites.* *Updated 2026-11-25 (`plan/00` §6 item 414(a)): this read 35.75 d over 41 cards, 35.75–50 d, +70 %, 23 % above the scaled top and +155 %, before `P7-T42` (1.0 d) was added for the owner's answer to item 413(a); propagated the same day to the same five sites, re-derived by script from the card bodies.* §3 says where the days went and where
 the sum is still likely low.
@@ -265,7 +265,8 @@ them (`plan/04` §0.2 item 10) may now be executed as the answer says. Every ans
 | `P7-T40` | The 500-item full-text job within 400 MB | 1.0 | none |
 | `P7-T41` | The duplicate screen yields and compares only likely pairs | 1.0 | none |
 | `P7-T42` | The summarize window redraws only the rows that change | 1.0 | none |
-| | **Total** | **36.75** | 10 gates |
+| `P7-T43` | Test windows stay visible when another window covers them | 0.25 | none |
+| | **Total** | **37.00** | 10 gates |
 
 *Updated 2026-11-16, later (`plan/00` §6 item 381): `P7-T32` added for §0.4 line 20; the total read 28.50. It is
 a new entry point that blocks `P7-T16`, and it does not lie on the critical path below (it ends at 0.75 d, before
@@ -283,9 +284,11 @@ a new entry point that blocks `P7-T16`, and it does not lie on the critical path
 
 *Updated 2026-11-25 (`plan/00` §6 items 413(a), 414(a)): `P7-T42` (1.0 d) added for the owner's answer to item 413(a); the total read 35.75. It depends on `P7-T15` and blocks `P7-T24`, like `P7-T39`–`P7-T41`, and ends at the same 13.25 d, so the path stays 16.50 d (recomputed by script the same day).*
 
+*Updated 2026-11-26 (`plan/00` §6 item 420(a)): `P7-T43` (0.25 d) added by batch O for the suite's Fluent timeouts; the total read 36.75. It depends on nothing and blocks `P7-T24`; it ends at 0.25 d, so the path stays 16.50 d (recomputed by script the same day).*
+
 **Entry points** (no `Depends on`): `P7-T01`, `P7-T04`, `P7-T12`, `P7-T21`, `P7-T22`, `P7-T28`, and `P7-T32`
-(added 2026-11-16, `plan/00` §6 item 381). They
-are documents, the spike's removal, the error audit, two workflow files and the owner's NCBI check;
+(added 2026-11-16, `plan/00` §6 item 381), and `P7-T43` (added 2026-11-26, item 420(a)). They
+are documents, the spike's removal, the error audit, two workflow files, the owner's NCBI check and (`P7-T43`) a test-profile preference;
 none touches a file another entry point holds, except that `P7-T04` and `P7-T12` both edit
 `src/i18n/keys.ts` and both bundles (different ids — exact-string edits).
 
@@ -1687,7 +1690,7 @@ every point `docs/13` §7.2 item 2 lists, and an entry for each community list i
 |---|---|
 | **ID** | `P7-T24` |
 | **State** | `TODO` — built 2026-11-18, awaiting the owner's review (only the owner sets `DONE`; `P7-T25` fills it, `G-37` signs it). Report at `plan/reports/P7-T24.md`. |
-| **Depends on** | `P7-T02`, `P7-T15`, `P7-T16`, `P7-T17`, `P7-T18`, `P7-T22`, `P7-T34`, `P7-T35`, `P7-T36`, `P7-T37`, `P7-T39`, `P7-T40`, `P7-T41`, `P7-T42` |
+| **Depends on** | `P7-T02`, `P7-T15`, `P7-T16`, `P7-T17`, `P7-T18`, `P7-T22`, `P7-T34`, `P7-T35`, `P7-T36`, `P7-T37`, `P7-T39`, `P7-T40`, `P7-T41`, `P7-T42`, `P7-T43` |
 | **Blocks** | `P7-T26` |
 | **Retires** | none |
 | **Implements** | `docs/11` §1 Phase 7 DoD line 1 |
@@ -2714,11 +2717,72 @@ the session calls through the window's sink from `createSummarizeSession` in `sr
 rows are constructed by `buildSummarizeWindowModel` in `src/ui/dialogs/summarizeDialog.ts`. `docs/07` declares
 no type of the summarize window's model (grep, 2026-11-25), so the row type lives in `summarizeDialog.ts`.
 
+### P7-T43 — Test windows stay visible when another window covers them
+
+| Field | Value |
+|---|---|
+| **ID** | `P7-T43` |
+| **State** | `TODO` — carded and built 2026-11-26 (batch O, coordinator under item 313, `plan/00` §6 item 420(a)), awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P7-batchO.md`. |
+| **Depends on** | none |
+| **Blocks** | `P7-T24` |
+| **Retires** | none |
+| **Implements** | none (the phase's "every Phase 7 test passes" line, and the three-run rule of `plan/04` §0.2) |
+| **Estimate** | 0.25 d |
+| **Human gate** | none |
+
+**Goal.** A Zotero window opened by the integration suite paints Fluent text in milliseconds even when another
+application's window covers it, so `searchDialog-flow.spec.ts`'s 25 s waits no longer fail by chance.
+
+**Read first.** `docs/13` §2.3, the dated note of 2026-11-26 (what occlusion does to a window's refresh ticks, with
+the measured figures); `plan/00` §6 items 20, 23 and 45 (the same slowness, read earlier as machine load);
+`zotero-plugin.config.ts` (`test.prefs`, `NO_APP_UPDATE_PREFS`).
+
+**Files.**
+- modify `docs/13-testing-build-and-release.md` (§2.3's dated note, written first)
+- modify `zotero-plugin.config.ts` (`VISIBLE_WINDOW_PREFS`, the constructing declaration, spread into `test.prefs`;
+  its caller is zotero-plugin-scaffold 0.9.2's `ZoteroRunner.setupProfile`, which writes `test.prefs` into the test
+  profile's `prefs.js` before each start)
+- modify `test/integration/searchDialog-flow.spec.ts` (`assertWindowVisible`, called from the `before` hooks of the
+  `P1-T35` and `P1-T22` blocks right after each opens the search window)
+
+**Do.**
+1. Set `widget.windows.window_occlusion_tracking.enabled` to `false` in the test profile.
+2. In the spec, after the window opens, wait up to 5 s for `document.visibilityState` to read `"visible"` and fail
+   with the reason if it does not.
+3. Measure the spec alone with the search window covered by an always-on-top window, with and without the
+   preference; then three consecutive clean recorded full runs on one tree.
+
+**Do NOT.**
+- Do **not** raise the 25 s waits, and do **not** replace a rendered-text wait with `formatMessages` or a forced
+  `translateRoots`: the text assertions are what catch a blank surface (`P1-T46`).
+- Do **not** change any Fluent id, any Korean or English text, or any plugin preference: this is the test profile's
+  Gecko preference only.
+
+**Done when.**
+- [ ] With an always-on-top window over the search window, `searchDialog-flow.spec.ts` run alone passes every test,
+  and the search window reads `"visible"` throughout.
+- [ ] Three consecutive recorded full runs on one tree pass every test.
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && \
+  NODE_USE_SYSTEM_CA=1 env -u OPENROUTER_API_KEY npm run test:integration -- --exit-on-finish
+```
+
+**Notes.** Added 2026-11-26 (`plan/00` §6 item 420(a)). The fault is in the test environment, not the product: a
+user looks at the window whose text they read, and a window that becomes visible is painted at once. A minimized
+window is still hidden with the preference off (measured), which is why step 2 checks the state rather than
+trusting the preference. A locked session was not measured. Blocks `P7-T24` because the checklist records the
+suite's runs; it ends at 0.25 d, off the critical path (by script). Measured 2026-11-26 (batch O): run alone under the always-on-top
+window, the spec passed 63 of 63 in 3 of 3 runs with the window "visible" throughout; then three consecutive
+recorded full runs on one tree passed 395 of 395 each (`plan/reports/P7-batchO.md`, Runs). The boxes are left for
+the owner's review.
+
 ---
 
 ## 3. Estimate reconciliation
 
-Where the 36.75 d sit *(28.50 d when first written; 35.75 d before 2026-11-25, item 414(a); 32.00 since 2026-11-17, item 398; 32.50 since 2026-11-18, item 402(a); 34.75 since 2026-11-18, later, item 404(a); 35.75 since 2026-11-18, later still, item 406(a))* against `plan/05` §4.1's work areas (now §5.1):
+Where the 37.00 d sit *(28.50 d when first written; 36.75 d before 2026-11-26, item 420(a); 35.75 d before 2026-11-25, item 414(a); 32.00 since 2026-11-17, item 398; 32.50 since 2026-11-18, item 402(a); 34.75 since 2026-11-18, later, item 404(a); 35.75 since 2026-11-18, later still, item 406(a))* against `plan/05` §4.1's work areas (now §5.1):
 
 | Work area | Cards | Days |
 |---|---|---|
@@ -2737,7 +2801,8 @@ Where the 36.75 d sit *(28.50 d when first written; 35.75 d before 2026-11-25, i
 | Not a work area: the owner's answer to §0.4 line 20 (added 2026-11-16, item 381) | `P7-T32` | 0.75 |
 | Not a work area: the owner's answer to item 393 (added 2026-11-17, item 393(d)) | `P7-T33` | 0.5 |
 | Not a work area: the owner's answers to item 395 (added 2026-11-17, item 398) | `P7-T34`, `P7-T35`, `P7-T36`, `P7-T37`, `P7-T38` | 2.0 |
-| | **Total** | **36.75** |
+| Not a work area: the integration suite's test profile (added 2026-11-26, item 420(a)) | `P7-T43` | 0.25 |
+| | **Total** | **37.00** |
 
 **Where the sum is likely low.** (1) `P7-T03` and `P7-T06`: a sweep is priced on the windows that
 exist today; Phases 5 and 6 add windows not yet built, and their findings are counted only as
