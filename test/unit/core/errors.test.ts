@@ -49,6 +49,13 @@ import {
   redactRecord,
   redactSourceProvenance,
 } from "../../../src/core/provenance";
+import { createManualClock } from "../../../src/core/clock";
+import {
+  createJobRecord,
+  fromJobRow,
+  toJobRow,
+} from "../../../src/core/jobQueue/jobRecord";
+import { createLogger } from "../../../src/core/logger";
 
 /**
  * `P1-T02`. Layer 1 (`docs/13` §2.1): plain Node, no Zotero, no network.
@@ -1228,5 +1235,148 @@ describe("P1-T37: the host and the seconds, and nothing else of the context", ()
         false,
       );
     }
+  });
+});
+
+/**
+ * `P1-T47` (`plan/00` §6 item 417(b)): a stored, exported or logged stack names
+ * no folder of the user's.
+ *
+ * The planted frames are the shapes measured on Zotero 10.0.8 on 2026-11-26
+ * (`plan/reports/P7-batchM.md`), with a planted folder name where the user's
+ * name stood: an XPI in a profile's `extensions` folder (a `jar:` URL), the
+ * integration suite's temporary add-on (a `file:` URL to the build folder),
+ * the same two on macOS and Linux, and the scaffold's own `chrome:` frames,
+ * which name no folder and must stay.
+ */
+describe("P1-T47: a stack's file locations are reduced to the plugin's resource path", () => {
+  const PLANTED = "planted-user";
+  const XPI = "research-helper@suppakoko.github.io.xpi";
+  const FRAMES: readonly (readonly [string, string])[] = [
+    [
+      `listCollections@jar:file:///C:/Users/${PLANTED}/AppData/Roaming/Zotero/Zotero/Profiles/k3x9q2ab.default/extensions/${XPI}!/content/scripts/research-helper.js:59525:32`,
+      "listCollections@content/scripts/research-helper.js:59525:32",
+    ],
+    [
+      `async*attemptOnce@file:///C:/Users/${PLANTED}/src/research_helper/.scaffold/build/addon/content/scripts/research-helper.js:1964:42`,
+      "async*attemptOnce@content/scripts/research-helper.js:1964:42",
+    ],
+    [
+      `request@jar:file:///Users/${PLANTED}/Library/Application%20Support/Zotero/Profiles/x.default/extensions/${XPI}!/content/scripts/research-helper.js:1968:18`,
+      "request@content/scripts/research-helper.js:1968:18",
+    ],
+    [
+      `startup@resource://gre/modules/addons/XPIProvider.sys.mjs -> file:///home/${PLANTED}/.zotero/zotero/x.default/extensions/research-helper/bootstrap.js:80:3`,
+      "startup@resource://gre/modules/addons/XPIProvider.sys.mjs -> [file]/bootstrap.js:80:3",
+    ],
+    [
+      "async*callFn@chrome://zotero-plugin-scaffold-test-runner/content/mocha.js:8907:25",
+      "async*callFn@chrome://zotero-plugin-scaffold-test-runner/content/mocha.js:8907:25",
+    ],
+  ];
+  const PLANTED_STACK = FRAMES.map(([raw]) => raw).join("\n");
+  const REDUCED_STACK = FRAMES.map(([, reduced]) => reduced).join("\n");
+
+  /** The planted folder, and every scheme or segment that would carry it. */
+  function expectNoUserFolder(text: string, where: string): void {
+    for (const leaked of [PLANTED, "file:", "jar:", "/Users/", "/home/", XPI]) {
+      expect(text, `${where} holds ${leaked}`).not.toContain(leaked);
+    }
+  }
+
+  /** A typed error whose stack is the planted one. */
+  function planted(): ResearchHelperError {
+    const error = new NetworkError("stub network", {});
+    Object.defineProperty(error, "stack", { value: PLANTED_STACK });
+    return error;
+  }
+
+  it("reduces each measured frame shape, keeping its line and column", () => {
+    for (const [raw, reduced] of FRAMES) {
+      expect(redact(raw)).toBe(reduced);
+    }
+    expect(redact(PLANTED_STACK)).toBe(REDUCED_STACK);
+  });
+
+  it("is idempotent, and leaves a web URL alone", () => {
+    expect(redact(redact(PLANTED_STACK))).toBe(REDUCED_STACK);
+    const url =
+      "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed";
+    expect(redact(url)).toBe(url);
+  });
+
+  it("still applies every key pattern after the reduction", () => {
+    const key = `sk-ant-${"a".repeat(40)}`;
+    const out = redact(
+      `${key}@file:///C:/Users/${PLANTED}/x/content/scripts/a.js:1:2`,
+    );
+    expect(out).toBe(`[redacted:${key.length}]@content/scripts/a.js:1:2`);
+  });
+
+  it("stores none of the folder: toSerialized, the job row and the record gate", () => {
+    const serialized = planted().toSerialized();
+    expect(serialized.stack).toBe(REDUCED_STACK);
+    expectNoUserFolder(JSON.stringify(serialized), "toSerialized()");
+
+    // A stack that reaches the store without `toSerialized` still passes the
+    // gate: `toJobRow` puts `error` through `redactRecord`.
+    const raw = { ...serialized, stack: PLANTED_STACK };
+    const record = {
+      ...createJobRecord({
+        id: "job-p1t47",
+        pipelineId: "summarize",
+        input: {},
+        createdAtEpochMs: 0,
+        createdByPluginVersion: "0.0.2",
+      }),
+      error: raw,
+    };
+    const { row } = toJobRow(record);
+    expectNoUserFolder(row.error_json ?? "", "job.error_json");
+    expect(fromJobRow(row).error?.stack).toBe(REDUCED_STACK);
+    expectNoUserFolder(
+      JSON.stringify(redactRecord({ error: raw }).record),
+      "redactRecord",
+    );
+  });
+
+  it("exports none of the folder: the provenance gate", () => {
+    const source = redactSourceProvenance({
+      sourceId: "pubmed",
+      endpointBaseUrl: "",
+      transmittedQuery: "",
+      transmittedUrl: "",
+      dateFilterApplied: "none",
+      requestedLimit: 10,
+      rawHitCount: undefined,
+      recordsRetrieved: 0,
+      recordsDeduplicatedAway: 0,
+      recordsImported: 0,
+      error: { ...planted().toSerialized(), stack: PLANTED_STACK },
+      sourceExtras: undefined,
+    });
+    expect(source.error?.stack).toBe(REDUCED_STACK);
+    expectNoUserFolder(JSON.stringify(source), "SourceProvenance");
+  });
+
+  it("logs none of the folder: the logger and the teardown line", () => {
+    const lines: string[] = [];
+    const logger = createLogger({
+      sink: {
+        write: (line: string) => {
+          lines.push(line);
+        },
+      },
+      clock: createManualClock(0),
+      level: "debug",
+    });
+    logger.error("a request failed", { error: planted() });
+    expect(lines).toHaveLength(1);
+    expectNoUserFolder(lines.join("\n"), "the log line");
+    expect(lines[0]).toContain("content/scripts/research-helper.js:59525:32");
+
+    const teardown = teardownErrorLine("RH", "close", planted());
+    expectNoUserFolder(teardown, "teardownErrorLine");
+    expect(teardown).toContain(REDUCED_STACK);
   });
 });

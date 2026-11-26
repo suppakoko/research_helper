@@ -4001,6 +4001,17 @@ export interface SerializedError {
 > `redactSerializedError` copies only the members it names, and `schema/provenance.schema.json`'s
 > `SerializedError` is unchanged); `JobRecord.error` keeps them through `redactRecord`.
 
+> **`stack` holds no file location whole. Added 2026-11-26 (`plan/02` `P1-T47`; `plan/00` §6 item
+> 417(b)).** Measured 2026-11-26 on Zotero 10.0.8 (`plan/reports/P7-batchM.md`): each frame of the
+> plugin's own code names the add-on's `rootURI`, so in an XPI installed into a profile's `extensions`
+> folder a stored frame read
+> `<function>@jar:file:///C:/Users/<user>/AppData/Roaming/Zotero/Zotero/Profiles/<profile>/extensions/research-helper@suppakoko.github.io.xpi!/content/scripts/research-helper.js:<line>:<col>`,
+> under the user's home folder, and `JobRecord.error` kept it byte for byte. `stack` is still carried,
+> but `redact()` (`09-security-privacy-and-api-keys.md` §2.1) now reduces each file location to the
+> plugin's own resource path before the key patterns, so a stored, exported or logged frame reads
+> `<function>@content/scripts/research-helper.js:<line>:<col>`. The member's type and §10.1's
+> `stack: redact(this.stack)` are unchanged; the reduction is a step of the one redactor that line calls.
+
 > **Redaction before storage. Decided 2026-10-20 (owner; `plan/00` §6 item 242).** Every record in
 > this section that the plugin persists — `StoredSummary` **with its `content` included**, and
 > `JobRecord`'s `input`, `progress`, `usage` and `error` — passes the one redaction gate,
@@ -6027,6 +6038,8 @@ export abstract class ResearchHelperError extends Error {
       // a GitHub issue. A credential in any error message reached both — while this section was
       // being followed exactly. `src/core/logger.ts` already redacted a stack when it walked an
       // `Error` in a context object, so the two paths disagreed about the same string.
+      // Noted 2026-11-26 (`P1-T47`): `redact` now also reduces each frame's file location to the
+      // plugin's own resource path (§5.2's note on `stack`; `09-security-privacy-and-api-keys.md` §2.1).
       stack: redact(this.stack),
       // Added 2026-11-25 (`P1-T37`): two named members, each read off a public member of one
       // class, never off `context` (§5.2's note). `wholeSeconds` rounds, with a floor of 1.

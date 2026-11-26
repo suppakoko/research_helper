@@ -465,12 +465,47 @@ const KEY_PATTERNS: readonly RegExp[] = [
   /\b[A-Za-z0-9_-]{40,}\b/g,               // long opaque run — last-resort net
 ];
 
+// Added 2026-11-26 (`P1-T47`; `plan/00` §6 item 417(b)): file locations first. See below.
+const JAR_ARCHIVE = /\bjar:[^\s!]*!\//gi;            // "jar:file:///…/<id>.xpi!/" → ""
+const FILE_URL = /\bfile:\/\/[^\s"'()<>]*/gi;        // "file:///…/content/x.js:1:2" → "content/x.js:1:2"
+
+function reduceFileLocations(input: string): string {
+  return input.replace(JAR_ARCHIVE, "").replace(FILE_URL, url => {
+    const at = url.lastIndexOf("/content/");
+    return at >= 0 ? url.slice(at + 1) : `[file]/${url.slice(url.lastIndexOf("/") + 1)}`;
+  });
+}
+
 export function redact(input: string): string {
-  let out = input;
+  let out = reduceFileLocations(input);
   for (const re of KEY_PATTERNS) out = out.replace(re, m => `[redacted:${m.length}]`);
   return out;
 }
 ```
+
+**A file location never leaves the plugin whole. Added 2026-11-26 (`P1-T47`), after `plan/00` §6 item 417(b)'s
+measurement (`plan/reports/P7-batchM.md`).** `addon/bootstrap.js`'s `startup` loads the bundle from the add-on's
+`rootURI`, so every stack frame of the plugin's own code names where the add-on lives. For an XPI installed into a
+profile's `extensions` folder that is
+`<function>@jar:file:///C:/Users/<user>/AppData/Roaming/Zotero/Zotero/Profiles/<profile>/extensions/research-helper@suppakoko.github.io.xpi!/content/scripts/research-helper.js:<line>:<col>`,
+under the user's home folder, which is Zotero's default profile root. Measured 2026-11-26 on Zotero 10.0.8, with the
+built XPI in a folder under the home folder; the integration suite's temporary add-on names its build folder the same
+way (`file:///…/.scaffold/build/addon/content/scripts/research-helper.js:<line>:<col>`). `toSerialized()` keeps a
+`stack`, `JobRecord.error` and `SourceProvenance.error` store it, the provenance export writes it to a file the user
+picks, and the logger writes a context error's stack; before this step every one of them kept the location whole,
+because none of `KEY_PATTERNS` matches a path. A user name in a folder name is personal data the user did not choose
+to disclose, the same reasoning as §2.2's rule for a user-chosen path. So `redact()` now reduces every file location
+**before** the key patterns: a `jar:` URL loses everything up to and including the `!/` that opens the archive, and a
+`file:` URL keeps only what follows its last `/content/` (the folder every script the add-on loads sits under), or,
+with none, only its last segment after `[file]/`. A frame then reads
+`<function>@content/scripts/research-helper.js:<line>:<col>` in both install forms, which is all a bug report needs.
+It is a step of the one redactor, not a second one: every path above already runs through `redact()` —
+`toSerialized()` directly, `redactRecord` and `redactSerializedError` through `redactText`, the logger and
+`teardownErrorLine` directly — so one change covers what is stored, exported and logged. `http(s):`, `chrome:` and
+`resource:` URLs name no folder of the user's and are untouched; the step is idempotent, because what it leaves holds
+neither scheme. `KEY_PATTERNS` and its eight entries are unchanged. **Not covered, stated so the next reader has it:**
+a bare absolute path in free text (`C:\Users\…` in an exception's message, with no `file:` scheme) is not reduced;
+SpiderMonkey's `stack` holds URLs only and no message, so the stack is covered, and a message's path was not measured.
 
 The final catch-all pattern will occasionally redact a legitimate long token (a base64 chunk, a hash). That is the correct trade: a false-positive redaction costs a debugging inconvenience; a false negative publishes a billing credential to a GitHub issue. *Corrected 2026-10-20 (owner; `plan/00` §6 item 242):* "a debugging inconvenience" is the cost in a log line. In a **stored record** the same false positive alters stored content — a gene or protein sequence quoted from a paper is a run of 40 or more letters — so the record is marked "partly redacted" (see "Persisted records pass one gate" below). The trade itself and the 40-character floor are unchanged.
 

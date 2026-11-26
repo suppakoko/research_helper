@@ -22,6 +22,7 @@ the canonical model, the Zotero item mapper) exists and is tested.
 **Effort in `docs/11` §1:** **18.75–26 developer-days** — re-derived on
 2026-09-09 *from* the card sum below (it was 9–12 d). The reconciliation is
 recorded in §7.
+*Corrected 2026-11-26 (`plan/00` §6 item 418): this line had stayed at the 2026-09-09 figure while §7's roll-up moved. The phase is now **29.75–42 developer-days**, the sum of 47 cards (29.75 × 1.4 = 41.65 → 42), after `P1-T47` (0.5 d), for the owner's answer to item 417(b) was added; it read 29.25–41 over 46 cards.*
 
 **Risks retired** (`docs/11` §1, Phase 1; register in `docs/11` §3):
 
@@ -351,7 +352,7 @@ compile, which is the behaviour `docs/07` §11.1 step 3 asks for.
 | **ID** | `P1-T02` |
 | **State** | `DONE` — approved 2026-09-30; 206 tests in its own files, 406 across the suite. Found that `docs/07` §10.1's error hierarchy **does not compile** as printed (15 `TS2416` errors, reproduced in isolation) and that its `toSerialized()` **leaked the unredacted message through `Error.stack`** into a user-exportable file. `result.ts` and `concurrency.ts` gained their missing tests; `result.ts` went 0 % → 100 %. |
 | **Depends on** | `P1-T01` |
-| **Blocks** | `P1-T03`, `P1-T04`, `P1-T05`, `P1-T07`, `P1-T12`, `P1-T15`, `P1-T18` |
+| **Blocks** | `P1-T03`, `P1-T04`, `P1-T05`, `P1-T07`, `P1-T12`, `P1-T15`, `P1-T18`, `P1-T47` |
 | **Retires** | none |
 | **Implements** | `FR-10`, part of `FR-54`, `NFR-14`, part of `NFR-16` |
 | **Estimate** | 1.0 d |
@@ -3242,7 +3243,7 @@ without a restart.
 | **ID** | `P1-T17` |
 | **State** | `DONE` — approved 2026-10-07; the provenance record, the human note and the JSON export, with the in-memory record as the authority and the asymmetry **disclosed**: a new field reaches the export and the schema check automatically, the note only when someone edits the renderer. **Closed two real credential leaks the project's own redaction could not see**, both reproduced by the coordinator — a bare query string parses as a *path*, so the parameter list is empty and nothing is removed; and a URL inside free text is invisible to the free-text redactor. A 32-character key is below its 40-character threshold. **One of the two was a live defect in the first draft, not a mutation.** Criterion 5's second half cannot hold, because the shipped redactor *removes* a named parameter and an empty value is the one thing a marker cannot express. **Separated conformance assertions from self-consistency ones**, and shipped no reader, so no round-trip can pass by agreeing with itself. |
 | **Depends on** | `P1-T09`, `P1-T14` |
-| **Blocks** | `P1-T22`, `P2-T17`, `P1-T35` |
+| **Blocks** | `P1-T22`, `P2-T17`, `P1-T35`, `P1-T47` |
 | **Retires** | none |
 | **Implements** | `FR-8`, part of `FR-4` |
 | **Estimate** | 0.75 d |
@@ -9459,6 +9460,83 @@ contributor to the slowness.
 
 ---
 
+### P1-T47 — Store, export and log a stack without the folder the add-on is installed in
+
+| Field | Value |
+|---|---|
+| **ID** | `P1-T47` |
+| **State** | `TODO` — *2026-11-26, batch M: built*, awaiting the owner's review (only the owner sets `DONE`). Report at `plan/reports/P1-T47.md`. Carded from `plan/00` §6 item 417(b)'s measurement: in an XPI installed into a profile's `extensions` folder a stored frame names the profile's folder, under the user's home folder by default, and `JobRecord.error` kept it byte for byte. `redact` now reduces every file location to the plugin's resource path first (`docs/09` §2.1 and `docs/07` §5.2 amended); unit mutants M1–M4 killed. State unchanged. |
+| **Depends on** | `P1-T02`, `P1-T17` |
+| **Blocks** | none |
+| **Retires** | `plan/00` §6 item 417(b) |
+| **Implements** | part of `NFR-16`, part of `docs/09` §2.1 |
+| **Estimate** | 0.5 d |
+| **Human gate** | none |
+
+**Goal.** A stack that is stored in `JobRecord.error` or `SourceProvenance.error`, written by the provenance
+export, or logged names no folder of the user's: each frame of the plugin's own code reads
+`<function>@content/scripts/research-helper.js:<line>:<col>` in every install form.
+
+**Why this is a card.** The owner's answer to item 417(b) was "Check first", with a card if a stored frame names a
+folder under the user's home. Measured 2026-11-26 on Zotero 10.0.8 (`plan/reports/P7-batchM.md`):
+`addon/bootstrap.js`'s `startup` loads the bundle from the add-on's `rootURI`, so every frame of the plugin's code
+names it. The integration suite's temporary add-on gives `file:///…/.scaffold/build/addon/content/…`; the built XPI
+in an `extensions` folder under the home folder gives `jar:file:///C:/Users/<user>/…/extensions/<id>.xpi!/content/…`,
+and this installation's default profile root is `C:\Users\<user>\AppData\Roaming\Zotero\Zotero\Profiles`. The
+queue's gate stored that stack unchanged.
+
+**Caller and constructing file (rule 10).** The step is built in `src/core/errors.ts` (`reduceFileLocations`, called
+first by `redact`). Its callers are unchanged and already call `redact`: `ResearchHelperError.toSerialized` and
+`teardownErrorLine` in `src/core/errors.ts` (the latter called by `src/addon.ts`'s scope `onError`), `redactText` in
+`src/core/provenance.ts` (behind `redactRecord`, which `toJobRow` in `src/core/jobQueue/jobRecord.ts` calls for
+`JobRecord.error`, and behind `redactSerializedError`, which the provenance export reaches), and `redactValue` in
+`src/core/logger.ts`.
+
+**Read first.**
+- `docs/09` §2.1, the printed `redact` block and "Persisted records pass one gate" — the one redactor and the one gate.
+- `docs/07` §5.2's `SerializedError` and §10.1's `toSerialized` — where `stack` is declared and redacted.
+- `plan/reports/P7-batchM.md` — the measured frame shapes.
+
+**Files.**
+- modify `docs/09-security-privacy-and-api-keys.md`
+- modify `docs/07-architecture-and-data-model.md`
+- modify `src/core/errors.ts`
+- modify `test/unit/core/errors.test.ts`
+- create `test/integration/storedStack.spec.ts`
+
+**Do.**
+1. Amend `docs/09` §2.1 and `docs/07` §5.2 first, with dated notes.
+2. Add the file-location step to `redact`, before the key patterns, module-private: a `jar:` URL loses everything up
+   to and including its `!/`; a `file:` URL keeps what follows its last `/content/`, or only its last segment.
+3. Plant mutants that drop the step and show the tests kill them; remove every marker.
+
+**Do NOT.**
+- Do not add a second redactor or a second gate: every path that stores, exports or logs a stack already calls
+  `redact`.
+- Do not change `KEY_PATTERNS`, its order, or `SerializedError`'s members.
+- Do not drop `stack`: a bug report needs the function names, the resource path and the line.
+
+**Done when.**
+- [ ] A unit test plants a user folder in a stack, in the measured `jar:` and `file:` shapes, and proves it is not
+      stored (`toSerialized`, `toJobRow`, `redactRecord`), not exported (`redactSourceProvenance`) and not logged
+      (`createLogger`, `teardownErrorLine`).
+- [ ] An integration test stores a real error from the plugin's HTTP client through the job queue and a frame planted
+      under the machine's home folder, and logs a context error, and finds no `file:` or `jar:` URL, no home folder
+      and no profile folder, with the plugin's frames as `content/scripts/research-helper.js:<line>:<col>`.
+- [ ] Mutants that drop the step are killed.
+- [ ] `npm run typecheck`, `npm run lint:check`, `npm run test` and `npm run test:integration` exit 0.
+
+**Verify with.**
+```bash
+npm run typecheck && npm run lint:check && npm run test && npm run test:integration -- --exit-on-finish
+```
+
+**Notes.** Not covered: a bare absolute path in free text (`C:\Users\…` in an exception's message, with no `file:`
+scheme). SpiderMonkey's `stack` holds URLs and no message, so the stack is covered; a message's path was not
+measured.
+
+---
+
 ---
 ## 7. Estimate roll-up
 
@@ -9510,7 +9588,8 @@ contributor to the slowness.
 | `P1-T44` | A preferences pane, so an arriving key has somewhere to go | 1.00 | — |
 | `P1-T45` | The export control, its three strings and the file chooser | 0.50 | **Yes** |
 | `P1-T46` | Stop three tests waiting on text the run has replaced | 0.50 | — |
-| | **Total** | **29.25 d** | **5 gates** |
+| `P1-T47` | Store, export and log a stack without the install folder | 0.50 | — |
+| | **Total** | **29.75 d** | **5 gates** |
 
 ### Comparison with `docs/11` — reconciled 2026-09-09
 

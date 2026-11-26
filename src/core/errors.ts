@@ -127,15 +127,69 @@ export const KEY_PATTERNS: readonly RegExp[] = [
 ];
 
 /**
- * Replace every credential-shaped run in `input` with `[redacted:<len>]`.
+ * The archive half of a `jar:` URL: from `jar:` up to and including the `!/`
+ * that opens the archive (`P1-T47`).
  *
- * `docs/09` §2.1's reference implementation, unchanged.
+ * An add-on installed from an XPI runs from
+ * `jar:file:///<profile>/extensions/<id>.xpi!/`, and `addon/bootstrap.js`'s
+ * `startup` loads the bundle from that `rootURI`, so every frame of the
+ * plugin's own code names the profile's folder — under the user's home folder
+ * by default (measured 2026-11-26, `plan/00` §6 item 417(b)). What follows the
+ * `!/` is the path inside the XPI, the plugin's own resource path, and stays.
+ */
+const JAR_ARCHIVE = /\bjar:[^\s!]*!\//gi;
+
+/**
+ * A `file:` URL, up to whitespace, a quote, a parenthesis or an angle bracket
+ * (`P1-T47`). An add-on installed from a folder — the integration suite's
+ * temporary add-on, or a proxy file — names that folder this way.
+ */
+const FILE_URL = /\bfile:\/\/[^\s"'()<>]*/gi;
+
+/**
+ * The folder every script the add-on loads sits under: `addon/content/`,
+ * shipped as `content/` at the add-on's root (`zotero-plugin.config.ts`'s
+ * `build.assets` and its esbuild `outfile`).
+ */
+const RESOURCE_FOLDER = "/content/";
+
+/**
+ * Every file location in `input`, reduced to the plugin's own resource path
+ * (`P1-T47`; `docs/09` §2.1, "A file location never leaves the plugin whole").
  *
- * @param input - arbitrary text that may contain a key
- * @returns the text with every {@link KEY_PATTERNS} match replaced
+ * A `jar:` URL loses its archive half; a `file:` URL keeps what follows its
+ * last `/content/`, or, with none, only its last segment after `[file]/`. A
+ * `:line:col` after the location stays. `http(s):`, `chrome:` and `resource:`
+ * URLs name no folder of the user's and are left alone. Idempotent: what it
+ * leaves holds neither scheme.
+ *
+ * Module-private and called only by {@link redact}, so it is a step of the one
+ * redactor, not a second one: everything that stores, exports or logs a stack
+ * already runs through `redact`.
+ */
+function reduceFileLocations(input: string): string {
+  return input.replace(JAR_ARCHIVE, "").replace(FILE_URL, (url) => {
+    const at = url.lastIndexOf(RESOURCE_FOLDER);
+    return at >= 0
+      ? url.slice(at + 1)
+      : `[file]/${url.slice(url.lastIndexOf("/") + 1)}`;
+  });
+}
+
+/**
+ * Reduce every file location in `input` to the plugin's own resource path,
+ * then replace every credential-shaped run with `[redacted:<len>]`.
+ *
+ * `docs/09` §2.1's reference implementation. *Amended 2026-11-26 (`P1-T47`):*
+ * the file-location step runs first ({@link reduceFileLocations}); the key
+ * patterns and their order are unchanged.
+ *
+ * @param input - arbitrary text that may contain a key or a file location
+ * @returns the text with every file location reduced and every
+ *   {@link KEY_PATTERNS} match replaced
  */
 export function redact(input: string): string {
-  let out = input;
+  let out = reduceFileLocations(input);
   for (const re of KEY_PATTERNS)
     out = out.replace(re, (m) => `[redacted:${m.length}]`);
   return out;
@@ -444,6 +498,10 @@ export abstract class ResearchHelperError extends Error {
    * `src/core/logger.ts` already redacts a stack when it walks an `Error` in a
    * context object — so §10.1's omission also made the two paths disagree about
    * the same string. Found by `test/unit/core/result.test.ts`, not by inspection.
+   * *Since 2026-11-26 (`P1-T47`)* the same `redact` call also reduces each
+   * frame's file location to the plugin's resource path, so a stored frame
+   * reads `<function>@content/scripts/research-helper.js:<line>:<col>` and
+   * names no folder of the user's.
    *
    * **2. `httpStatus` and `stack` are spread in conditionally** rather than
    * assigned `| undefined`. §10.1 writes them as plain properties, which does not
