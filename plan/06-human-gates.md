@@ -1041,6 +1041,8 @@ cover.
 
 *(Corrected 2026-10-26 (owner, `plan/00` §6 items 284(c) and 288(c)): the owner labels the recorded random sample of 60 of the 267 label-set pairs (`test/fixtures/dedup/label-sample.json`), not ≥ 200; the figures carry 95 % Wilson intervals, and Phase 2 may close on no false merge in the sample. The text below is the original wording.)*
 
+**Signed off 2026-11-26 (owner, in chat, `plan/00` §6 item 423(a)): "확정".** On the 90 labelled pairs (`npm run dedup:report`, `plan/reports/dedup-report-372.md`): precision 1.0000, 95 % Wilson interval [0.8957, 1.0000] over 33 merged pairs, no false merge; recall 0.9429, [0.8139, 0.9842] over 35 true duplicates. Both misses are one kind of pair, a conference paper against its journal version, recorded as a known limit (`docs/02` §11.3, "Measured 2026-11-12"; item 372).
+
 **What the human must do.** Hand-label ≥ 200 record pairs as true or false
 duplicates, including the hard cases — preprint/published pairs, corrigenda,
 same-title different-cohort papers.
