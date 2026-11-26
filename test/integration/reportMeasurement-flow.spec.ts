@@ -612,6 +612,17 @@ function figuresIn(text: string, figures: readonly string[]): string[] {
   );
 }
 
+/**
+ * `text` without the note's report marker (`<!-- rh:report … -->`, written by
+ * `src/zotero/notes.ts`). The marker carries the report's random id, whose
+ * all-digit groups can equal a measured figure by chance (batch M's recorded
+ * run 1, 2026-11-26: `9195`); the marker is the plugin's own fixed-format
+ * comment, so a figure found only there is not a leak (plan/00 §6 item 419(d)).
+ */
+function withoutReportMarker(text: string): string {
+  return text.replace(/<!--\s*rh:report\b[^>]*-->/g, "");
+}
+
 /** What the measurement calls its members, found in `text`. */
 function memberNamesIn(text: string): string[] {
   return MEMBER_NAMES.filter((name) => text.includes(name));
@@ -1051,12 +1062,13 @@ describe("P4-T23 step 4: a run's measurement in real Zotero, on a mock provider"
     );
     assert.include(exported.en, headings[6] as string, "the English export");
     assert.include(exported.ko, koHeadings[6] as string, "the Korean export");
-    for (const [what, text] of [
+    for (const [what, original] of [
       ["the first note", notes[0] as string],
       ["the second note", notes[1] as string],
       ["the English export and copy", exported.en],
       ["the Korean export and copy", exported.ko],
     ] as const) {
+      const text = withoutReportMarker(original);
       const found = {
         measuredOnly: figuresIn(text, measuredOnly),
         summaryFiguresOutsideTheirRows: figuresIn(
